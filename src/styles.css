@@ -1,0 +1,234 @@
+:root {
+  color: #d6dde8;
+  background: #111418;
+  --app-bg: #111418;
+  --panel-bg: #181d24;
+  --panel-strong-bg: #1f2630;
+  --editor-bg: #0f1217;
+  --editor-text: #d6dde8;
+  --muted-text: #8995a7;
+  --strong-text: #f4f7fb;
+  --border: #2c3542;
+  --border-strong: #3d4a5c;
+  --button-bg: #252d38;
+  --button-hover-bg: #2e3846;
+  --button-text: #eef3fa;
+  --button-disabled-text: #647084;
+  --focus: #7aa2e3;
+  --focus-shadow: rgba(122, 162, 227, 0.2);
+  --dirty-bg: #3b2c14;
+  --dirty-border: #8f6a24;
+  --dirty-text: #ffd98a;
+  --error-bg: #351b1f;
+  --error-border: #69313a;
+  --error-text: #ffb9c0;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--app-bg);
+}
+
+button {
+  font: inherit;
+}
+
+button {
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  cursor: pointer;
+  padding: 8px 12px;
+}
+
+button:hover:not(:disabled) {
+  background: var(--button-hover-bg);
+}
+
+button:disabled {
+  color: var(--button-disabled-text);
+  cursor: default;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  height: 100vh;
+}
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-bg);
+  padding: 14px 18px;
+}
+
+.app-kicker {
+  margin: 0 0 3px;
+  color: var(--muted-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  color: var(--strong-text);
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.titlebar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dirty-marker {
+  border: 1px solid var(--dirty-border);
+  border-radius: 999px;
+  background: var(--dirty-bg);
+  color: var(--dirty-text);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 9px;
+}
+
+.error-message {
+  margin: 0;
+  border-bottom: 1px solid var(--error-border);
+  background: var(--error-bg);
+  color: var(--error-text);
+  font-size: 13px;
+  padding: 9px 18px;
+}
+
+.editor-frame {
+  min-height: 0;
+  padding: 18px;
+}
+
+.source-editor {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--editor-bg);
+  overflow: hidden;
+}
+
+.source-editor:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--focus-shadow);
+}
+
+.source-editor .cm-editor {
+  height: 100%;
+  background: var(--editor-bg);
+  color: var(--editor-text);
+  font-family:
+    "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono",
+    monospace;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.source-editor .cm-focused {
+  outline: none;
+}
+
+.source-editor .cm-scroller {
+  padding: 18px 0;
+}
+
+.source-editor .cm-content {
+  min-height: 100%;
+  padding: 0 20px;
+}
+
+.source-editor .cm-gutters {
+  border-right: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--muted-text);
+}
+
+.source-editor .cm-activeLine,
+.source-editor .cm-activeLineGutter {
+  background: var(--panel-strong-bg);
+}
+
+.source-editor .cm-cursor {
+  border-left-color: var(--strong-text);
+}
+
+.source-editor .cm-selectionBackground,
+.source-editor.cm-focused .cm-selectionBackground,
+.source-editor .cm-content ::selection {
+  background: rgba(122, 162, 227, 0.32);
+}
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--muted-text);
+  font-size: 12px;
+  padding: 8px 18px;
+}
+
+.path-status {
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .titlebar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .titlebar-actions {
+    justify-content: flex-start;
+  }
+
+  .editor-frame {
+    padding: 10px;
+  }
+
+  .statusbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .path-status {
+    max-width: 100%;
+    text-align: left;
+  }
+}
