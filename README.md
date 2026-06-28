@@ -1,25 +1,26 @@
 # Folden
 
-Folden is a lightweight local-first text editor.
+Folden is a lightweight local-first Markdown editor.
 
-The project goal is to combine a fast desktop writing tool, Markdown-friendly files, and a future visual block editor without hiding user documents in an opaque database.
+The project goal is to combine a fast desktop writing tool, Markdown-friendly files, and a visual editing experience without hiding user documents in an opaque database.
 
 ## Current Status
 
-The repository currently contains the first desktop scaffold:
+The repository currently contains the 0.2 desktop editor:
 
 * Vue 3 + TypeScript + Vite;
 * Tauri 2 shell;
-* npm package setup;
-* CodeMirror source editor;
-* minimal single-document editor screen;
-* minimal dark theme;
-* native open/save commands for text files;
-* dirty state;
-* character count;
-* basic build verification.
+* visual Markdown editing with Tiptap 3;
+* CodeMirror source mode;
+* native text file open/save;
+* workspace folder opening and file tree;
+* workspace file and folder create/rename/trash actions;
+* multiple open files with tabs;
+* two-pane split view;
+* manual dirty-state handling;
+* centered editor canvas with a polished dark theme.
 
-The current app is still an early 0.1 build. It has one editing surface and no workspace, tabs, autosave, recovery, or visual block editor yet.
+Still out of scope: autosave, crash recovery, backlinks, SQLite indexing, custom blocks, slash commands, plugin API, and arbitrary split grids.
 
 ## Run Frontend
 
@@ -35,21 +36,13 @@ Start the development server:
 npm run dev
 ```
 
-This runs only the Vue/Vite frontend in the browser.
+This runs only the Vue/Vite frontend in the browser. Native file dialogs and workspace commands require the desktop app.
 
 Build the frontend:
 
 ```powershell
 npm run build
 ```
-
-Preview the built frontend:
-
-```powershell
-npm run preview
-```
-
-This serves the already-built `dist/` directory. It is not the desktop app.
 
 ## Run Desktop
 
@@ -107,5 +100,5 @@ See [docs/SETUP.md](docs/SETUP.md) for the Windows setup notes.
 * [ROADMAP.md](ROADMAP.md) lists the long-term milestones.
 * [CHANGELOG.md](CHANGELOG.md) tracks version changes.
 * [docs/MVP.md](docs/MVP.md) defines the proposed first useful version.
-* [docs/EDITOR_ENGINE.md](docs/EDITOR_ENGINE.md) compares the editor engine options.
+* [docs/EDITOR_ENGINE.md](docs/EDITOR_ENGINE.md) describes the editor engine split.
 * [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) lists the immediate handoff steps.
