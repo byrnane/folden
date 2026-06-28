@@ -8,6 +8,18 @@
 
 ---
 
+## 0. Specification authority
+
+Product goals, safety requirements, invariants, and acceptance criteria in this document are authoritative.
+
+Suggested file names, module boundaries, APIs, data structures, libraries, thresholds, and implementation sequences are proposals rather than mandatory designs unless explicitly marked otherwise.
+
+Before implementing a phase, compare its proposed design with the current repository. If the proposal conflicts with existing architecture, framework constraints, or a substantially simpler safe solution, stop and document the conflict before changing code.
+
+Do not silently ignore a requirement and do not blindly implement a proposed design that does not fit the project.
+
+---
+
 ## 1. Release summary
 
 Folden 0.3 must turn the current working Markdown editor into an application that can be trusted for long writing sessions and real user documents.
