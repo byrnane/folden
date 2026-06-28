@@ -28,7 +28,9 @@ import {
   createDirectory,
   createFile,
   listDirectory,
+  logFrontendEvent,
   type NativeFsEvent,
+  openLogsFolder,
   openTextFile,
   openTextFileByPath,
   openWorkspaceDirectory,
@@ -2176,6 +2178,27 @@ async function runFileTask(task: () => Promise<void>, message: string) {
     await task()
   } catch (error) {
     errorMessage.value = `${message}: ${formatError(error)}`
+
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      'operation' in error &&
+      'userMessage' in error
+    ) {
+      const nativeError = error as {
+        code: string
+        operation: string
+        userMessage: string
+        retryable?: boolean
+      }
+      void logFrontendEvent(
+        'warn',
+        `native_error operation=${nativeError.operation} code=${nativeError.code} retryable=${nativeError.retryable ? 'true' : 'false'} message=${nativeError.userMessage}`,
+      )
+    } else {
+      void logFrontendEvent('error', `${message}: ${formatError(error)}`)
+    }
   } finally {
     isFileBusy.value = false
   }
@@ -2516,6 +2539,9 @@ onBeforeUnmount(() => {
         <div class="topbar-actions">
           <button type="button" title="Open file" :disabled="isFileBusy" @click="openNativeDocument">
             Open
+          </button>
+          <button type="button" title="Open logs folder" :disabled="!isTauriRuntime()" @click="openLogsFolder">
+            Logs
           </button>
           <button
             type="button"
