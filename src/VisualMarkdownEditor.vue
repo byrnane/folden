@@ -21,6 +21,7 @@ import {
 import { onBeforeUnmount, ref, watch } from 'vue'
 import PromptDialog from './components/PromptDialog.vue'
 import type { DocumentUpdate } from './editorSync'
+import { validateImageTarget, validateLinkTarget } from './markdownSafety'
 
 const props = defineProps<{
   documentId: string
@@ -191,6 +192,7 @@ async function setLink() {
     placeholder: 'https://example.com',
     confirmLabel: 'Apply',
     inputLabel: 'Link URL',
+    validate: (value) => validateLinkTarget(value),
     normalize: (value) => value.trim(),
   })
 
@@ -220,12 +222,12 @@ async function setImage() {
 
   const url = await openInputDialog({
     title: 'Insert image',
-    message: 'Enter an image URL to insert into the document.',
+    message: 'Enter a relative, asset:, or data: image URL to insert into the document.',
     initialValue: '',
-    placeholder: 'https://example.com/image.png',
+    placeholder: './image.png',
     confirmLabel: 'Insert',
     inputLabel: 'Image URL',
-    validate: (value) => value.trim() ? null : 'Image URL is required.',
+    validate: (value) => validateImageTarget(value),
     normalize: (value) => value.trim(),
   })
 

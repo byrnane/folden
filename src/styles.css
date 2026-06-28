@@ -827,6 +827,29 @@ h1 {
   gap: 8px;
 }
 
+.dialog-feature-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--soft-text);
+}
+
+.dialog-feature-list li {
+  display: grid;
+  gap: 2px;
+}
+
+.dialog-feature-list strong {
+  color: var(--strong-text);
+  font-size: 13px;
+}
+
+.dialog-feature-list span {
+  color: var(--muted-text);
+  font-size: 12px;
+}
+
 button.danger {
   border-color: rgba(242, 121, 131, 0.35);
   color: #ffd2d6;

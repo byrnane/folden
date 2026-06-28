@@ -12,9 +12,15 @@ import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import MarkdownSafetyDialog from './components/MarkdownSafetyDialog.vue'
 import PromptDialog from './components/PromptDialog.vue'
 import RecoveryDialog from './components/RecoveryDialog.vue'
 import UnsavedChangesDialog from './components/UnsavedChangesDialog.vue'
+import {
+  analyzeMarkdownSafety,
+  type MarkdownSafetyReport,
+  type MarkdownUnsupportedFeature,
+} from './markdownSafety'
 import { shouldPromptToDiscardDocument } from './closeProtection'
 import SourceEditor from './SourceEditor.vue'
 import {
@@ -127,6 +133,12 @@ type RecoveryDialogState = {
 
 type WindowCloseDecision = 'clean' | 'save' | 'discard' | 'cancel'
 
+type MarkdownSafetyDialogState = {
+  title: string
+  features: MarkdownUnsupportedFeature[]
+  resolve: (confirmed: boolean) => void
+}
+
 const initialText = '# Untitled\n\nStart writing in Folden.\n'
 const recentWorkspaceStorageKey = 'folden:recent-workspaces'
 const documentState = createDocumentState({
@@ -190,6 +202,7 @@ const promptDialog = ref<PromptDialogState | null>(null)
 const promptDialogError = ref<string | null>(null)
 const confirmDialog = ref<ConfirmDialogState | null>(null)
 const unsavedDialog = ref<UnsavedDialogState | null>(null)
+const markdownSafetyDialog = ref<MarkdownSafetyDialogState | null>(null)
 const recoveryDialog = ref<RecoveryDialogState | null>(null)
 const pendingRecoveryEntries = ref<RecoverySnapshot[]>([])
 let tauriWindowCloseUnlisten: (() => void) | null = null
@@ -199,6 +212,8 @@ let sessionRestoreComplete = false
 let sessionPersistTimeout: number | null = null
 let sessionPersistRunning = false
 let sessionPersistRequested = false
+const markdownSafetyCache = ref<Record<string, MarkdownSafetyReport>>({})
+const visualSafetyAcknowledgments = ref<Record<string, number>>({})
 const pendingWorkspaceRefreshes = new Map<string, number>()
 const pendingDocumentReloads = new Map<string, number>()
 const saveQueue = createDocumentSaveQueue({
@@ -510,6 +525,89 @@ function sessionDocumentKind(document: Pick<OpenDocument, 'path'>): SessionDocum
   return document.path ? 'saved' : 'scratch'
 }
 
+function markdownSafetyCacheKey(document: Pick<OpenDocument, 'id' | 'revision'>) {
+  return `${document.id}:${document.revision}`
+}
+
+function isMarkdownDocument(document: Pick<OpenDocument, 'path'>) {
+  return isMarkdownPath(document.path)
+}
+
+function getMarkdownSafetyReport(document: OpenDocument) {
+  if (!isMarkdownDocument(document)) {
+    return {
+      safeForVisualEditing: true,
+      unsupportedFeatures: [],
+    } satisfies MarkdownSafetyReport
+  }
+
+  const cacheKey = markdownSafetyCacheKey(document)
+  const cachedReport = markdownSafetyCache.value[cacheKey]
+
+  if (cachedReport) {
+    return cachedReport
+  }
+
+  const nextReport = analyzeMarkdownSafety(document.content)
+  markdownSafetyCache.value = {
+    ...markdownSafetyCache.value,
+    [cacheKey]: nextReport,
+  }
+  return nextReport
+}
+
+function acknowledgeVisualSafety(document: OpenDocument) {
+  visualSafetyAcknowledgments.value = {
+    ...visualSafetyAcknowledgments.value,
+    [document.id]: document.revision,
+  }
+}
+
+function isVisualSafetyAcknowledged(document: OpenDocument) {
+  return visualSafetyAcknowledgments.value[document.id] === document.revision
+}
+
+function resetVisualSafetyAcknowledgment(documentId: string, revision: number) {
+  if (visualSafetyAcknowledgments.value[documentId] === revision) {
+    return
+  }
+
+  if (!(documentId in visualSafetyAcknowledgments.value)) {
+    return
+  }
+
+  const nextAcknowledgments = { ...visualSafetyAcknowledgments.value }
+  delete nextAcknowledgments[documentId]
+  visualSafetyAcknowledgments.value = nextAcknowledgments
+}
+
+function enforceDocumentVisualSafety(document: OpenDocument) {
+  resetVisualSafetyAcknowledgment(document.id, document.revision)
+
+  if (!isMarkdownDocument(document)) {
+    return
+  }
+
+  const safetyReport = getMarkdownSafetyReport(document)
+
+  if (safetyReport.safeForVisualEditing || isVisualSafetyAcknowledged(document)) {
+    return
+  }
+
+  document.defaultMode = 'source'
+  const nextModes = { ...paneDocumentModes.value }
+
+  for (const pane of panes.value) {
+    if (!pane.documentIds.includes(document.id)) {
+      continue
+    }
+
+    nextModes[paneDocumentModeKey(pane.id, document.id)] = 'source'
+  }
+
+  paneDocumentModes.value = nextModes
+}
+
 function formatError(error: unknown) {
   if (
     typeof error === 'object' &&
@@ -759,6 +857,21 @@ function resolveConfirmDialog(confirmed: boolean) {
   currentDialog?.resolve(confirmed)
 }
 
+function openMarkdownSafetyDialog(options: Omit<MarkdownSafetyDialogState, 'resolve'>) {
+  return new Promise<boolean>((resolve) => {
+    markdownSafetyDialog.value = {
+      ...options,
+      resolve,
+    }
+  })
+}
+
+function resolveMarkdownSafetyDialog(confirmed: boolean) {
+  const currentDialog = markdownSafetyDialog.value
+  markdownSafetyDialog.value = null
+  currentDialog?.resolve(confirmed)
+}
+
 function openUnsavedDialog(options: Omit<UnsavedDialogState, 'resolve'>) {
   return new Promise<UnsavedDialogDecision>((resolve) => {
     unsavedDialog.value = {
@@ -821,8 +934,40 @@ function getDocumentMode(pane: EditorPane, document: OpenDocument) {
   return paneDocumentModes.value[paneDocumentModeKey(pane.id, document.id)] ?? document.defaultMode
 }
 
-function setPaneDocumentMode(pane: EditorPane, document: OpenDocument, mode: EditorMode) {
+async function confirmVisualMode(document: OpenDocument) {
+  if (!isMarkdownDocument(document)) {
+    return false
+  }
+
+  const safetyReport = getMarkdownSafetyReport(document)
+
+  if (safetyReport.unsupportedFeatures.some((feature) => feature.kind === 'remote-image')) {
+    errorMessage.value = 'Documents with remote images must stay in Source mode in this release.'
+    return false
+  }
+
+  if (safetyReport.safeForVisualEditing || isVisualSafetyAcknowledged(document)) {
+    return true
+  }
+
+  const confirmed = await openMarkdownSafetyDialog({
+    title: `Visual mode may rewrite ${document.name}`,
+    features: safetyReport.unsupportedFeatures,
+  })
+
+  if (confirmed) {
+    acknowledgeVisualSafety(document)
+  }
+
+  return confirmed
+}
+
+async function setPaneDocumentMode(pane: EditorPane, document: OpenDocument, mode: EditorMode) {
   if (mode === 'visual' && !isMarkdownPath(document.path)) {
+    return
+  }
+
+  if (mode === 'visual' && !(await confirmVisualMode(document))) {
     return
   }
 
@@ -845,6 +990,8 @@ function addDocumentToPane(document: OpenDocument, paneId = activePaneId.value) 
   if (!pane) {
     return
   }
+
+  enforceDocumentVisualSafety(document)
 
   if (!pane.documentIds.includes(document.id)) {
     pane.documentIds.push(document.id)
@@ -917,6 +1064,8 @@ function handleDocumentUpdate(update: DocumentUpdate) {
   if (!nextDocument) {
     return
   }
+
+  enforceDocumentVisualSafety(nextDocument)
 
   const sessions = Object.values(viewSessions.value)
   const sessionIds = [
@@ -1051,6 +1200,7 @@ function mergeRightPaneIntoLeft() {
 
 function openLoadedDocument(document: OpenedDocument, paneId = activePaneId.value) {
   const openDocument = openDocumentState(document)
+  enforceDocumentVisualSafety(openDocument)
   addDocumentToPane(openDocument, paneId)
   return openDocument
 }
@@ -1855,7 +2005,11 @@ async function ensureRecoveryDocument(
 
 function applyRecoverySnapshotToDocument(document: OpenDocument, entry: RecoverySnapshot) {
   document.fileFormat = entry.fileFormat
-  applyDocumentUpdate(document.id, document.revision, entry.content)
+  const nextDocument = applyDocumentUpdate(document.id, document.revision, entry.content)
+
+  if (nextDocument) {
+    enforceDocumentVisualSafety(nextDocument)
+  }
 }
 
 async function inspectRecoverySnapshots(documentIdByKey: Map<string, string>) {
@@ -1948,6 +2102,7 @@ async function reloadDocumentFromDisk(documentId: string) {
   const reloadedDocument = replaceDocumentFromDisk(documentId, loadedDocument)
 
   if (reloadedDocument) {
+    enforceDocumentVisualSafety(reloadedDocument)
     updateDocumentSessions(reloadedDocument.id, reloadedDocument.revision)
   }
 }
@@ -2559,6 +2714,14 @@ onBeforeUnmount(() => {
     :confirm-tone="confirmDialog?.confirmTone ?? 'default'"
     @confirm="resolveConfirmDialog(true)"
     @cancel="resolveConfirmDialog(false)"
+  />
+
+  <MarkdownSafetyDialog
+    :open="!!markdownSafetyDialog"
+    :title="markdownSafetyDialog?.title ?? ''"
+    :features="markdownSafetyDialog?.features ?? []"
+    @confirm="resolveMarkdownSafetyDialog(true)"
+    @cancel="resolveMarkdownSafetyDialog(false)"
   />
 
   <UnsavedChangesDialog
