@@ -18,15 +18,22 @@ import {
   RemoveFormatting,
   Strikethrough,
 } from 'lucide-vue-next'
-import { onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
+import type { DocumentUpdate } from './editorSync'
 
 const props = defineProps<{
+  documentId: string
+  viewId: string
   modelValue: string
+  revision: number
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string]
+  'document-update': [update: DocumentUpdate]
 }>()
+const scrollHost = ref<HTMLDivElement | null>(null)
+let lastAppliedRevision = props.revision
+let isApplyingExternalContent = false
 
 const editor = useEditor({
   content: props.modelValue,
@@ -46,27 +53,67 @@ const editor = useEditor({
     Markdown,
   ],
   onUpdate: ({ editor }) => {
-    emit('update:modelValue', editor.getMarkdown())
+    if (isApplyingExternalContent) {
+      return
+    }
+
+    emit('document-update', {
+      documentId: props.documentId,
+      originViewId: props.viewId,
+      baseRevision: lastAppliedRevision,
+      nextContent: editor.getMarkdown(),
+      updateKind: 'visual-edit',
+    })
+    lastAppliedRevision += 1
   },
 })
 
 watch(
-  () => props.modelValue,
-  (value) => {
+  () => [props.documentId, props.modelValue, props.revision] as const,
+  ([documentId, value, revision], [previousDocumentId]) => {
     if (!editor.value) {
       return
     }
 
     if (editor.value.getMarkdown() === value) {
+      lastAppliedRevision = revision
       return
     }
 
+    const isDocumentSwitch = documentId !== previousDocumentId
+    const scrollTop = scrollHost.value?.scrollTop ?? 0
+    const selection = editor.value.state.selection
+    isApplyingExternalContent = true
     editor.value.commands.setContent(value, {
       contentType: 'markdown',
       emitUpdate: false,
     })
+    const nextMaxPosition = editor.value.state.doc.content.size
+    if (nextMaxPosition > 0) {
+      const from = Math.max(1, Math.min(selection.from, nextMaxPosition))
+      const to = Math.max(1, Math.min(selection.to, nextMaxPosition))
+      editor.value.commands.setTextSelection({ from, to })
+    }
+    lastAppliedRevision = revision
+    isApplyingExternalContent = false
+
+    if (!isDocumentSwitch) {
+      requestAnimationFrame(() => {
+        if (scrollHost.value) {
+          scrollHost.value.scrollTop = scrollTop
+        }
+      })
+    }
   },
 )
+
+function flushContent() {
+  return editor.value?.getMarkdown() ?? props.modelValue
+}
+
+defineExpose({
+  flushContent,
+})
 
 function runCommand(command: () => void) {
   if (!editor.value) {
@@ -243,7 +290,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div class="visual-editor-scroll">
+    <div ref="scrollHost" class="visual-editor-scroll">
       <EditorContent :editor="editor" class="visual-editor-content" />
     </div>
   </div>
