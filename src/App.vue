@@ -27,6 +27,13 @@ import {
 } from './tauriFiles'
 import { createDocumentState, type EditorMode, type OpenDocument } from './documentState'
 import { createTextFileFormat, isDocumentDirty } from './domain/document'
+import {
+  acceptDocumentUpdate,
+  createEditorViewSession,
+  getSynchronizedSessionIds,
+  type DocumentUpdate,
+  type EditorViewSession,
+} from './editorSync'
 import { createDocumentSaveQueue } from './saveQueue'
 import VisualMarkdownEditor from './VisualMarkdownEditor.vue'
 import WorkspaceTree from './WorkspaceTree.vue'
@@ -45,6 +52,10 @@ type EditorPane = {
   activeDocumentId: string | null
 }
 
+type EditorAdapter = {
+  flushContent: () => string
+}
+
 const initialText = '# Untitled\n\nStart writing in Folden.\n'
 const recentWorkspaceStorageKey = 'folden:recent-workspaces'
 const documentState = createDocumentState({
@@ -58,7 +69,7 @@ const {
   getDocument,
   createScratchDocument: createDocumentDraft,
   openLoadedDocument: openDocumentState,
-  updateDocumentContent,
+  applyDocumentUpdate,
   markDocumentQueued,
   markDocumentSaving,
   markDocumentSaved,
@@ -90,6 +101,8 @@ const errorMessage = ref<string | null>(null)
 const isFileBusy = ref(false)
 const recentWorkspaces = ref(loadRecentWorkspaces())
 const paneDocumentModes = ref<Record<string, EditorMode>>({})
+const viewSessions = ref<Record<string, EditorViewSession>>({})
+const paneEditors = ref<Partial<Record<EditorPane['id'], EditorAdapter | null>>>({})
 const saveQueue = createDocumentSaveQueue({
   performSave: (job) => saveTextFile(
     job.documentNativeId,
@@ -127,6 +140,13 @@ const saveQueue = createDocumentSaveQueue({
     markDocumentSaveError(job.documentId, error)
   },
 })
+viewSessions.value = {
+  [paneDocumentModeKey('left', initialDocument.id)]: createEditorViewSession(
+    initialDocument,
+    'left',
+    initialDocument.defaultMode,
+  ),
+}
 
 const activePane = computed(() => getPane(activePaneId.value) ?? panes.value[0])
 const activeDocument = computed(() => {
@@ -174,6 +194,31 @@ const selectedDirectoryPath = computed(() => {
 
   return parentPath(entry.path) ?? ''
 })
+
+function ensureViewSession(pane: EditorPane, document: OpenDocument) {
+  const mode = getDocumentMode(pane, document)
+  const sessionId = paneDocumentModeKey(pane.id, document.id)
+  const existingSession = viewSessions.value[sessionId]
+
+  if (existingSession) {
+    existingSession.mode = mode
+    existingSession.lastAppliedRevision = document.revision
+    return existingSession
+  }
+
+  const session = createEditorViewSession(document, pane.id, mode)
+  viewSessions.value = {
+    ...viewSessions.value,
+    [sessionId]: session,
+  }
+
+  return session
+}
+
+function getViewSessionId(pane: EditorPane, document: OpenDocument) {
+  return viewSessions.value[paneDocumentModeKey(pane.id, document.id)]?.id
+    ?? paneDocumentModeKey(pane.id, document.id)
+}
 
 function fileNameFromPath(path: string) {
   return cleanDisplayPath(path).split(/[\\/]/).at(-1) || path
@@ -303,6 +348,8 @@ function setPaneDocumentMode(pane: EditorPane, document: OpenDocument, mode: Edi
     return
   }
 
+  ensureViewSession(pane, document)
+  flushPaneEditorContent(pane.id)
   paneDocumentModes.value = {
     ...paneDocumentModes.value,
     [paneDocumentModeKey(pane.id, document.id)]: mode,
@@ -325,7 +372,95 @@ function addDocumentToPane(document: OpenDocument, paneId = activePaneId.value) 
     pane.documentIds.push(document.id)
   }
 
+  ensureViewSession(pane, document)
   setActiveDocument(pane, document.id)
+}
+
+function setPaneEditorAdapter(paneId: EditorPane['id'], adapter: EditorAdapter | null) {
+  paneEditors.value = {
+    ...paneEditors.value,
+    [paneId]: adapter,
+  }
+}
+
+function flushPaneEditorContent(paneId: EditorPane['id']) {
+  const pane = getPane(paneId)
+
+  if (!pane?.activeDocumentId) {
+    return
+  }
+
+  const document = getDocument(pane.activeDocumentId)
+  const adapter = paneEditors.value[paneId]
+
+  if (!document || !adapter) {
+    return
+  }
+
+  const nextContent = adapter.flushContent()
+
+  if (nextContent === document.content) {
+    return
+  }
+
+  const session = ensureViewSession(pane, document)
+  handleDocumentUpdate({
+    documentId: document.id,
+    originViewId: session.id,
+    baseRevision: document.revision,
+    nextContent,
+    updateKind: getDocumentMode(pane, document) === 'visual' ? 'visual-edit' : 'source-edit',
+  })
+}
+
+function flushVisibleDocumentViews(documentId: string) {
+  for (const pane of visiblePanes.value) {
+    if (pane.activeDocumentId === documentId) {
+      flushPaneEditorContent(pane.id)
+    }
+  }
+}
+
+function handleDocumentUpdate(update: DocumentUpdate) {
+  const document = getDocument(update.documentId)
+
+  if (!document) {
+    return
+  }
+
+  const acceptedUpdate = acceptDocumentUpdate(document, update)
+
+  if (!acceptedUpdate) {
+    return
+  }
+
+  const nextDocument = applyDocumentUpdate(document.id, update.baseRevision, acceptedUpdate.nextContent)
+
+  if (!nextDocument) {
+    return
+  }
+
+  const sessions = Object.values(viewSessions.value)
+  const sessionIds = [
+    update.originViewId,
+    ...getSynchronizedSessionIds(sessions, document.id, update.originViewId),
+  ]
+  const nextSessions = { ...viewSessions.value }
+
+  for (const sessionId of sessionIds) {
+    const session = nextSessions[sessionId]
+
+    if (!session) {
+      continue
+    }
+
+    nextSessions[sessionId] = {
+      ...session,
+      lastAppliedRevision: nextDocument.revision,
+    }
+  }
+
+  viewSessions.value = nextSessions
 }
 
 function setSplitEnabled(enabled: boolean) {
@@ -466,17 +601,24 @@ async function saveDocument(document = activeDocument.value) {
   }
 
   await runFileTask(async () => {
+    flushVisibleDocumentViews(document.id)
+    const currentDocument = getDocument(document.id)
+
+    if (!currentDocument) {
+      return
+    }
+
     await saveQueue.enqueue({
-      documentId: document.id,
-      documentNativeId: document.nativeId,
-      pathBeforeSave: document.path,
-      workspaceIdBeforeSave: document.workspaceId,
-      relativePathBeforeSave: document.relativePath,
-      revision: document.revision,
-      contentSnapshot: document.content,
-      expectedFingerprint: document.diskFingerprint,
-      fileFormat: document.fileFormat ?? createTextFileFormat(),
-      suggestedFileName: document.nativeId ? undefined : suggestFileName(document.content),
+      documentId: currentDocument.id,
+      documentNativeId: currentDocument.nativeId,
+      pathBeforeSave: currentDocument.path,
+      workspaceIdBeforeSave: currentDocument.workspaceId,
+      relativePathBeforeSave: currentDocument.relativePath,
+      revision: currentDocument.revision,
+      contentSnapshot: currentDocument.content,
+      expectedFingerprint: currentDocument.diskFingerprint,
+      fileFormat: currentDocument.fileFormat ?? createTextFileFormat(),
+      suggestedFileName: currentDocument.nativeId ? undefined : suggestFileName(currentDocument.content),
       reason: 'manual',
     })
   }, 'Could not save file')
@@ -516,6 +658,8 @@ function closeDocument(pane: EditorPane, documentId: string) {
   if (!document) {
     return
   }
+
+  flushPaneEditorContent(pane.id)
 
   if (isDirty(document) && !window.confirm(`Close ${document.name} without saving?`)) {
     return
@@ -932,13 +1076,21 @@ onBeforeUnmount(() => {
 
             <VisualMarkdownEditor
               v-if="getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'visual'"
+              :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
+              :document-id="getDocument(pane.activeDocumentId)!.id"
+              :view-id="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
               :model-value="getDocument(pane.activeDocumentId)!.content"
-              @update:model-value="updateDocumentContent(pane.activeDocumentId, $event)"
+              :revision="getDocument(pane.activeDocumentId)!.revision"
+              @document-update="handleDocumentUpdate"
             />
             <section v-else class="source-editor-frame">
               <SourceEditor
+                :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
+                :document-id="getDocument(pane.activeDocumentId)!.id"
+                :view-id="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
                 :model-value="getDocument(pane.activeDocumentId)!.content"
-                @update:model-value="updateDocumentContent(pane.activeDocumentId, $event)"
+                :revision="getDocument(pane.activeDocumentId)!.revision"
+                @document-update="handleDocumentUpdate"
               />
             </section>
           </template>

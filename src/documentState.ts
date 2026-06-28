@@ -153,6 +153,25 @@ export function createDocumentState(options: DocumentStateOptions) {
     document.revision = nextDocumentRevision(document.revision)
   }
 
+  function applyDocumentUpdate(
+    documentId: DocumentId,
+    baseRevision: DocumentRevision,
+    nextContent: string,
+  ) {
+    const document = getDocument(documentId)
+
+    if (!document || document.revision !== baseRevision) {
+      return null
+    }
+
+    if (document.content !== nextContent) {
+      document.content = nextContent
+      document.revision = nextDocumentRevision(document.revision)
+    }
+
+    return document
+  }
+
   function markDocumentQueued(documentId: DocumentId) {
     const document = getDocument(documentId)
 
@@ -272,6 +291,7 @@ export function createDocumentState(options: DocumentStateOptions) {
     createScratchDocument,
     openLoadedDocument,
     updateDocumentContent,
+    applyDocumentUpdate,
     markDocumentQueued,
     markDocumentSaving,
     markDocumentSaved,
