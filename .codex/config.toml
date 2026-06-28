@@ -1,0 +1,11 @@
+[mcp_servers.godot]
+enabled = false
+
+[mcp_servers.figma-console]
+enabled = false
+
+[mcp_servers.context7]
+enabled = true
+
+[mcp_servers.node_repl]
+enabled = false
