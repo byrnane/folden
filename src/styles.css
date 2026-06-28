@@ -217,6 +217,16 @@ h1 {
   white-space: nowrap;
 }
 
+.tree-meta {
+  flex: 0 0 auto;
+  color: var(--muted-text);
+  font-size: 11px;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
 .tree-actions {
   display: none;
   gap: 2px;
