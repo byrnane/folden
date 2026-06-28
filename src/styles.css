@@ -271,7 +271,7 @@ h1 {
 
 .workbench {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) 28px;
+  grid-template-rows: auto auto auto minmax(0, 1fr) 28px;
   min-width: 0;
   min-height: 0;
   background: var(--editor-bg);
@@ -330,8 +330,47 @@ h1 {
   padding: 9px 14px;
 }
 
-.pane-grid {
+.warning-message {
+  grid-row: 2;
+  margin: 0;
+  border-bottom: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-size: 13px;
+  padding: 9px 14px;
+}
+
+.document-warning {
   grid-row: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--warning-border);
+  background: rgba(114, 91, 44, 0.22);
+  color: var(--warning-text);
+  font-size: 13px;
+  padding: 10px 14px;
+}
+
+.document-warning strong,
+.document-warning span {
+  display: block;
+}
+
+.document-warning span {
+  color: var(--soft-text);
+  margin-top: 2px;
+}
+
+.document-warning-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pane-grid {
+  grid-row: 4;
   display: grid;
   min-width: 0;
   min-height: 0;
@@ -657,7 +696,7 @@ h1 {
 }
 
 .statusbar {
-  grid-row: 4;
+  grid-row: 5;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;

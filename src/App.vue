@@ -8,6 +8,7 @@ import {
   Save,
   X,
 } from 'lucide-vue-next'
+import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
@@ -17,9 +18,11 @@ import UnsavedChangesDialog from './components/UnsavedChangesDialog.vue'
 import { shouldPromptToDiscardDocument } from './closeProtection'
 import SourceEditor from './SourceEditor.vue'
 import {
+  closeNativeDocuments,
   createDirectory,
   createFile,
   listDirectory,
+  type NativeFsEvent,
   openTextFile,
   openTextFileByPath,
   openWorkspaceDirectory,
@@ -31,7 +34,11 @@ import {
   type WorkspaceDescriptor,
   type WorkspaceEntry,
 } from './tauriFiles'
-import { createDocumentState, type EditorMode, type OpenDocument } from './documentState'
+import {
+  createDocumentState,
+  type EditorMode,
+  type OpenDocument,
+} from './documentState'
 import { createTextFileFormat, isDocumentDirty } from './domain/document'
 import {
   acceptDocumentUpdate,
@@ -131,6 +138,7 @@ const {
   documents,
   dirtyDocuments,
   getDocument,
+  findDocumentByPath,
   createScratchDocument: createDocumentDraft,
   openLoadedDocument: openDocumentState,
   applyDocumentUpdate,
@@ -140,6 +148,10 @@ const {
   markDocumentSaving,
   markDocumentSaved,
   markDocumentSaveError,
+  replaceDocumentFromDisk,
+  markDocumentConflict,
+  markDocumentMissing,
+  clearDocumentExternalState,
   updateDocumentPaths,
   removeDocuments,
 } = documentState
@@ -164,6 +176,7 @@ const panes = ref<EditorPane[]>([
 const activePaneId = ref<EditorPane['id']>('left')
 const splitEnabled = ref(false)
 const errorMessage = ref<string | null>(null)
+const watcherWarning = ref<string | null>(null)
 const isFileBusy = ref(false)
 const recentWorkspaces = ref(loadRecentWorkspaces())
 const paneDocumentModes = ref<Record<string, EditorMode>>({})
@@ -176,10 +189,14 @@ const unsavedDialog = ref<UnsavedDialogState | null>(null)
 const recoveryDialog = ref<RecoveryDialogState | null>(null)
 const pendingRecoveryEntries = ref<RecoverySnapshot[]>([])
 let tauriWindowCloseUnlisten: (() => void) | null = null
+let fsEventUnlisten: (() => void) | null = null
+let watcherWarningUnlisten: (() => void) | null = null
 let sessionRestoreComplete = false
 let sessionPersistTimeout: number | null = null
 let sessionPersistRunning = false
 let sessionPersistRequested = false
+const pendingWorkspaceRefreshes = new Map<string, number>()
+const pendingDocumentReloads = new Map<string, number>()
 const saveQueue = createDocumentSaveQueue({
   performSave: (job) => saveTextFile(
     job.documentNativeId,
@@ -947,6 +964,86 @@ async function refreshWorkspace() {
   workspace.value.entries = await listDirectory(workspace.value.id, '')
 }
 
+function replaceWorkspaceBranch(
+  entries: WorkspaceEntry[],
+  branchPath: string,
+  nextChildren: WorkspaceEntry[],
+): WorkspaceEntry[] {
+  if (!branchPath) {
+    return nextChildren
+  }
+
+  return entries.map((entry) => {
+    if (entry.path === branchPath && entry.kind === 'directory') {
+      return {
+        ...entry,
+        children: nextChildren,
+      }
+    }
+
+    if (entry.kind !== 'directory' || entry.children.length === 0) {
+      return entry
+    }
+
+    return {
+      ...entry,
+      children: replaceWorkspaceBranch(entry.children, branchPath, nextChildren),
+    }
+  })
+}
+
+async function refreshWorkspaceBranch(branchPath: string | null) {
+  if (!workspace.value) {
+    return
+  }
+
+  const normalizedBranchPath = branchPath ?? ''
+  const nextChildren = await listDirectory(workspace.value.id, normalizedBranchPath)
+
+  if (normalizedBranchPath === '') {
+    workspace.value.entries = nextChildren
+    return
+  }
+
+  workspace.value.entries = replaceWorkspaceBranch(
+    workspace.value.entries,
+    normalizedBranchPath,
+    nextChildren,
+  )
+}
+
+function scheduleWorkspaceRefresh(branchPath: string | null) {
+  const key = branchPath ?? ''
+  const existingTimeout = pendingWorkspaceRefreshes.get(key)
+
+  if (existingTimeout !== undefined) {
+    window.clearTimeout(existingTimeout)
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    pendingWorkspaceRefreshes.delete(key)
+    void refreshWorkspaceBranch(branchPath).catch((error) => {
+      watcherWarning.value = `Could not refresh workspace after external changes: ${formatError(error)}`
+    })
+  }, 180)
+
+  pendingWorkspaceRefreshes.set(key, timeoutId)
+}
+
+function releaseClosedNativeDocuments(documentIds: string[]) {
+  const nativeDocumentIds = documentIds
+    .map((documentId) => getDocument(documentId)?.nativeId ?? null)
+    .filter((documentId): documentId is string => documentId !== null)
+
+  if (!nativeDocumentIds.length) {
+    return
+  }
+
+  void closeNativeDocuments(nativeDocumentIds).catch(() => {
+    // Closing native handles is best-effort; the next open/save will resync watcher state.
+  })
+}
+
 async function openWorkspaceFile(entry: WorkspaceEntry, paneId = activePaneId.value) {
   if (!workspace.value || entry.kind !== 'file') {
     return
@@ -986,6 +1083,11 @@ async function saveDocument(document = activeDocument.value) {
     return
   }
 
+  if (document.externalState !== 'idle' && document.nativeId) {
+    errorMessage.value = 'Resolve the external file conflict before saving to the original path.'
+    return
+  }
+
   await runFileTask(async () => {
     flushVisibleDocumentViews(document.id)
     const currentDocument = getDocument(document.id)
@@ -1008,6 +1110,35 @@ async function saveDocument(document = activeDocument.value) {
       reason: 'manual',
     })
   }, 'Could not save file')
+}
+
+async function saveDocumentAsCopy(document = activeDocument.value) {
+  if (!document) {
+    return
+  }
+
+  await runFileTask(async () => {
+    flushVisibleDocumentViews(document.id)
+    const currentDocument = getDocument(document.id)
+
+    if (!currentDocument) {
+      return
+    }
+
+    await saveQueue.enqueue({
+      documentId: currentDocument.id,
+      documentNativeId: null,
+      pathBeforeSave: currentDocument.path,
+      workspaceIdBeforeSave: currentDocument.workspaceId,
+      relativePathBeforeSave: currentDocument.relativePath,
+      revision: currentDocument.revision,
+      contentSnapshot: currentDocument.content,
+      expectedFingerprint: null,
+      fileFormat: currentDocument.fileFormat ?? createTextFileFormat(),
+      suggestedFileName: suggestFileName(currentDocument.content),
+      reason: 'manual',
+    })
+  }, 'Could not save file copy')
 }
 
 async function saveDirtyDocuments(documentIds: string[]) {
@@ -1075,6 +1206,7 @@ function removeDocumentView(pane: EditorPane, documentId: string) {
   }
 
   if (!panes.value.some((openPane) => openPane.documentIds.includes(documentId))) {
+    releaseClosedNativeDocuments([documentId])
     removeDocuments([documentId])
     delete nextPaneDocumentModes[paneDocumentModeKey('left', documentId)]
     delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
@@ -1293,11 +1425,14 @@ function removeDocumentsFromPanes(documentIds: string[]) {
   }
 
   paneDocumentModes.value = nextPaneDocumentModes
+  releaseClosedNativeDocuments(documentIds)
   removeDocuments(documentIds)
 }
 
 function clearRestoredLayout() {
-  removeDocuments(documents.value.map((document) => document.id))
+  const currentDocumentIds = documents.value.map((document) => document.id)
+  releaseClosedNativeDocuments(currentDocumentIds)
+  removeDocuments(currentDocumentIds)
   panes.value = [
     {
       id: 'left',
@@ -1566,6 +1701,98 @@ async function inspectRecoverySnapshots(documentIdByKey: Map<string, string>) {
   }
 }
 
+function workspaceRelativePathFromAbsolute(path: string) {
+  if (!workspace.value) {
+    return null
+  }
+
+  const normalizedRoot = normalizePath(workspace.value.rootPath)
+  const normalizedPath = normalizePath(path)
+
+  if (normalizedPath === normalizedRoot) {
+    return ''
+  }
+
+  if (!normalizedPath.startsWith(`${normalizedRoot}\\`)) {
+    return null
+  }
+
+  return cleanDisplayPath(path).slice(cleanDisplayPath(workspace.value.rootPath).length + 1)
+}
+
+async function reloadDocumentFromDisk(documentId: string) {
+  const document = getDocument(documentId)
+
+  if (!document?.path) {
+    return
+  }
+
+  const loadedDocument = (
+    workspace.value &&
+    document.workspaceId === workspace.value.id &&
+    document.relativePath
+  )
+    ? await openTextFileByPath(workspace.value.id, document.relativePath)
+    : await openTextFileAtPath(document.path)
+
+  const reloadedDocument = replaceDocumentFromDisk(documentId, loadedDocument)
+
+  if (reloadedDocument) {
+    updateDocumentSessions(reloadedDocument.id, reloadedDocument.revision)
+  }
+}
+
+function scheduleDocumentReload(documentId: string) {
+  const existingTimeout = pendingDocumentReloads.get(documentId)
+
+  if (existingTimeout !== undefined) {
+    window.clearTimeout(existingTimeout)
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    pendingDocumentReloads.delete(documentId)
+    void reloadDocumentFromDisk(documentId).catch((error) => {
+      const document = getDocument(documentId)
+
+      if (document) {
+        markDocumentConflict(documentId, `Could not reload external changes: ${formatError(error)}`)
+      }
+    })
+  }, 180)
+
+  pendingDocumentReloads.set(documentId, timeoutId)
+}
+
+function handleExternalFileEvent(event: NativeFsEvent) {
+  const document = findDocumentByPath(event.path)
+  const relativePath = workspaceRelativePathFromAbsolute(event.path)
+
+  if (relativePath !== null) {
+    const branchPath = event.kind === 'remove'
+      ? parentPath(relativePath) ?? ''
+      : parentPath(relativePath) ?? ''
+
+    scheduleWorkspaceRefresh(branchPath)
+  }
+
+  if (!document) {
+    return
+  }
+
+  if (event.kind === 'remove') {
+    markDocumentMissing(document.id, `${document.name} was moved or deleted outside Folden.`)
+    return
+  }
+
+  if (isDirty(document)) {
+    markDocumentConflict(document.id, `${document.name} changed on disk while you have unsaved edits.`)
+    return
+  }
+
+  clearDocumentExternalState(document.id)
+  scheduleDocumentReload(document.id)
+}
+
 function isSameOrChildPath(path: string, parent: string) {
   const normalizedPath = normalizePath(path)
   const normalizedParent = normalizePath(parent)
@@ -1740,6 +1967,18 @@ onMounted(() => {
     errorMessage.value = `Could not restore the previous session: ${formatError(error)}`
   })
 
+  void listen<NativeFsEvent>('folden://fs-event', (event) => {
+    handleExternalFileEvent(event.payload)
+  }).then((unlisten) => {
+    fsEventUnlisten = unlisten
+  })
+
+  void listen<string | null>('folden://watcher-warning', (event) => {
+    watcherWarning.value = event.payload
+  }).then((unlisten) => {
+    watcherWarningUnlisten = unlisten
+  })
+
   let isProgrammaticWindowClose = false
 
   void getCurrentWindow().onCloseRequested(async (event) => {
@@ -1787,10 +2026,20 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   tauriWindowCloseUnlisten?.()
+  fsEventUnlisten?.()
+  watcherWarningUnlisten?.()
 
   if (sessionPersistTimeout !== null) {
     window.clearTimeout(sessionPersistTimeout)
     sessionPersistTimeout = null
+  }
+
+  for (const timeoutId of pendingWorkspaceRefreshes.values()) {
+    window.clearTimeout(timeoutId)
+  }
+
+  for (const timeoutId of pendingDocumentReloads.values()) {
+    window.clearTimeout(timeoutId)
   }
 })
 </script>
@@ -1903,7 +2152,7 @@ onBeforeUnmount(() => {
             type="button"
             class="icon-button"
             title="Save"
-            :disabled="isFileBusy || !activeDocument"
+            :disabled="isFileBusy || !activeDocument || (activeDocument.externalState !== 'idle' && !!activeDocument.nativeId)"
             @click="saveDocument()"
           >
             <Save :size="16" />
@@ -1929,7 +2178,49 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
+      <p
+        v-if="errorMessage || watcherWarning"
+        :class="errorMessage ? 'error-message' : 'warning-message'"
+      >
+        {{ errorMessage ?? watcherWarning }}
+      </p>
+      <section
+        v-if="activeDocument?.externalState === 'conflict'"
+        class="document-warning"
+      >
+        <div>
+          <strong>External changes detected.</strong>
+          <span>{{ activeDocument.externalMessage }}</span>
+        </div>
+        <div class="document-warning-actions">
+          <button type="button" @click="reloadDocumentFromDisk(activeDocument.id)">
+            Reload from disk
+          </button>
+          <button type="button" @click="saveDocumentAsCopy(activeDocument)">
+            Save As
+          </button>
+          <button type="button" @click="clearDocumentExternalState(activeDocument.id)">
+            Later
+          </button>
+        </div>
+      </section>
+      <section
+        v-else-if="activeDocument?.externalState === 'missing'"
+        class="document-warning"
+      >
+        <div>
+          <strong>File is missing on disk.</strong>
+          <span>{{ activeDocument.externalMessage }}</span>
+        </div>
+        <div class="document-warning-actions">
+          <button type="button" @click="saveDocumentAsCopy(activeDocument)">
+            Save As
+          </button>
+          <button type="button" @click="reloadDocumentFromDisk(activeDocument.id)">
+            Retry reload
+          </button>
+        </div>
+      </section>
 
       <section class="pane-grid" :class="{ split: splitEnabled }">
         <section

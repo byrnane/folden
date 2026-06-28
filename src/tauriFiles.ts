@@ -33,6 +33,10 @@ export type NativeError = {
 }
 
 export type SaveDocumentResult = OpenedDocument
+export type NativeFsEvent = {
+  kind: 'create' | 'modify' | 'remove'
+  path: string
+}
 
 function normalizeNativeError(error: unknown): NativeError {
   if (typeof error === 'object' && error !== null) {
@@ -137,5 +141,11 @@ export async function trashPath(workspaceId: string, path: string) {
   return invokeNative<void>('trash_path', {
     workspaceId,
     path,
+  })
+}
+
+export async function closeNativeDocuments(documentIds: string[]) {
+  return invokeNative<void>('close_native_documents', {
+    documentIds,
   })
 }

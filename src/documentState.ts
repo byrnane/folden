@@ -19,6 +19,7 @@ import {
 import type { NativeError } from './tauriFiles'
 
 export type EditorMode = 'visual' | 'source'
+export type ExternalDocumentState = 'idle' | 'conflict' | 'missing'
 
 export type OpenDocument = {
   id: DocumentId
@@ -35,6 +36,8 @@ export type OpenDocument = {
   diskFingerprint: FileFingerprint | null
   saveState: 'idle' | 'queued' | 'saving' | 'error'
   saveError: NativeError | null
+  externalState: ExternalDocumentState
+  externalMessage: string | null
   history: DocumentHistoryState
 }
 
@@ -104,6 +107,8 @@ export function createDocumentState(options: DocumentStateOptions) {
       diskFingerprint: null,
       saveState: 'idle',
       saveError: null,
+      externalState: 'idle',
+      externalMessage: null,
       history: createDocumentHistoryState(),
     }
   }
@@ -132,6 +137,8 @@ export function createDocumentState(options: DocumentStateOptions) {
       existingDocument.diskFingerprint = document.fingerprint
       existingDocument.saveState = 'idle'
       existingDocument.saveError = null
+      existingDocument.externalState = 'idle'
+      existingDocument.externalMessage = null
       return existingDocument
     }
 
@@ -144,6 +151,8 @@ export function createDocumentState(options: DocumentStateOptions) {
       diskFingerprint: document.fingerprint,
       saveState: 'idle',
       saveError: null,
+      externalState: 'idle',
+      externalMessage: null,
       history: createDocumentHistoryState(),
     })
   }
@@ -178,6 +187,8 @@ export function createDocumentState(options: DocumentStateOptions) {
       document.history = recordDocumentHistory(document.history, document.content)
       document.content = nextContent
       document.revision = nextDocumentRevision(document.revision)
+      document.externalState = 'idle'
+      document.externalMessage = null
     }
 
     return document
@@ -267,6 +278,8 @@ export function createDocumentState(options: DocumentStateOptions) {
     document.persistedRevision = savedRevision
     document.saveState = 'idle'
     document.saveError = null
+    document.externalState = 'idle'
+    document.externalMessage = null
 
     if (!options.isMarkdownPath(documentSnapshot.path)) {
       document.defaultMode = 'source'
@@ -285,6 +298,75 @@ export function createDocumentState(options: DocumentStateOptions) {
 
     document.saveState = 'error'
     document.saveError = error
+    return document
+  }
+
+  function replaceDocumentFromDisk(documentId: DocumentId, documentSnapshot: LoadedDocument) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    setPathIndex(document.path, null)
+    const nextRevision = nextDocumentRevision(document.revision)
+    document.nativeId = documentSnapshot.id
+    document.path = documentSnapshot.path
+    document.workspaceId = documentSnapshot.workspaceId
+    document.relativePath = documentSnapshot.relativePath
+    document.name = options.fileNameFromPath(documentSnapshot.path)
+    document.content = documentSnapshot.content
+    document.revision = nextRevision
+    document.persistedRevision = nextRevision
+    document.fileFormat = documentSnapshot.fileFormat
+    document.diskFingerprint = documentSnapshot.fingerprint
+    document.saveState = 'idle'
+    document.saveError = null
+    document.externalState = 'idle'
+    document.externalMessage = null
+    document.history = createDocumentHistoryState()
+
+    if (!options.isMarkdownPath(documentSnapshot.path)) {
+      document.defaultMode = 'source'
+    }
+
+    setPathIndex(document.path, document.id)
+    return document
+  }
+
+  function markDocumentConflict(documentId: DocumentId, message: string) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    document.externalState = 'conflict'
+    document.externalMessage = message
+    return document
+  }
+
+  function markDocumentMissing(documentId: DocumentId, message: string) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    document.externalState = 'missing'
+    document.externalMessage = message
+    return document
+  }
+
+  function clearDocumentExternalState(documentId: DocumentId) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    document.externalState = 'idle'
+    document.externalMessage = null
     return document
   }
 
@@ -339,6 +421,7 @@ export function createDocumentState(options: DocumentStateOptions) {
     getDocument,
     createScratchDocument,
     openLoadedDocument,
+    findDocumentByPath,
     updateDocumentContent,
     applyDocumentUpdate,
     undoDocument,
@@ -347,6 +430,10 @@ export function createDocumentState(options: DocumentStateOptions) {
     markDocumentSaving,
     markDocumentSaved,
     markDocumentSaveError,
+    replaceDocumentFromDisk,
+    markDocumentConflict,
+    markDocumentMissing,
+    clearDocumentExternalState,
     updateDocumentPaths,
     removeDocuments,
   }
