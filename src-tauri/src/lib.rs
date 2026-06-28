@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, Runtime};
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -475,7 +476,10 @@ fn desired_watch_paths(state: &NativeAppState) -> HashMap<String, WatchPathMode>
     let mut desired_paths = HashMap::new();
 
     for workspace in state.workspaces.values() {
-        desired_paths.insert(path_to_string(&workspace.root_path), WatchPathMode::Recursive);
+        desired_paths.insert(
+            path_to_string(&workspace.root_path),
+            WatchPathMode::Recursive,
+        );
     }
 
     for document in state.documents.values() {
@@ -516,8 +520,8 @@ fn sync_native_watcher<R: Runtime>(
 
     if state.watcher.is_none() {
         state.watcher = Some(
-            create_native_watcher(app_handle.clone(), state.self_write_suppressions.clone()).map_err(
-                |error| {
+            create_native_watcher(app_handle.clone(), state.self_write_suppressions.clone())
+                .map_err(|error| {
                     native_error(
                         FileErrorCode::Unknown,
                         "sync_native_watcher",
@@ -525,8 +529,7 @@ fn sync_native_watcher<R: Runtime>(
                         Some(error.to_string()),
                         true,
                     )
-                },
-            )?,
+                })?,
         );
     }
 
@@ -855,6 +858,38 @@ fn remove_data_file_if_exists(path: &Path, operation: &str) -> NativeResult<()> 
     }
 }
 
+fn sanitize_log_message(message: &str) -> String {
+    message
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(500)
+        .collect()
+}
+
+fn open_directory_in_file_manager(path: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer").arg(path).spawn()?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(path).spawn()?;
+        Ok(())
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open").arg(path).spawn()?;
+        Ok(())
+    }
+}
+
 fn save_json_file<T: serde::Serialize>(
     path: &Path,
     value: &T,
@@ -919,15 +954,16 @@ fn load_recovery_snapshots_from_path(path: &Path) -> RecoveryLoadResult {
     for (index, item) in items.iter().enumerate() {
         match serde_json::from_value::<RecoverySnapshot>(item.clone()) {
             Ok(entry) => entries.push(entry),
-            Err(error) => diagnostics.push(format!(
-                "Skipped recovery entry {}: {}",
-                index + 1,
-                error
-            )),
+            Err(error) => {
+                diagnostics.push(format!("Skipped recovery entry {}: {}", index + 1, error))
+            }
         }
     }
 
-    RecoveryLoadResult { entries, diagnostics }
+    RecoveryLoadResult {
+        entries,
+        diagnostics,
+    }
 }
 
 fn ensure_expected_fingerprint(
@@ -1465,7 +1501,9 @@ fn restore_workspace_by_path(
 }
 
 #[tauri::command]
-fn load_session_state<R: Runtime>(app_handle: tauri::AppHandle<R>) -> NativeResult<Option<PersistedSessionState>> {
+fn load_session_state<R: Runtime>(
+    app_handle: tauri::AppHandle<R>,
+) -> NativeResult<Option<PersistedSessionState>> {
     let path = app_data_file_path(&app_handle, "load_session_state", "session-state.json")?;
     Ok(load_session_state_from_path(&path))
 }
@@ -1487,7 +1525,9 @@ fn save_session_state<R: Runtime>(
 }
 
 #[tauri::command]
-fn load_recovery_snapshots<R: Runtime>(app_handle: tauri::AppHandle<R>) -> NativeResult<RecoveryLoadResult> {
+fn load_recovery_snapshots<R: Runtime>(
+    app_handle: tauri::AppHandle<R>,
+) -> NativeResult<RecoveryLoadResult> {
     let path = app_data_file_path(
         &app_handle,
         "load_recovery_snapshots",
@@ -1514,6 +1554,36 @@ fn close_native_documents(
     }
 
     sync_native_watcher(&mut state, &app_handle)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn log_frontend_event(level: String, message: String) -> NativeResult<()> {
+    let sanitized_message = sanitize_log_message(&message);
+
+    match level.as_str() {
+        "info" => log::info!(target: "frontend", "{sanitized_message}"),
+        "warn" => log::warn!(target: "frontend", "{sanitized_message}"),
+        _ => log::error!(target: "frontend", "{sanitized_message}"),
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn open_logs_folder<R: Runtime>(app_handle: tauri::AppHandle<R>) -> NativeResult<()> {
+    let log_directory = app_handle.path().app_log_dir().map_err(|error| {
+        native_error(
+            FileErrorCode::Unknown,
+            "open_logs_folder",
+            "Could not resolve the logs folder.",
+            Some(error.to_string()),
+            true,
+        )
+    })?;
+    fs::create_dir_all(&log_directory).map_err(|error| io_error("open_logs_folder", error))?;
+    open_directory_in_file_manager(&log_directory)
+        .map_err(|error| io_error("open_logs_folder", error))?;
     Ok(())
 }
 
@@ -1728,13 +1798,33 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(NativeAppState::default()))
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            app.handle().plugin(
+                tauri_plugin_log::Builder::new()
+                    .clear_targets()
+                    .target(Target::new(TargetKind::LogDir {
+                        file_name: Some("folden".into()),
+                    }))
+                    .level(if cfg!(debug_assertions) {
+                        log::LevelFilter::Debug
+                    } else {
+                        log::LevelFilter::Info
+                    })
+                    .rotation_strategy(RotationStrategy::KeepSome(5))
+                    .max_file_size(256_000)
+                    .build(),
+            )?;
+
+            std::panic::set_hook(Box::new(|panic_info| {
+                log::error!(target: "panic", "{panic_info}");
+            }));
+            log::info!(
+                target: "app",
+                "Folden {} starting on {}-{}",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            );
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1748,6 +1838,8 @@ pub fn run() {
             load_recovery_snapshots,
             save_recovery_snapshots,
             close_native_documents,
+            log_frontend_event,
+            open_logs_folder,
             list_directory,
             open_text_file_by_path,
             create_file,
@@ -1959,6 +2051,9 @@ mod tests {
         let result = load_recovery_snapshots_from_path(&path);
 
         assert!(result.entries.is_empty());
-        assert_eq!(result.diagnostics, vec!["Recovery data must be a JSON array.".to_string()]);
+        assert_eq!(
+            result.diagnostics,
+            vec!["Recovery data must be a JSON array.".to_string()]
+        );
     }
 }

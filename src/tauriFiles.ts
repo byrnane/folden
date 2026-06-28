@@ -149,3 +149,18 @@ export async function closeNativeDocuments(documentIds: string[]) {
     documentIds,
   })
 }
+
+export async function logFrontendEvent(level: 'info' | 'warn' | 'error', message: string) {
+  try {
+    await invokeNative<void>('log_frontend_event', {
+      level,
+      message,
+    })
+  } catch {
+    // Logging must stay best-effort and never block the app.
+  }
+}
+
+export async function openLogsFolder() {
+  return invokeNative<void>('open_logs_folder')
+}

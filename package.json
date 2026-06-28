@@ -1,7 +1,14 @@
 {
   "name": "folden",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.3.0",
+  "description": "Local-first desktop Markdown and text editor.",
+  "author": "byrnane",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:byrnane/folden.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +20,8 @@
     "app:dev": "node scripts/tauri.mjs dev",
     "app:build": "node scripts/tauri.mjs build --no-bundle",
     "app:run": "node scripts/run-app.mjs",
-    "tauri": "node scripts/tauri.mjs"
+    "tauri": "node scripts/tauri.mjs",
+    "version:check": "node scripts/check-version.mjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
