@@ -1,7 +1,7 @@
 {
   "name": "folden",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,13 @@
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
     "@tauri-apps/api": "^2.11.1",
+    "@tiptap/extension-image": "^3.27.1",
+    "@tiptap/extension-link": "^3.27.1",
+    "@tiptap/markdown": "^3.27.1",
+    "@tiptap/starter-kit": "^3.27.1",
+    "@tiptap/vue-3": "^3.27.1",
     "codemirror": "^6.0.2",
+    "lucide-vue-next": "^1.0.0",
     "vue": "^3.5.38"
   },
   "devDependencies": {

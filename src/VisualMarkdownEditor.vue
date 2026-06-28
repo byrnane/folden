@@ -1,0 +1,241 @@
+<script setup lang="ts">
+import Image from '@tiptap/extension-image'
+import Link from '@tiptap/extension-link'
+import { Markdown } from '@tiptap/markdown'
+import StarterKit from '@tiptap/starter-kit'
+import { EditorContent, useEditor } from '@tiptap/vue-3'
+import {
+  Bold,
+  Code,
+  Heading1,
+  Heading2,
+  Image as ImageIcon,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Quote,
+  Strikethrough,
+} from 'lucide-vue-next'
+import { onBeforeUnmount, watch } from 'vue'
+
+const props = defineProps<{
+  modelValue: string
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: string]
+}>()
+
+const editor = useEditor({
+  content: props.modelValue,
+  contentType: 'markdown',
+  extensions: [
+    StarterKit.configure({
+      link: false,
+    }),
+    Link.configure({
+      openOnClick: false,
+      autolink: true,
+    }),
+    Image.configure({
+      inline: false,
+      allowBase64: false,
+    }),
+    Markdown,
+  ],
+  onUpdate: ({ editor }) => {
+    emit('update:modelValue', editor.getMarkdown())
+  },
+})
+
+watch(
+  () => props.modelValue,
+  (value) => {
+    if (!editor.value) {
+      return
+    }
+
+    if (editor.value.getMarkdown() === value) {
+      return
+    }
+
+    editor.value.commands.setContent(value, {
+      contentType: 'markdown',
+      emitUpdate: false,
+    })
+  },
+)
+
+function runCommand(command: () => void) {
+  if (!editor.value) {
+    return
+  }
+
+  command()
+  editor.value.commands.focus()
+}
+
+function setLink() {
+  if (!editor.value) {
+    return
+  }
+
+  const previousUrl = editor.value.getAttributes('link').href as string | undefined
+  const url = window.prompt('Link URL', previousUrl ?? '')
+
+  if (url === null) {
+    return
+  }
+
+  if (url.trim() === '') {
+    runCommand(() => editor.value?.chain().focus().extendMarkRange('link').unsetLink().run())
+    return
+  }
+
+  runCommand(() =>
+    editor.value
+      ?.chain()
+      .focus()
+      .extendMarkRange('link')
+      .setLink({ href: url.trim() })
+      .run(),
+  )
+}
+
+function setImage() {
+  if (!editor.value) {
+    return
+  }
+
+  const url = window.prompt('Image URL')
+
+  if (!url?.trim()) {
+    return
+  }
+
+  runCommand(() => editor.value?.chain().focus().setImage({ src: url.trim() }).run())
+}
+
+onBeforeUnmount(() => {
+  editor.value?.destroy()
+})
+</script>
+
+<template>
+  <div class="visual-editor">
+    <div v-if="editor" class="format-toolbar" aria-label="Markdown formatting">
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('heading', { level: 1 }) }"
+        title="Heading 1"
+        @click="runCommand(() => editor?.chain().focus().toggleHeading({ level: 1 }).run())"
+      >
+        <Heading1 :size="16" />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('heading', { level: 2 }) }"
+        title="Heading 2"
+        @click="runCommand(() => editor?.chain().focus().toggleHeading({ level: 2 }).run())"
+      >
+        <Heading2 :size="16" />
+      </button>
+      <span class="toolbar-divider" />
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('bold') }"
+        title="Bold"
+        @click="runCommand(() => editor?.chain().focus().toggleBold().run())"
+      >
+        <Bold :size="16" />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('italic') }"
+        title="Italic"
+        @click="runCommand(() => editor?.chain().focus().toggleItalic().run())"
+      >
+        <Italic :size="16" />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('strike') }"
+        title="Strike"
+        @click="runCommand(() => editor?.chain().focus().toggleStrike().run())"
+      >
+        <Strikethrough :size="16" />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('code') }"
+        title="Inline code"
+        @click="runCommand(() => editor?.chain().focus().toggleCode().run())"
+      >
+        <Code :size="16" />
+      </button>
+      <span class="toolbar-divider" />
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('bulletList') }"
+        title="Bullet list"
+        @click="runCommand(() => editor?.chain().focus().toggleBulletList().run())"
+      >
+        <List :size="16" />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('orderedList') }"
+        title="Ordered list"
+        @click="runCommand(() => editor?.chain().focus().toggleOrderedList().run())"
+      >
+        <ListOrdered :size="16" />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('blockquote') }"
+        title="Quote"
+        @click="runCommand(() => editor?.chain().focus().toggleBlockquote().run())"
+      >
+        <Quote :size="16" />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        :class="{ active: editor.isActive('codeBlock') }"
+        title="Code block"
+        @click="runCommand(() => editor?.chain().focus().toggleCodeBlock().run())"
+      >
+        <Code :size="16" />
+      </button>
+      <span class="toolbar-divider" />
+      <button type="button" class="icon-button" title="Link" @click="setLink">
+        <LinkIcon :size="16" />
+      </button>
+      <button type="button" class="icon-button" title="Image" @click="setImage">
+        <ImageIcon :size="16" />
+      </button>
+      <button
+        type="button"
+        class="toolbar-button"
+        title="Horizontal rule"
+        @click="runCommand(() => editor?.chain().focus().setHorizontalRule().run())"
+      >
+        HR
+      </button>
+    </div>
+
+    <div class="visual-editor-scroll">
+      <EditorContent :editor="editor" class="visual-editor-content" />
+    </div>
+  </div>
+</template>
