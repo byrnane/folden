@@ -9,9 +9,10 @@ import {
   X,
 } from 'lucide-vue-next'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import PromptDialog from './components/PromptDialog.vue'
+import RecoveryDialog from './components/RecoveryDialog.vue'
 import UnsavedChangesDialog from './components/UnsavedChangesDialog.vue'
 import { shouldPromptToDiscardDocument } from './closeProtection'
 import SourceEditor from './SourceEditor.vue'
@@ -40,6 +41,20 @@ import {
   type EditorViewSession,
 } from './editorSync'
 import { createDocumentSaveQueue } from './saveQueue'
+import {
+  buildSessionDocumentKey,
+  loadRecoverySnapshots,
+  loadSessionState,
+  MAX_RECOVERY_ENTRIES,
+  openTextFileAtPath,
+  pruneRecoverySnapshots,
+  saveRecoverySnapshots,
+  saveSessionState,
+  type PersistedSessionState,
+  type RecoverySnapshot,
+  type SessionDocumentKind,
+  type SessionPaneId,
+} from './sessionRecovery'
 import VisualMarkdownEditor from './VisualMarkdownEditor.vue'
 import WorkspaceTree from './WorkspaceTree.vue'
 
@@ -94,6 +109,17 @@ type UnsavedDialogState = {
   resolve: (decision: UnsavedDialogDecision) => void
 }
 
+type RecoveryDialogDecision = 'restore' | 'open-copy' | 'discard' | 'later'
+
+type RecoveryDialogState = {
+  title: string
+  message: string
+  details: string | null
+  resolve: (decision: RecoveryDialogDecision) => void
+}
+
+type WindowCloseDecision = 'clean' | 'save' | 'discard' | 'cancel'
+
 const initialText = '# Untitled\n\nStart writing in Folden.\n'
 const recentWorkspaceStorageKey = 'folden:recent-workspaces'
 const documentState = createDocumentState({
@@ -147,7 +173,13 @@ const promptDialog = ref<PromptDialogState | null>(null)
 const promptDialogError = ref<string | null>(null)
 const confirmDialog = ref<ConfirmDialogState | null>(null)
 const unsavedDialog = ref<UnsavedDialogState | null>(null)
+const recoveryDialog = ref<RecoveryDialogState | null>(null)
+const pendingRecoveryEntries = ref<RecoverySnapshot[]>([])
 let tauriWindowCloseUnlisten: (() => void) | null = null
+let sessionRestoreComplete = false
+let sessionPersistTimeout: number | null = null
+let sessionPersistRunning = false
+let sessionPersistRequested = false
 const saveQueue = createDocumentSaveQueue({
   performSave: (job) => saveTextFile(
     job.documentNativeId,
@@ -240,6 +272,129 @@ const selectedDirectoryPath = computed(() => {
   return parentPath(entry.path) ?? ''
 })
 
+function buildPersistedSessionState(): PersistedSessionState {
+  const documentRecords: PersistedSessionState['documents'] = documents.value.map((document) => ({
+    key: buildSessionDocumentKey(document, normalizePath),
+    kind: sessionDocumentKind(document),
+    path: document.path,
+    workspaceRootPath: documentWorkspaceRootPath(document),
+    relativePath: document.relativePath,
+    name: document.name,
+  }))
+  const paneModeEntries = Object.entries(paneDocumentModes.value)
+    .map(([key, mode]) => {
+      const [paneId, documentId] = key.split(':', 2) as [SessionPaneId, string]
+      const document = getDocument(documentId)
+
+      if (!document) {
+        return null
+      }
+
+      return {
+        paneId,
+        documentKey: buildSessionDocumentKey(document, normalizePath),
+        mode,
+      }
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+
+  return {
+    workspaceRootPath: workspace.value?.rootPath ?? null,
+    splitEnabled: splitEnabled.value,
+    activePaneId: activePaneId.value,
+    panes: panes.value.map((pane) => ({
+      id: pane.id,
+      documentKeys: pane.documentIds
+        .map((documentId) => getDocument(documentId))
+        .filter((document): document is OpenDocument => document !== null)
+        .map((document) => buildSessionDocumentKey(document, normalizePath)),
+      activeDocumentKey: pane.activeDocumentId
+        ? (() => {
+          const activeDocumentRecord = getDocument(pane.activeDocumentId)
+          return activeDocumentRecord
+            ? buildSessionDocumentKey(activeDocumentRecord, normalizePath)
+            : null
+        })()
+        : null,
+    })),
+    documents: documentRecords,
+    paneModes: paneModeEntries,
+  }
+}
+
+function buildCurrentRecoverySnapshots() {
+  return documents.value
+    .filter((document) => isDirty(document))
+    .map((document) => ({
+      key: buildSessionDocumentKey(document, normalizePath),
+      kind: sessionDocumentKind(document),
+      path: document.path,
+      workspaceRootPath: documentWorkspaceRootPath(document),
+      relativePath: document.relativePath,
+      name: document.name,
+      content: document.content,
+      fileFormat: document.fileFormat,
+      fingerprint: document.diskFingerprint,
+      updatedAtMs: Date.now(),
+    } satisfies RecoverySnapshot))
+}
+
+function buildPersistedRecoverySnapshots(excludedKeys = new Set<string>()) {
+  const currentEntries = buildCurrentRecoverySnapshots()
+    .filter((entry) => !excludedKeys.has(entry.key))
+  const currentKeys = new Set(currentEntries.map((entry) => entry.key))
+  const mergedEntries = [
+    ...pendingRecoveryEntries.value.filter((entry) => (
+      !excludedKeys.has(entry.key) && !currentKeys.has(entry.key)
+    )),
+    ...currentEntries,
+  ]
+
+  return pruneRecoverySnapshots(mergedEntries, MAX_RECOVERY_ENTRIES)
+}
+
+async function persistSessionAndRecoveryState() {
+  if (!sessionRestoreComplete) {
+    return
+  }
+
+  if (sessionPersistRunning) {
+    sessionPersistRequested = true
+    return
+  }
+
+  sessionPersistRunning = true
+
+  try {
+    await saveSessionState(buildPersistedSessionState())
+    await saveRecoverySnapshots(buildPersistedRecoverySnapshots())
+  } catch (error) {
+    errorMessage.value = `Could not persist session data: ${formatError(error)}`
+  } finally {
+    sessionPersistRunning = false
+
+    if (sessionPersistRequested) {
+      sessionPersistRequested = false
+      void persistSessionAndRecoveryState()
+    }
+  }
+}
+
+function scheduleSessionPersistence() {
+  if (!sessionRestoreComplete) {
+    return
+  }
+
+  if (sessionPersistTimeout !== null) {
+    window.clearTimeout(sessionPersistTimeout)
+  }
+
+  sessionPersistTimeout = window.setTimeout(() => {
+    sessionPersistTimeout = null
+    void persistSessionAndRecoveryState()
+  }, 250)
+}
+
 function ensureViewSession(pane: EditorPane, document: OpenDocument) {
   const mode = getDocumentMode(pane, document)
   const sessionId = paneDocumentModeKey(pane.id, document.id)
@@ -313,6 +468,25 @@ function joinWorkspacePath(rootPath: string, relativePath: string | null) {
   }
 
   return `${rootPath.replace(/[\\/]+$/u, '')}\\${relativePath.replace(/^[\\/]+/u, '')}`
+}
+
+function recoveredCopyName(name: string) {
+  const match = name.match(/^(.*?)(\.[^.]*)?$/)
+  const stem = match?.[1] || name
+  const extension = match?.[2] || ''
+  return `${stem} (Recovered)${extension}`
+}
+
+function documentWorkspaceRootPath(document: OpenDocument) {
+  if (document.workspaceId && workspace.value?.id === document.workspaceId) {
+    return workspace.value.rootPath
+  }
+
+  return null
+}
+
+function sessionDocumentKind(document: Pick<OpenDocument, 'path'>): SessionDocumentKind {
+  return document.path ? 'saved' : 'scratch'
 }
 
 function formatError(error: unknown) {
@@ -442,6 +616,21 @@ function openUnsavedDialog(options: Omit<UnsavedDialogState, 'resolve'>) {
 function resolveUnsavedDialog(decision: UnsavedDialogDecision) {
   const currentDialog = unsavedDialog.value
   unsavedDialog.value = null
+  currentDialog?.resolve(decision)
+}
+
+function openRecoveryDialog(options: Omit<RecoveryDialogState, 'resolve'>) {
+  return new Promise<RecoveryDialogDecision>((resolve) => {
+    recoveryDialog.value = {
+      ...options,
+      resolve,
+    }
+  })
+}
+
+function resolveRecoveryDialog(decision: RecoveryDialogDecision) {
+  const currentDialog = recoveryDialog.value
+  recoveryDialog.value = null
   currentDialog?.resolve(decision)
 }
 
@@ -1107,6 +1296,276 @@ function removeDocumentsFromPanes(documentIds: string[]) {
   removeDocuments(documentIds)
 }
 
+function clearRestoredLayout() {
+  removeDocuments(documents.value.map((document) => document.id))
+  panes.value = [
+    {
+      id: 'left',
+      title: 'Main',
+      documentIds: [],
+      activeDocumentId: null,
+    },
+    {
+      id: 'right',
+      title: 'Split',
+      documentIds: [],
+      activeDocumentId: null,
+    },
+  ]
+  activePaneId.value = 'left'
+  splitEnabled.value = false
+  selectedPath.value = null
+  paneDocumentModes.value = {}
+  viewSessions.value = {}
+}
+
+async function restoreDocumentFromSession(
+  record: PersistedSessionState['documents'][number],
+) {
+  if (record.kind === 'scratch') {
+    return createDocumentDraft('', record.name)
+  }
+
+  if (
+    workspace.value &&
+    record.workspaceRootPath &&
+    normalizePath(workspace.value.rootPath) === normalizePath(record.workspaceRootPath) &&
+    record.relativePath
+  ) {
+    return openDocumentState(await openTextFileByPath(workspace.value.id, record.relativePath))
+  }
+
+  if (!record.path) {
+    return null
+  }
+
+  return openDocumentState(await openTextFileAtPath(record.path))
+}
+
+function ensureSessionFallbackDocument() {
+  if (documents.value.length > 0) {
+    return
+  }
+
+  const fallbackDocument = createDocumentDraft(initialText, 'Untitled.md')
+  panes.value[0].documentIds = [fallbackDocument.id]
+  panes.value[0].activeDocumentId = fallbackDocument.id
+  viewSessions.value = {
+    [paneDocumentModeKey('left', fallbackDocument.id)]: createEditorViewSession(
+      fallbackDocument,
+      'left',
+      fallbackDocument.defaultMode,
+    ),
+  }
+}
+
+async function restoreSessionSnapshot() {
+  const diagnostics: string[] = []
+  const [session, recoveryLoadResult] = await Promise.all([
+    loadSessionState(),
+    loadRecoverySnapshots(),
+  ])
+  pendingRecoveryEntries.value = recoveryLoadResult.entries
+
+  if (recoveryLoadResult.diagnostics.length > 0) {
+    diagnostics.push(...recoveryLoadResult.diagnostics)
+  }
+
+  if (!session) {
+    await inspectRecoverySnapshots(new Map())
+    sessionRestoreComplete = true
+    await persistSessionAndRecoveryState()
+    if (diagnostics.length > 0) {
+      errorMessage.value = diagnostics.join(' ')
+    }
+    return
+  }
+
+  clearRestoredLayout()
+
+  if (session.workspaceRootPath) {
+    try {
+      await loadWorkspace(await restoreWorkspaceByPath(session.workspaceRootPath))
+    } catch (error) {
+      diagnostics.push(`Could not restore workspace: ${formatError(error)}`)
+    }
+  }
+
+  const documentIdByKey = new Map<string, string>()
+
+  for (const record of session.documents) {
+    try {
+      const document = await restoreDocumentFromSession(record)
+
+      if (!document) {
+        continue
+      }
+
+      documentIdByKey.set(record.key, document.id)
+    } catch (error) {
+      diagnostics.push(`Could not restore ${record.name}: ${formatError(error)}`)
+    }
+  }
+
+  for (const pane of panes.value) {
+    pane.documentIds = []
+    pane.activeDocumentId = null
+  }
+
+  for (const paneRecord of session.panes) {
+    const pane = getPane(paneRecord.id)
+
+    if (!pane) {
+      continue
+    }
+
+    pane.documentIds = paneRecord.documentKeys
+      .map((key) => documentIdByKey.get(key) ?? null)
+      .filter((documentId): documentId is string => documentId !== null)
+    pane.activeDocumentId = paneRecord.activeDocumentKey
+      ? documentIdByKey.get(paneRecord.activeDocumentKey) ?? pane.documentIds.at(-1) ?? null
+      : pane.documentIds.at(-1) ?? null
+  }
+
+  for (const documentId of documentIdByKey.values()) {
+    if (!panes.value.some((pane) => pane.documentIds.includes(documentId))) {
+      panes.value[0].documentIds.push(documentId)
+    }
+  }
+
+  const nextPaneModes: Record<string, EditorMode> = {}
+
+  for (const modeRecord of session.paneModes) {
+    const documentId = documentIdByKey.get(modeRecord.documentKey)
+
+    if (!documentId) {
+      continue
+    }
+
+    nextPaneModes[paneDocumentModeKey(modeRecord.paneId, documentId)] = modeRecord.mode
+  }
+
+  paneDocumentModes.value = nextPaneModes
+  splitEnabled.value = session.splitEnabled && panes.value[1].documentIds.length > 0
+  activePaneId.value = getPane(session.activePaneId)?.documentIds.length ? session.activePaneId : 'left'
+  ensureSessionFallbackDocument()
+
+  for (const pane of panes.value) {
+    for (const documentId of pane.documentIds) {
+      const document = getDocument(documentId)
+
+      if (document) {
+        ensureViewSession(pane, document)
+      }
+    }
+  }
+
+  if (diagnostics.length > 0) {
+    errorMessage.value = diagnostics.join(' ')
+  }
+
+  await inspectRecoverySnapshots(documentIdByKey)
+  sessionRestoreComplete = true
+  await persistSessionAndRecoveryState()
+}
+
+async function ensureRecoveryDocument(
+  entry: RecoverySnapshot,
+  documentIdByKey: Map<string, string>,
+) {
+  const knownDocumentId = documentIdByKey.get(entry.key)
+
+  if (knownDocumentId) {
+    return getDocument(knownDocumentId)
+  }
+
+  if (entry.kind === 'scratch') {
+    const scratchDocument = createDocumentDraft('', entry.name)
+    addDocumentToPane(scratchDocument, 'left')
+    documentIdByKey.set(entry.key, scratchDocument.id)
+    return scratchDocument
+  }
+
+  if (
+    workspace.value &&
+    entry.workspaceRootPath &&
+    normalizePath(workspace.value.rootPath) === normalizePath(entry.workspaceRootPath) &&
+    entry.relativePath
+  ) {
+    const document = openDocumentState(await openTextFileByPath(workspace.value.id, entry.relativePath))
+    addDocumentToPane(document, 'left')
+    documentIdByKey.set(entry.key, document.id)
+    return document
+  }
+
+  if (!entry.path) {
+    return null
+  }
+
+  const document = openDocumentState(await openTextFileAtPath(entry.path))
+  addDocumentToPane(document, 'left')
+  documentIdByKey.set(entry.key, document.id)
+  return document
+}
+
+function applyRecoverySnapshotToDocument(document: OpenDocument, entry: RecoverySnapshot) {
+  document.fileFormat = entry.fileFormat
+  applyDocumentUpdate(document.id, document.revision, entry.content)
+}
+
+async function inspectRecoverySnapshots(documentIdByKey: Map<string, string>) {
+  for (const entry of [...pendingRecoveryEntries.value]) {
+    let currentDocument: OpenDocument | null = null
+
+    try {
+      currentDocument = await ensureRecoveryDocument(entry, documentIdByKey)
+    } catch {
+      currentDocument = null
+    }
+
+    if (entry.kind === 'saved' && currentDocument && currentDocument.content === entry.content) {
+      pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter((item) => item.key !== entry.key)
+      continue
+    }
+
+    const decision = await openRecoveryDialog({
+      title: `Recovered changes for ${entry.name}`,
+      message: currentDocument
+        ? `Folden found unsaved changes for ${entry.name}.`
+        : `Folden found unsaved changes, but the original file could not be reopened automatically.`,
+      details: entry.path ?? null,
+    })
+
+    if (decision === 'later') {
+      continue
+    }
+
+    pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter((item) => item.key !== entry.key)
+
+    if (decision === 'discard') {
+      continue
+    }
+
+    if (decision === 'open-copy') {
+      const copyDocument = createDocumentDraft('', recoveredCopyName(entry.name))
+      addDocumentToPane(copyDocument, 'left')
+      applyRecoverySnapshotToDocument(copyDocument, entry)
+      continue
+    }
+
+    const targetDocument = currentDocument ?? await ensureRecoveryDocument(entry, documentIdByKey)
+
+    if (!targetDocument) {
+      const copyDocument = createDocumentDraft('', recoveredCopyName(entry.name))
+      addDocumentToPane(copyDocument, 'left')
+      applyRecoverySnapshotToDocument(copyDocument, entry)
+      continue
+    }
+
+    applyRecoverySnapshotToDocument(targetDocument, entry)
+  }
+}
+
 function isSameOrChildPath(path: string, parent: string) {
   const normalizedPath = normalizePath(path)
   const normalizedParent = normalizePath(parent)
@@ -1134,11 +1593,11 @@ function isTauriRuntime() {
   return '__TAURI_INTERNALS__' in window
 }
 
-async function confirmWindowClose() {
+async function confirmWindowClose(): Promise<WindowCloseDecision> {
   const dirtyDocumentIds = dirtyDocuments.value.map((document) => document.id)
 
   if (!dirtyDocumentIds.length) {
-    return true
+    return 'clean'
   }
 
   const decision = await openUnsavedDialog({
@@ -1151,14 +1610,14 @@ async function confirmWindowClose() {
   })
 
   if (decision === 'cancel') {
-    return false
+    return 'cancel'
   }
 
   if (decision === 'save') {
-    return saveDirtyDocuments(dirtyDocumentIds)
+    return (await saveDirtyDocuments(dirtyDocumentIds)) ? 'save' : 'cancel'
   }
 
-  return true
+  return 'discard'
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
@@ -1233,13 +1692,53 @@ function handleGlobalKeydown(event: KeyboardEvent) {
   }
 }
 
+watch(
+  () => ({
+    workspaceRootPath: workspace.value?.rootPath ?? null,
+    splitEnabled: splitEnabled.value,
+    activePaneId: activePaneId.value,
+    panes: panes.value.map((pane) => ({
+      id: pane.id,
+      documentIds: [...pane.documentIds],
+      activeDocumentId: pane.activeDocumentId,
+    })),
+    paneModes: { ...paneDocumentModes.value },
+    documents: documents.value.map((document) => ({
+      id: document.id,
+      name: document.name,
+      path: document.path,
+      workspaceId: document.workspaceId,
+      relativePath: document.relativePath,
+      content: document.content,
+      revision: document.revision,
+      persistedRevision: document.persistedRevision,
+      fileFormat: document.fileFormat,
+      fingerprint: document.diskFingerprint,
+    })),
+    pendingRecoveryEntries: pendingRecoveryEntries.value.map((entry) => ({
+      key: entry.key,
+      updatedAtMs: entry.updatedAtMs,
+    })),
+  }),
+  () => {
+    scheduleSessionPersistence()
+  },
+  { deep: true },
+)
+
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('beforeunload', handleBeforeUnload)
 
   if (!isTauriRuntime()) {
+    sessionRestoreComplete = true
     return
   }
+
+  void restoreSessionSnapshot().catch((error) => {
+    sessionRestoreComplete = true
+    errorMessage.value = `Could not restore the previous session: ${formatError(error)}`
+  })
 
   let isProgrammaticWindowClose = false
 
@@ -1250,7 +1749,25 @@ onMounted(() => {
 
     event.preventDefault()
 
-    if (!(await confirmWindowClose())) {
+    const closeDecision = await confirmWindowClose()
+
+    if (closeDecision === 'cancel') {
+      return
+    }
+
+    try {
+      if (closeDecision === 'discard') {
+        const discardedKeys = new Set(
+          dirtyDocuments.value.map((document) => buildSessionDocumentKey(document, normalizePath)),
+        )
+        pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter((entry) => !discardedKeys.has(entry.key))
+        await saveSessionState(buildPersistedSessionState())
+        await saveRecoverySnapshots(buildPersistedRecoverySnapshots(discardedKeys))
+      } else {
+        await persistSessionAndRecoveryState()
+      }
+    } catch (error) {
+      errorMessage.value = `Could not finalize session data: ${formatError(error)}`
       return
     }
 
@@ -1270,6 +1787,11 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   tauriWindowCloseUnlisten?.()
+
+  if (sessionPersistTimeout !== null) {
+    window.clearTimeout(sessionPersistTimeout)
+    sessionPersistTimeout = null
+  }
 })
 </script>
 
@@ -1545,5 +2067,16 @@ onBeforeUnmount(() => {
     @save="resolveUnsavedDialog('save')"
     @discard="resolveUnsavedDialog('discard')"
     @cancel="resolveUnsavedDialog('cancel')"
+  />
+
+  <RecoveryDialog
+    :open="!!recoveryDialog"
+    :title="recoveryDialog?.title ?? ''"
+    :message="recoveryDialog?.message ?? ''"
+    :details="recoveryDialog?.details ?? null"
+    @restore="resolveRecoveryDialog('restore')"
+    @open-copy="resolveRecoveryDialog('open-copy')"
+    @discard="resolveRecoveryDialog('discard')"
+    @later="resolveRecoveryDialog('later')"
   />
 </template>
