@@ -23,24 +23,15 @@ import {
   type OpenedDocument,
   type WorkspaceEntry,
 } from './tauriFiles'
+import { createDocumentState, type EditorMode, type OpenDocument } from './documentState'
+import { isDocumentDirty } from './domain/document'
 import VisualMarkdownEditor from './VisualMarkdownEditor.vue'
 import WorkspaceTree from './WorkspaceTree.vue'
-
-type EditorMode = 'visual' | 'source'
 
 type Workspace = {
   rootPath: string
   name: string
   entries: WorkspaceEntry[]
-}
-
-type OpenDocument = {
-  id: string
-  path: string | null
-  name: string
-  content: string
-  savedContent: string
-  defaultMode: EditorMode
 }
 
 type EditorPane = {
@@ -52,18 +43,32 @@ type EditorPane = {
 
 const initialText = '# Untitled\n\nStart writing in Folden.\n'
 const recentWorkspaceStorageKey = 'folden:recent-workspaces'
+const documentState = createDocumentState({
+  fileNameFromPath,
+  isMarkdownPath,
+  normalizePath,
+})
+const {
+  documents,
+  dirtyDocuments,
+  getDocument,
+  createScratchDocument: createDocumentDraft,
+  openLoadedDocument: openDocumentState,
+  updateDocumentContent,
+  markDocumentSaved,
+  updateDocumentPaths,
+  removeDocuments,
+} = documentState
+const initialDocument = createDocumentDraft(initialText, 'Untitled.md')
 
 const workspace = ref<Workspace | null>(null)
 const selectedPath = ref<string | null>(null)
-const documents = ref<OpenDocument[]>([
-  createDocumentFromContent(null, initialText, 'Untitled.md'),
-])
 const panes = ref<EditorPane[]>([
   {
     id: 'left',
     title: 'Main',
-    documentIds: [documents.value[0].id],
-    activeDocumentId: documents.value[0].id,
+    documentIds: [initialDocument.id],
+    activeDocumentId: initialDocument.id,
   },
   {
     id: 'right',
@@ -98,9 +103,6 @@ const activeLocation = computed(() => {
 const visiblePanes = computed(() =>
   splitEnabled.value ? panes.value : panes.value.filter((pane) => pane.id === 'left'),
 )
-const dirtyDocuments = computed(() =>
-  documents.value.filter((document) => document.content !== document.savedContent),
-)
 const selectedDirectoryPath = computed(() => {
   if (!workspace.value) {
     return null
@@ -122,21 +124,6 @@ const selectedDirectoryPath = computed(() => {
 
   return parentPath(entry.path) ?? workspace.value.rootPath
 })
-
-function createDocumentFromContent(
-  path: string | null,
-  content: string,
-  fallbackName?: string,
-): OpenDocument {
-  return {
-    id: crypto.randomUUID(),
-    path,
-    name: path ? fileNameFromPath(path) : fallbackName ?? 'Untitled.md',
-    content,
-    savedContent: content,
-    defaultMode: path && !isMarkdownPath(path) ? 'source' : 'visual',
-  }
-}
 
 function fileNameFromPath(path: string) {
   return cleanDisplayPath(path).split(/[\\/]/).at(-1) || path
@@ -180,10 +167,6 @@ function normalizePath(path: string) {
   return cleanDisplayPath(path).replaceAll('/', '\\').toLowerCase()
 }
 
-function pathsMatch(left: string, right: string) {
-  return normalizePath(left) === normalizePath(right)
-}
-
 function formatError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
@@ -192,16 +175,8 @@ function getPane(id: EditorPane['id']) {
   return panes.value.find((pane) => pane.id === id) ?? null
 }
 
-function getDocument(id: string) {
-  return documents.value.find((document) => document.id === id) ?? null
-}
-
-function findDocumentByPath(path: string) {
-  return documents.value.find((document) => document.path && pathsMatch(document.path, path)) ?? null
-}
-
 function isDirty(document: OpenDocument) {
-  return document.content !== document.savedContent
+  return isDocumentDirty(document)
 }
 
 function loadRecentWorkspaces() {
@@ -332,22 +307,13 @@ function mergeRightPaneIntoLeft() {
 }
 
 function openLoadedDocument(document: OpenedDocument, paneId = activePaneId.value) {
-  const existingDocument = findDocumentByPath(document.path)
-
-  if (existingDocument) {
-    addDocumentToPane(existingDocument, paneId)
-    return existingDocument
-  }
-
-  const openDocument = createDocumentFromContent(document.path, document.content)
-  documents.value.push(openDocument)
+  const openDocument = openDocumentState(document)
   addDocumentToPane(openDocument, paneId)
   return openDocument
 }
 
 function createScratchDocument() {
-  const document = createDocumentFromContent(null, '# Untitled\n\n', 'Untitled.md')
-  documents.value.push(document)
+  const document = createDocumentDraft('# Untitled\n\n', 'Untitled.md')
   addDocumentToPane(document)
 }
 
@@ -442,14 +408,8 @@ async function saveDocument(document = activeDocument.value) {
       return
     }
 
-    document.path = savedPath
-    document.name = fileNameFromPath(savedPath)
-    document.savedContent = document.content
+    markDocumentSaved(document.id, savedPath)
     selectedPath.value = savedPath
-
-    if (!isMarkdownPath(savedPath)) {
-      document.defaultMode = 'source'
-    }
 
     await refreshWorkspace()
   }, 'Could not save file')
@@ -503,26 +463,12 @@ function closeDocument(pane: EditorPane, documentId: string) {
   }
 
   if (!panes.value.some((openPane) => openPane.documentIds.includes(documentId))) {
-    documents.value = documents.value.filter((openDocument) => openDocument.id !== documentId)
+    removeDocuments([documentId])
     delete nextPaneDocumentModes[paneDocumentModeKey('left', documentId)]
     delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
   }
 
   paneDocumentModes.value = nextPaneDocumentModes
-}
-
-function updateDocumentContent(documentId: string | null, value: string) {
-  if (!documentId) {
-    return
-  }
-
-  const document = getDocument(documentId)
-
-  if (!document) {
-    return
-  }
-
-  document.content = value
 }
 
 async function createWorkspaceFile(parentPath = selectedDirectoryPath.value) {
@@ -574,7 +520,7 @@ async function renameWorkspacePath(entry: WorkspaceEntry) {
 
   await runFileTask(async () => {
     const nextPath = await renamePath(workspace.value!.rootPath, entry.path, newName.trim())
-    updateOpenDocumentPaths(entry.path, nextPath)
+    updateDocumentPaths(entry.path, nextPath)
     selectedPath.value = nextPath
     await refreshWorkspace()
   }, 'Could not rename path')
@@ -599,28 +545,14 @@ async function trashWorkspacePath(entry: WorkspaceEntry) {
 
   await runFileTask(async () => {
     await trashPath(workspace.value!.rootPath, entry.path)
-    removeDocuments(affectedDocuments.map((document) => document.id))
+    removeDocumentsFromPanes(affectedDocuments.map((document) => document.id))
     selectedPath.value = workspace.value!.rootPath
     await refreshWorkspace()
   }, 'Could not move path to trash')
 }
 
-function updateOpenDocumentPaths(previousPath: string, nextPath: string) {
-  for (const document of documents.value) {
-    if (!document.path || !isSameOrChildPath(document.path, previousPath)) {
-      continue
-    }
-
-    document.path = document.path === previousPath
-      ? nextPath
-      : `${nextPath}${document.path.slice(previousPath.length)}`
-    document.name = fileNameFromPath(document.path)
-  }
-}
-
-function removeDocuments(documentIds: string[]) {
+function removeDocumentsFromPanes(documentIds: string[]) {
   const documentIdSet = new Set(documentIds)
-  documents.value = documents.value.filter((document) => !documentIdSet.has(document.id))
 
   for (const pane of panes.value) {
     pane.documentIds = pane.documentIds.filter((documentId) => !documentIdSet.has(documentId))
@@ -638,6 +570,7 @@ function removeDocuments(documentIds: string[]) {
   }
 
   paneDocumentModes.value = nextPaneDocumentModes
+  removeDocuments(documentIds)
 }
 
 function isSameOrChildPath(path: string, parent: string) {
