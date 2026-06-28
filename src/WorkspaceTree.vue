@@ -9,7 +9,6 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-vue-next'
-import { ref } from 'vue'
 import type { WorkspaceEntry } from './tauriFiles'
 
 defineOptions({
@@ -20,6 +19,9 @@ const props = defineProps<{
   entries: WorkspaceEntry[]
   activePath: string | null
   selectedPath: string | null
+  expandedPaths: Set<string>
+  loadingPaths: Set<string>
+  loadErrors: Record<string, string>
   level?: number
 }>()
 
@@ -31,16 +33,15 @@ const emit = defineEmits<{
   createDirectory: [entry: WorkspaceEntry]
   renamePath: [entry: WorkspaceEntry]
   trashPath: [entry: WorkspaceEntry]
+  toggleDirectory: [entry: WorkspaceEntry]
 }>()
-
-const collapsedPaths = ref(new Set<string>())
 
 function isDirectory(entry: WorkspaceEntry) {
   return entry.kind === 'directory'
 }
 
 function isExpanded(entry: WorkspaceEntry) {
-  return !collapsedPaths.value.has(entry.path)
+  return props.expandedPaths.has(entry.path)
 }
 
 function normalizePath(path: string) {
@@ -51,16 +52,12 @@ function pathMatches(left: string | null, right: string) {
   return left ? normalizePath(left) === normalizePath(right) : false
 }
 
+function isLoading(entry: WorkspaceEntry) {
+  return props.loadingPaths.has(entry.path)
+}
+
 function toggleDirectory(entry: WorkspaceEntry) {
-  const collapsed = new Set(collapsedPaths.value)
-
-  if (collapsed.has(entry.path)) {
-    collapsed.delete(entry.path)
-  } else {
-    collapsed.add(entry.path)
-  }
-
-  collapsedPaths.value = collapsed
+  emit('toggleDirectory', entry)
 }
 
 function selectEntry(entry: WorkspaceEntry) {
@@ -96,6 +93,7 @@ function selectEntry(entry: WorkspaceEntry) {
           type="button"
           class="tree-toggle icon-button"
           :title="isExpanded(entry) ? 'Collapse folder' : 'Expand folder'"
+          :disabled="isLoading(entry)"
           @click.stop="toggleDirectory(entry)"
         >
           <ChevronDown v-if="isExpanded(entry)" :size="14" />
@@ -106,6 +104,10 @@ function selectEntry(entry: WorkspaceEntry) {
         <Folder v-if="isDirectory(entry)" class="tree-icon" :size="15" />
         <FileText v-else class="tree-icon" :size="15" />
         <span class="tree-name">{{ entry.name }}</span>
+        <span v-if="isDirectory(entry) && isLoading(entry)" class="tree-meta">Loading...</span>
+        <span v-else-if="loadErrors[entry.path]" class="tree-meta danger-text" :title="loadErrors[entry.path]">
+          Error
+        </span>
 
         <span class="tree-actions">
           <button
@@ -150,6 +152,9 @@ function selectEntry(entry: WorkspaceEntry) {
         :entries="entry.children"
         :active-path="activePath"
         :selected-path="selectedPath"
+        :expanded-paths="expandedPaths"
+        :loading-paths="loadingPaths"
+        :load-errors="loadErrors"
         :level="(level ?? 0) + 1"
         @open-file="emit('openFile', $event)"
         @clear-selection="emit('clearSelection')"
@@ -158,6 +163,7 @@ function selectEntry(entry: WorkspaceEntry) {
         @create-directory="emit('createDirectory', $event)"
         @rename-path="emit('renamePath', $event)"
         @trash-path="emit('trashPath', $event)"
+        @toggle-directory="emit('toggleDirectory', $event)"
       />
     </li>
   </ul>

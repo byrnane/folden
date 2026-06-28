@@ -158,6 +158,10 @@ const {
 const initialDocument = createDocumentDraft(initialText, 'Untitled.md')
 
 const workspace = ref<Workspace | null>(null)
+const expandedWorkspacePaths = ref(new Set<string>())
+const loadedWorkspacePaths = ref(new Set<string>())
+const loadingWorkspacePaths = ref(new Set<string>())
+const workspaceLoadErrors = ref<Record<string, string>>({})
 const selectedPath = ref<string | null>(null)
 const panes = ref<EditorPane[]>([
   {
@@ -227,7 +231,7 @@ const saveQueue = createDocumentSaveQueue({
       || job.workspaceIdBeforeSave !== savedDocument.workspaceId
 
     if (didPathChange && nextDocument.workspaceId === workspace.value?.id) {
-      void refreshWorkspace()
+      void refreshWorkspaceBranch(parentPath(nextDocument.relativePath ?? '') ?? '')
     }
   },
   onError: (job, error) => {
@@ -545,6 +549,140 @@ function loadRecentWorkspaces() {
 function saveRecentWorkspaces(paths: string[]) {
   recentWorkspaces.value = [...new Set(paths)].slice(0, 6)
   window.localStorage.setItem(recentWorkspaceStorageKey, JSON.stringify(recentWorkspaces.value))
+}
+
+function clonePathSet(source: Set<string>) {
+  return new Set(source)
+}
+
+function setWorkspacePathLoaded(path: string, loaded: boolean) {
+  const nextLoadedPaths = clonePathSet(loadedWorkspacePaths.value)
+
+  if (loaded) {
+    nextLoadedPaths.add(path)
+  } else {
+    nextLoadedPaths.delete(path)
+  }
+
+  loadedWorkspacePaths.value = nextLoadedPaths
+}
+
+function setWorkspacePathLoading(path: string, loading: boolean) {
+  const nextLoadingPaths = clonePathSet(loadingWorkspacePaths.value)
+
+  if (loading) {
+    nextLoadingPaths.add(path)
+  } else {
+    nextLoadingPaths.delete(path)
+  }
+
+  loadingWorkspacePaths.value = nextLoadingPaths
+}
+
+function setWorkspacePathExpanded(path: string, expanded: boolean) {
+  const nextExpandedPaths = clonePathSet(expandedWorkspacePaths.value)
+
+  if (expanded) {
+    nextExpandedPaths.add(path)
+  } else {
+    nextExpandedPaths.delete(path)
+  }
+
+  expandedWorkspacePaths.value = nextExpandedPaths
+}
+
+function clearWorkspaceLoadError(path: string) {
+  if (!(path in workspaceLoadErrors.value)) {
+    return
+  }
+
+  const nextErrors = { ...workspaceLoadErrors.value }
+  delete nextErrors[path]
+  workspaceLoadErrors.value = nextErrors
+}
+
+function setWorkspaceLoadError(path: string, message: string) {
+  workspaceLoadErrors.value = {
+    ...workspaceLoadErrors.value,
+    [path]: message,
+  }
+}
+
+function removeWorkspacePathState(path: string) {
+  const normalizedTargetPath = normalizePath(path)
+  loadedWorkspacePaths.value = new Set(
+    [...loadedWorkspacePaths.value].filter((value) => {
+      const normalizedValue = normalizePath(value)
+      return normalizedValue !== normalizedTargetPath
+        && !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+    }),
+  )
+  loadingWorkspacePaths.value = new Set(
+    [...loadingWorkspacePaths.value].filter((value) => {
+      const normalizedValue = normalizePath(value)
+      return normalizedValue !== normalizedTargetPath
+        && !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+    }),
+  )
+  expandedWorkspacePaths.value = new Set(
+    [...expandedWorkspacePaths.value].filter((value) => {
+      const normalizedValue = normalizePath(value)
+      return normalizedValue !== normalizedTargetPath
+        && !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+    }),
+  )
+  workspaceLoadErrors.value = Object.fromEntries(
+    Object.entries(workspaceLoadErrors.value).filter(([value]) => {
+      const normalizedValue = normalizePath(value)
+      return normalizedValue !== normalizedTargetPath
+        && !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+    }),
+  )
+}
+
+function remapWorkspacePathState(previousPath: string, nextPath: string) {
+  const normalizedPreviousPath = normalizePath(previousPath)
+  const remapPath = (value: string) => (
+    normalizePath(value) === normalizedPreviousPath
+      ? nextPath
+      : `${nextPath}${value.slice(previousPath.length)}`
+  )
+  loadedWorkspacePaths.value = new Set(
+    [...loadedWorkspacePaths.value].map((value) => {
+      const normalizedValue = normalizePath(value)
+      return normalizedValue === normalizedPreviousPath
+        || normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+        ? remapPath(value)
+        : value
+    }),
+  )
+  loadingWorkspacePaths.value = new Set(
+    [...loadingWorkspacePaths.value].map((value) => {
+      const normalizedValue = normalizePath(value)
+      return normalizedValue === normalizedPreviousPath
+        || normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+        ? remapPath(value)
+        : value
+    }),
+  )
+  expandedWorkspacePaths.value = new Set(
+    [...expandedWorkspacePaths.value].map((value) => {
+      const normalizedValue = normalizePath(value)
+      return normalizedValue === normalizedPreviousPath
+        || normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+        ? remapPath(value)
+        : value
+    }),
+  )
+  workspaceLoadErrors.value = Object.fromEntries(
+    Object.entries(workspaceLoadErrors.value).map(([value, message]) => {
+      const normalizedValue = normalizePath(value)
+      return normalizedValue === normalizedPreviousPath
+        || normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+        ? [remapPath(value), message]
+        : [value, message]
+    }),
+  )
 }
 
 function validateEntryName(value: string) {
@@ -952,16 +1090,16 @@ async function loadWorkspace(descriptor: WorkspaceDescriptor) {
     name: descriptor.name,
     entries,
   }
+  expandedWorkspacePaths.value = new Set()
+  loadedWorkspacePaths.value = new Set([''])
+  loadingWorkspacePaths.value = new Set()
+  workspaceLoadErrors.value = {}
   selectedPath.value = null
   saveRecentWorkspaces([descriptor.rootPath, ...recentWorkspaces.value])
 }
 
 async function refreshWorkspace() {
-  if (!workspace.value) {
-    return
-  }
-
-  workspace.value.entries = await listDirectory(workspace.value.id, '')
+  await refreshWorkspaceBranch('')
 }
 
 function replaceWorkspaceBranch(
@@ -992,16 +1130,18 @@ function replaceWorkspaceBranch(
   })
 }
 
-async function refreshWorkspaceBranch(branchPath: string | null) {
+async function refreshWorkspaceBranch(branchPath: string | null, preserveDescendants = true) {
   if (!workspace.value) {
     return
   }
 
   const normalizedBranchPath = branchPath ?? ''
+  clearWorkspaceLoadError(normalizedBranchPath)
   const nextChildren = await listDirectory(workspace.value.id, normalizedBranchPath)
 
   if (normalizedBranchPath === '') {
     workspace.value.entries = nextChildren
+    setWorkspacePathLoaded('', true)
     return
   }
 
@@ -1010,10 +1150,78 @@ async function refreshWorkspaceBranch(branchPath: string | null) {
     normalizedBranchPath,
     nextChildren,
   )
+  setWorkspacePathLoaded(normalizedBranchPath, true)
+
+  if (!preserveDescendants) {
+    return
+  }
+
+  const descendantPaths = [...loadedWorkspacePaths.value]
+    .filter((value) => value !== normalizedBranchPath && value !== '')
+    .filter((value) => (
+      normalizedBranchPath === ''
+        ? true
+        : isSameOrChildPath(value, normalizedBranchPath)
+    ))
+    .sort((left, right) => left.split('\\').length - right.split('\\').length)
+
+  for (const descendantPath of descendantPaths) {
+    await refreshWorkspaceBranch(descendantPath, false)
+  }
+}
+
+async function ensureWorkspaceBranchLoaded(branchPath: string) {
+  if (!workspace.value) {
+    return
+  }
+
+  if (loadedWorkspacePaths.value.has(branchPath) || loadingWorkspacePaths.value.has(branchPath)) {
+    return
+  }
+
+  setWorkspacePathLoading(branchPath, true)
+
+  try {
+    await refreshWorkspaceBranch(branchPath)
+  } catch (error) {
+    setWorkspaceLoadError(branchPath, formatError(error))
+    throw error
+  } finally {
+    setWorkspacePathLoading(branchPath, false)
+  }
+}
+
+function nearestLoadedWorkspaceBranch(branchPath: string | null) {
+  let currentPath = branchPath ?? ''
+
+  while (currentPath) {
+    if (loadedWorkspacePaths.value.has(currentPath)) {
+      return currentPath
+    }
+
+    currentPath = parentPath(currentPath) ?? ''
+  }
+
+  return ''
+}
+
+async function toggleWorkspaceDirectory(entry: WorkspaceEntry) {
+  if (expandedWorkspacePaths.value.has(entry.path)) {
+    setWorkspacePathExpanded(entry.path, false)
+    return
+  }
+
+  setWorkspacePathExpanded(entry.path, true)
+
+  try {
+    await ensureWorkspaceBranchLoaded(entry.path)
+  } catch (error) {
+    watcherWarning.value = `Could not load folder ${entry.name}: ${formatError(error)}`
+  }
 }
 
 function scheduleWorkspaceRefresh(branchPath: string | null) {
-  const key = branchPath ?? ''
+  const key = nearestLoadedWorkspaceBranch(branchPath)
   const existingTimeout = pendingWorkspaceRefreshes.get(key)
 
   if (existingTimeout !== undefined) {
@@ -1022,7 +1230,7 @@ function scheduleWorkspaceRefresh(branchPath: string | null) {
 
   const timeoutId = window.setTimeout(() => {
     pendingWorkspaceRefreshes.delete(key)
-    void refreshWorkspaceBranch(branchPath).catch((error) => {
+    void refreshWorkspaceBranch(key).catch((error) => {
       watcherWarning.value = `Could not refresh workspace after external changes: ${formatError(error)}`
     })
   }, 180)
@@ -1281,7 +1489,7 @@ async function createWorkspaceFile(parentPath = selectedDirectoryPath.value) {
 
   await runFileTask(async () => {
     const path = await createFile(workspace.value!.id, parentPath, name)
-    await refreshWorkspace()
+    await refreshWorkspaceBranch(parentPath)
     const document = await openTextFileByPath(workspace.value!.id, path)
     openLoadedDocument(document)
   }, 'Could not create file')
@@ -1309,7 +1517,7 @@ async function createWorkspaceDirectory(parentPath = selectedDirectoryPath.value
 
   await runFileTask(async () => {
     await createDirectory(workspace.value!.id, parentPath, name)
-    await refreshWorkspace()
+    await refreshWorkspaceBranch(parentPath)
   }, 'Could not create folder')
 }
 
@@ -1335,6 +1543,7 @@ async function renameWorkspacePath(entry: WorkspaceEntry) {
 
   await runFileTask(async () => {
     const nextPath = await renamePath(workspace.value!.id, entry.path, newName)
+    remapWorkspacePathState(entry.path, nextPath)
     updateDocumentPaths(entry.path, nextPath)
     for (const document of documents.value) {
       if (document.workspaceId !== workspace.value?.id || !document.relativePath) {
@@ -1348,7 +1557,7 @@ async function renameWorkspacePath(entry: WorkspaceEntry) {
       document.path = joinWorkspacePath(workspace.value.rootPath, document.relativePath)
     }
     selectedPath.value = nextPath
-    await refreshWorkspace()
+    await refreshWorkspaceBranch(parentPath(nextPath) ?? '')
   }, 'Could not rename path')
 }
 
@@ -1400,9 +1609,10 @@ async function trashWorkspacePath(entry: WorkspaceEntry) {
 
   await runFileTask(async () => {
     await trashPath(workspace.value!.id, entry.path)
+    removeWorkspacePathState(entry.path)
     removeDocumentsFromPanes(affectedDocuments.map((document) => document.id))
     selectedPath.value = null
-    await refreshWorkspace()
+    await refreshWorkspaceBranch(parentPath(entry.path) ?? '')
   }, 'Could not move path to trash')
 }
 
@@ -2100,6 +2310,9 @@ onBeforeUnmount(() => {
           :entries="workspace.entries"
           :active-path="activePath"
           :selected-path="selectedPath"
+          :expanded-paths="expandedWorkspacePaths"
+          :loading-paths="loadingWorkspacePaths"
+          :load-errors="workspaceLoadErrors"
           @clear-selection="clearSidebarSelection"
           @open-file="openWorkspaceFile"
           @select-path="selectedPath = $event.path"
@@ -2107,6 +2320,7 @@ onBeforeUnmount(() => {
           @create-directory="createWorkspaceDirectory($event.path)"
           @rename-path="renameWorkspacePath"
           @trash-path="trashWorkspacePath"
+          @toggle-directory="toggleWorkspaceDirectory"
         />
       </div>
 

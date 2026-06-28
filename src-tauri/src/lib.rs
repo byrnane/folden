@@ -1162,7 +1162,7 @@ fn read_workspace_entries(
                 name,
                 path: relative_path,
                 kind: "directory".to_string(),
-                children: read_workspace_entries(root, &entry_path, operation)?,
+                children: Vec::new(),
             });
         } else if file_type.is_file() && is_text_file(&entry_path) {
             entries.push(WorkspaceEntry {
