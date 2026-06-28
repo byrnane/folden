@@ -16,7 +16,13 @@ struct WorkspaceEntry {
 }
 
 fn path_to_string(path: &Path) -> String {
-    path.to_string_lossy().to_string()
+    let value = path.to_string_lossy().to_string();
+
+    if let Some(stripped) = value.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{stripped}");
+    }
+
+    value.strip_prefix(r"\\?\").unwrap_or(&value).to_string()
 }
 
 fn canonical_root(root: &str) -> Result<PathBuf, String> {
@@ -163,7 +169,7 @@ fn open_text_file() -> Result<Option<OpenedDocument>, String> {
         fs::read_to_string(&path).map_err(|error| format!("Failed to read file: {error}"))?;
 
     Ok(Some(OpenedDocument {
-        path: path.to_string_lossy().to_string(),
+        path: path_to_string(&path),
         content,
     }))
 }
@@ -196,7 +202,7 @@ fn save_text_file(
 
     fs::write(&path, content).map_err(|error| format!("Failed to save file: {error}"))?;
 
-    Ok(Some(path.to_string_lossy().to_string()))
+    Ok(Some(path_to_string(&path)))
 }
 
 #[tauri::command]
