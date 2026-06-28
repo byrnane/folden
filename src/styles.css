@@ -765,6 +765,13 @@ h1 {
   font-size: 12px;
 }
 
+.dialog-details {
+  margin: 10px 0 0;
+  color: var(--muted-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .dialog-inline-actions {
   display: flex;
   justify-content: flex-end;

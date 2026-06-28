@@ -5,6 +5,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{Manager, Runtime};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -84,6 +85,66 @@ struct OpenedDocument {
     relative_path: Option<String>,
     file_format: TextFileFormat,
     fingerprint: Option<FileFingerprint>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistedSessionDocument {
+    key: String,
+    kind: String,
+    path: Option<String>,
+    workspace_root_path: Option<String>,
+    relative_path: Option<String>,
+    name: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistedSessionPane {
+    id: String,
+    document_keys: Vec<String>,
+    active_document_key: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistedPaneMode {
+    pane_id: String,
+    document_key: String,
+    mode: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistedSessionState {
+    workspace_root_path: Option<String>,
+    split_enabled: bool,
+    active_pane_id: String,
+    panes: Vec<PersistedSessionPane>,
+    documents: Vec<PersistedSessionDocument>,
+    pane_modes: Vec<PersistedPaneMode>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoverySnapshot {
+    key: String,
+    kind: String,
+    path: Option<String>,
+    workspace_root_path: Option<String>,
+    relative_path: Option<String>,
+    name: String,
+    content: String,
+    file_format: TextFileFormat,
+    fingerprint: Option<FileFingerprint>,
+    updated_at_ms: u64,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryLoadResult {
+    entries: Vec<RecoverySnapshot>,
+    diagnostics: Vec<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -505,6 +566,116 @@ fn write_atomic_text_file(
     create_file_fingerprint(&metadata)
 }
 
+fn app_data_directory<R: Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    operation: &str,
+) -> NativeResult<PathBuf> {
+    let directory = app_handle.path().app_data_dir().map_err(|error| {
+        native_error(
+            FileErrorCode::Unknown,
+            operation,
+            "Could not access the Folden app data directory.",
+            Some(error.to_string()),
+            true,
+        )
+    })?;
+
+    fs::create_dir_all(&directory).map_err(|error| io_error(operation, error))?;
+
+    Ok(directory)
+}
+
+fn app_data_file_path<R: Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    operation: &str,
+    file_name: &str,
+) -> NativeResult<PathBuf> {
+    Ok(app_data_directory(app_handle, operation)?.join(file_name))
+}
+
+fn remove_data_file_if_exists(path: &Path, operation: &str) -> NativeResult<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(io_error(operation, error)),
+    }
+}
+
+fn save_json_file<T: serde::Serialize>(
+    path: &Path,
+    value: &T,
+    operation: &str,
+) -> NativeResult<()> {
+    let bytes = serde_json::to_vec_pretty(value).map_err(|error| {
+        native_error(
+            FileErrorCode::Unknown,
+            operation,
+            "Could not serialize app data.",
+            Some(error.to_string()),
+            false,
+        )
+    })?;
+
+    write_atomic_text_file(path, &bytes, operation)?;
+    Ok(())
+}
+
+fn load_session_state_from_path(path: &Path) -> Option<PersistedSessionState> {
+    let bytes = fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn load_recovery_snapshots_from_path(path: &Path) -> RecoveryLoadResult {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return RecoveryLoadResult {
+                entries: Vec::new(),
+                diagnostics: Vec::new(),
+            }
+        }
+        Err(error) => {
+            return RecoveryLoadResult {
+                entries: Vec::new(),
+                diagnostics: vec![format!("Could not read recovery data: {error}")],
+            }
+        }
+    };
+
+    let json: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(json) => json,
+        Err(error) => {
+            return RecoveryLoadResult {
+                entries: Vec::new(),
+                diagnostics: vec![format!("Recovery data is malformed: {error}")],
+            }
+        }
+    };
+
+    let Some(items) = json.as_array() else {
+        return RecoveryLoadResult {
+            entries: Vec::new(),
+            diagnostics: vec!["Recovery data must be a JSON array.".to_string()],
+        };
+    };
+
+    let mut entries = Vec::new();
+    let mut diagnostics = Vec::new();
+
+    for (index, item) in items.iter().enumerate() {
+        match serde_json::from_value::<RecoverySnapshot>(item.clone()) {
+            Ok(entry) => entries.push(entry),
+            Err(error) => diagnostics.push(format!(
+                "Skipped recovery entry {}: {}",
+                index + 1,
+                error
+            )),
+        }
+    }
+
+    RecoveryLoadResult { entries, diagnostics }
+}
+
 fn ensure_expected_fingerprint(
     path: &Path,
     expected_fingerprint: Option<&FileFingerprint>,
@@ -865,6 +1036,28 @@ fn open_text_file(
 }
 
 #[tauri::command]
+fn open_text_file_at_path(
+    state: tauri::State<'_, Mutex<NativeAppState>>,
+    path: String,
+) -> NativeResult<OpenedDocument> {
+    let canonical_path = canonical_root(Path::new(&path), "open_text_file_at_path")?;
+    let (content, file_format, fingerprint) =
+        decode_text_file(&canonical_path, "open_text_file_at_path")?;
+    let mut state = state.lock().unwrap();
+    let (workspace_id, relative_path) = detect_workspace_membership(&state, &canonical_path);
+
+    Ok(register_document(
+        &mut state,
+        canonical_path,
+        workspace_id,
+        relative_path,
+        content,
+        file_format,
+        Some(fingerprint),
+    ))
+}
+
+#[tauri::command]
 fn save_text_file(
     state: tauri::State<'_, Mutex<NativeAppState>>,
     document_id: Option<String>,
@@ -994,6 +1187,59 @@ fn restore_workspace_by_path(
     let mut state = state.lock().unwrap();
 
     Ok(register_workspace(&mut state, canonical_path))
+}
+
+#[tauri::command]
+fn load_session_state<R: Runtime>(app_handle: tauri::AppHandle<R>) -> NativeResult<Option<PersistedSessionState>> {
+    let path = app_data_file_path(&app_handle, "load_session_state", "session-state.json")?;
+    Ok(load_session_state_from_path(&path))
+}
+
+#[tauri::command]
+fn save_session_state<R: Runtime>(
+    app_handle: tauri::AppHandle<R>,
+    session: Option<PersistedSessionState>,
+) -> NativeResult<()> {
+    let path = app_data_file_path(&app_handle, "save_session_state", "session-state.json")?;
+
+    if let Some(session) = session {
+        save_json_file(&path, &session, "save_session_state")?;
+    } else {
+        remove_data_file_if_exists(&path, "save_session_state")?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn load_recovery_snapshots<R: Runtime>(app_handle: tauri::AppHandle<R>) -> NativeResult<RecoveryLoadResult> {
+    let path = app_data_file_path(
+        &app_handle,
+        "load_recovery_snapshots",
+        "recovery-snapshots.json",
+    )?;
+
+    Ok(load_recovery_snapshots_from_path(&path))
+}
+
+#[tauri::command]
+fn save_recovery_snapshots<R: Runtime>(
+    app_handle: tauri::AppHandle<R>,
+    entries: Vec<RecoverySnapshot>,
+) -> NativeResult<()> {
+    let path = app_data_file_path(
+        &app_handle,
+        "save_recovery_snapshots",
+        "recovery-snapshots.json",
+    )?;
+
+    if entries.is_empty() {
+        remove_data_file_if_exists(&path, "save_recovery_snapshots")?;
+    } else {
+        save_json_file(&path, &entries, "save_recovery_snapshots")?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -1193,9 +1439,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_text_file,
+            open_text_file_at_path,
             save_text_file,
             open_workspace_directory,
             restore_workspace_by_path,
+            load_session_state,
+            save_session_state,
+            load_recovery_snapshots,
+            save_recovery_snapshots,
             list_directory,
             open_text_file_by_path,
             create_file,
@@ -1376,5 +1627,37 @@ mod tests {
             fs::read_to_string(&path).expect("failed to read original file"),
             "original"
         );
+    }
+
+    #[test]
+    fn malformed_recovery_entries_are_skipped_without_crashing() {
+        let temp = TempWorkspace::new();
+        let path = temp.path.join("recovery-snapshots.json");
+        fs::write(
+            &path,
+            r#"[
+              {"key":"saved:a","kind":"saved","path":"C:\\Docs\\a.md","workspaceRootPath":null,"relativePath":null,"name":"a.md","content":"A","fileFormat":{"lineEnding":"lf","hasUtf8Bom":false},"fingerprint":null,"updatedAtMs":1},
+              {"key":42}
+            ]"#,
+        )
+        .expect("failed to write malformed recovery file");
+
+        let result = load_recovery_snapshots_from_path(&path);
+
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].key, "saved:a");
+        assert_eq!(result.diagnostics.len(), 1);
+    }
+
+    #[test]
+    fn invalid_recovery_root_returns_diagnostic() {
+        let temp = TempWorkspace::new();
+        let path = temp.path.join("recovery-snapshots.json");
+        fs::write(&path, "{\"broken\":true}").expect("failed to write invalid recovery file");
+
+        let result = load_recovery_snapshots_from_path(&path);
+
+        assert!(result.entries.is_empty());
+        assert_eq!(result.diagnostics, vec!["Recovery data must be a JSON array.".to_string()]);
     }
 }

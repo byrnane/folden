@@ -57,7 +57,7 @@ function normalizeNativeError(error: unknown): NativeError {
   throw error
 }
 
-async function invokeNative<T>(command: string, payload?: Record<string, unknown>) {
+export async function invokeNative<T>(command: string, payload?: Record<string, unknown>) {
   try {
     return await invoke<T>(command, payload)
   } catch (error) {
