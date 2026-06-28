@@ -70,6 +70,8 @@ const {
   createScratchDocument: createDocumentDraft,
   openLoadedDocument: openDocumentState,
   applyDocumentUpdate,
+  undoDocument,
+  redoDocument,
   markDocumentQueued,
   markDocumentSaving,
   markDocumentSaved,
@@ -463,6 +465,69 @@ function handleDocumentUpdate(update: DocumentUpdate) {
   viewSessions.value = nextSessions
 }
 
+function updateDocumentSessions(documentId: string, revision: number) {
+  const nextSessions = { ...viewSessions.value }
+
+  for (const [sessionId, session] of Object.entries(nextSessions)) {
+    if (session.documentId !== documentId) {
+      continue
+    }
+
+    nextSessions[sessionId] = {
+      ...session,
+      lastAppliedRevision: revision,
+    }
+  }
+
+  viewSessions.value = nextSessions
+}
+
+function runDocumentUndo() {
+  const document = activeDocument.value
+
+  if (!document) {
+    return
+  }
+
+  flushVisibleDocumentViews(document.id)
+  const currentDocument = getDocument(document.id)
+
+  if (!currentDocument) {
+    return
+  }
+
+  const nextDocument = undoDocument(currentDocument.id)
+
+  if (!nextDocument) {
+    return
+  }
+
+  updateDocumentSessions(nextDocument.id, nextDocument.revision)
+}
+
+function runDocumentRedo() {
+  const document = activeDocument.value
+
+  if (!document) {
+    return
+  }
+
+  flushVisibleDocumentViews(document.id)
+  const currentDocument = getDocument(document.id)
+
+  if (!currentDocument) {
+    return
+  }
+
+  const nextDocument = redoDocument(currentDocument.id)
+
+  if (!nextDocument) {
+    return
+  }
+
+  updateDocumentSessions(nextDocument.id, nextDocument.revision)
+}
+
 function setSplitEnabled(enabled: boolean) {
   if (enabled) {
     splitEnabled.value = true
@@ -832,6 +897,24 @@ function handleGlobalKeydown(event: KeyboardEvent) {
   if (code === 'KeyS') {
     event.preventDefault()
     void saveDocument()
+    return
+  }
+
+  if (code === 'KeyZ' && event.shiftKey) {
+    event.preventDefault()
+    runDocumentRedo()
+    return
+  }
+
+  if (code === 'KeyZ') {
+    event.preventDefault()
+    runDocumentUndo()
+    return
+  }
+
+  if (code === 'KeyY') {
+    event.preventDefault()
+    runDocumentRedo()
     return
   }
 

@@ -3,7 +3,7 @@ import type { EditorMode, OpenDocument } from './documentState'
 
 export type EditorViewId = string
 
-export type DocumentUpdateKind = 'source-edit' | 'visual-edit'
+export type DocumentUpdateKind = 'source-edit' | 'visual-edit' | 'undo' | 'redo'
 
 export type DocumentUpdate = {
   documentId: string
