@@ -18,9 +18,11 @@ import {
   openTextFileByPath,
   openWorkspaceDirectory,
   renamePath,
+  restoreWorkspaceByPath,
   saveTextFile,
   trashPath,
   type OpenedDocument,
+  type WorkspaceDescriptor,
   type WorkspaceEntry,
 } from './tauriFiles'
 import { createDocumentState, type EditorMode, type OpenDocument } from './documentState'
@@ -29,6 +31,7 @@ import VisualMarkdownEditor from './VisualMarkdownEditor.vue'
 import WorkspaceTree from './WorkspaceTree.vue'
 
 type Workspace = {
+  id: string
   rootPath: string
   name: string
   entries: WorkspaceEntry[]
@@ -92,7 +95,13 @@ const activeDocument = computed(() => {
 
   return getDocument(activePane.value.activeDocumentId)
 })
-const activePath = computed(() => activeDocument.value?.path ?? null)
+const activePath = computed(() => {
+  if (!workspace.value || activeDocument.value?.workspaceId !== workspace.value.id) {
+    return null
+  }
+
+  return activeDocument.value.relativePath
+})
 const activeLocation = computed(() => {
   if (!activeDocument.value?.path) {
     return 'Scratch'
@@ -109,20 +118,20 @@ const selectedDirectoryPath = computed(() => {
   }
 
   if (!selectedPath.value) {
-    return workspace.value.rootPath
+    return ''
   }
 
   const entry = findEntry(workspace.value.entries, selectedPath.value)
 
   if (!entry) {
-    return workspace.value.rootPath
+    return ''
   }
 
   if (entry.kind === 'directory') {
     return entry.path
   }
 
-  return parentPath(entry.path) ?? workspace.value.rootPath
+  return parentPath(entry.path) ?? ''
 })
 
 function fileNameFromPath(path: string) {
@@ -167,7 +176,24 @@ function normalizePath(path: string) {
   return cleanDisplayPath(path).replaceAll('/', '\\').toLowerCase()
 }
 
+function joinWorkspacePath(rootPath: string, relativePath: string | null) {
+  if (!relativePath) {
+    return rootPath
+  }
+
+  return `${rootPath.replace(/[\\/]+$/u, '')}\\${relativePath.replace(/^[\\/]+/u, '')}`
+}
+
 function formatError(error: unknown) {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'userMessage' in error &&
+    typeof (error as { userMessage?: unknown }).userMessage === 'string'
+  ) {
+    return (error as { userMessage: string }).userMessage
+  }
+
   return error instanceof Error ? error.message : String(error)
 }
 
@@ -329,25 +355,26 @@ async function openNativeDocument() {
 
 async function openWorkspace() {
   await runFileTask(async () => {
-    const rootPath = await openWorkspaceDirectory()
+    const descriptor = await openWorkspaceDirectory()
 
-    if (!rootPath) {
+    if (!descriptor) {
       return
     }
 
-    await loadWorkspace(rootPath)
+    await loadWorkspace(descriptor)
   }, 'Could not open workspace')
 }
 
-async function loadWorkspace(rootPath: string) {
-  const entries = await listDirectory(rootPath, rootPath)
+async function loadWorkspace(descriptor: WorkspaceDescriptor) {
+  const entries = await listDirectory(descriptor.id, '')
   workspace.value = {
-    rootPath,
-    name: workspaceNameFromPath(rootPath),
+    id: descriptor.id,
+    rootPath: descriptor.rootPath,
+    name: descriptor.name,
     entries,
   }
-  selectedPath.value = rootPath
-  saveRecentWorkspaces([rootPath, ...recentWorkspaces.value])
+  selectedPath.value = null
+  saveRecentWorkspaces([descriptor.rootPath, ...recentWorkspaces.value])
 }
 
 async function refreshWorkspace() {
@@ -355,7 +382,7 @@ async function refreshWorkspace() {
     return
   }
 
-  workspace.value.entries = await listDirectory(workspace.value.rootPath, workspace.value.rootPath)
+  workspace.value.entries = await listDirectory(workspace.value.id, '')
 }
 
 async function openWorkspaceFile(entry: WorkspaceEntry, paneId = activePaneId.value) {
@@ -366,7 +393,7 @@ async function openWorkspaceFile(entry: WorkspaceEntry, paneId = activePaneId.va
   selectedPath.value = entry.path
 
   await runFileTask(async () => {
-    const document = await openTextFileByPath(workspace.value!.rootPath, entry.path)
+    const document = await openTextFileByPath(workspace.value!.id, entry.path)
     openLoadedDocument(document, paneId)
   }, 'Could not open workspace file')
 }
@@ -398,18 +425,21 @@ async function saveDocument(document = activeDocument.value) {
   }
 
   await runFileTask(async () => {
-    const savedPath = await saveTextFile(
-      document.path,
+    const savedDocument = await saveTextFile(
+      document.nativeId,
       document.content,
-      document.path ? undefined : suggestFileName(document.content),
+      document.nativeId ? undefined : suggestFileName(document.content),
     )
 
-    if (!savedPath) {
+    if (!savedDocument) {
       return
     }
 
-    markDocumentSaved(document.id, savedPath)
-    selectedPath.value = savedPath
+    const nextDocument = markDocumentSaved(document.id, savedDocument)
+
+    if (nextDocument && nextDocument.workspaceId === workspace.value?.id) {
+      selectedPath.value = nextDocument.relativePath
+    }
 
     await refreshWorkspace()
   }, 'Could not save file')
@@ -472,7 +502,7 @@ function closeDocument(pane: EditorPane, documentId: string) {
 }
 
 async function createWorkspaceFile(parentPath = selectedDirectoryPath.value) {
-  if (!workspace.value || !parentPath) {
+  if (!workspace.value || parentPath === null) {
     return
   }
 
@@ -483,15 +513,15 @@ async function createWorkspaceFile(parentPath = selectedDirectoryPath.value) {
   }
 
   await runFileTask(async () => {
-    const path = await createFile(workspace.value!.rootPath, parentPath, name.trim())
+    const path = await createFile(workspace.value!.id, parentPath, name.trim())
     await refreshWorkspace()
-    const document = await openTextFileByPath(workspace.value!.rootPath, path)
+    const document = await openTextFileByPath(workspace.value!.id, path)
     openLoadedDocument(document)
   }, 'Could not create file')
 }
 
 async function createWorkspaceDirectory(parentPath = selectedDirectoryPath.value) {
-  if (!workspace.value || !parentPath) {
+  if (!workspace.value || parentPath === null) {
     return
   }
 
@@ -502,7 +532,7 @@ async function createWorkspaceDirectory(parentPath = selectedDirectoryPath.value
   }
 
   await runFileTask(async () => {
-    await createDirectory(workspace.value!.rootPath, parentPath, name.trim())
+    await createDirectory(workspace.value!.id, parentPath, name.trim())
     await refreshWorkspace()
   }, 'Could not create folder')
 }
@@ -519,8 +549,19 @@ async function renameWorkspacePath(entry: WorkspaceEntry) {
   }
 
   await runFileTask(async () => {
-    const nextPath = await renamePath(workspace.value!.rootPath, entry.path, newName.trim())
+    const nextPath = await renamePath(workspace.value!.id, entry.path, newName.trim())
     updateDocumentPaths(entry.path, nextPath)
+    for (const document of documents.value) {
+      if (document.workspaceId !== workspace.value?.id || !document.relativePath) {
+        continue
+      }
+
+      if (!isSameOrChildPath(document.relativePath, entry.path)) {
+        continue
+      }
+
+      document.path = joinWorkspacePath(workspace.value.rootPath, document.relativePath)
+    }
     selectedPath.value = nextPath
     await refreshWorkspace()
   }, 'Could not rename path')
@@ -531,8 +572,10 @@ async function trashWorkspacePath(entry: WorkspaceEntry) {
     return
   }
 
+  const workspaceId = workspace.value.id
   const affectedDocuments = documents.value.filter((document) =>
-    document.path ? isSameOrChildPath(document.path, entry.path) : false,
+    document.workspaceId === workspaceId &&
+    document.relativePath ? isSameOrChildPath(document.relativePath, entry.path) : false,
   )
   const hasDirtyDocument = affectedDocuments.some(isDirty)
   const prompt = hasDirtyDocument
@@ -544,9 +587,9 @@ async function trashWorkspacePath(entry: WorkspaceEntry) {
   }
 
   await runFileTask(async () => {
-    await trashPath(workspace.value!.rootPath, entry.path)
+    await trashPath(workspace.value!.id, entry.path)
     removeDocumentsFromPanes(affectedDocuments.map((document) => document.id))
-    selectedPath.value = workspace.value!.rootPath
+    selectedPath.value = null
     await refreshWorkspace()
   }, 'Could not move path to trash')
 }
@@ -728,7 +771,12 @@ onBeforeUnmount(() => {
             type="button"
             class="recent-workspace"
             :title="path"
-            @click="runFileTask(() => loadWorkspace(path), 'Could not open recent workspace')"
+            @click="
+              runFileTask(
+                async () => loadWorkspace(await restoreWorkspaceByPath(path)),
+                'Could not open recent workspace',
+              )
+            "
           >
             {{ workspaceNameFromPath(path) }}
           </button>
@@ -829,13 +877,13 @@ onBeforeUnmount(() => {
                 Source
               </button>
               <button
-                v-if="pane.id !== 'right' && workspace && getDocument(pane.activeDocumentId)?.path"
+                v-if="pane.id !== 'right' && workspace && getDocument(pane.activeDocumentId)?.relativePath"
                 type="button"
                 class="open-right-button"
                 @click="
                   openEntryInRight({
                     name: getDocument(pane.activeDocumentId)!.name,
-                    path: getDocument(pane.activeDocumentId)!.path!,
+                    path: getDocument(pane.activeDocumentId)!.relativePath!,
                     kind: 'file',
                     children: [],
                   })

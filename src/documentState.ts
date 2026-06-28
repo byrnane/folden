@@ -11,7 +11,10 @@ export type EditorMode = 'visual' | 'source'
 
 export type OpenDocument = {
   id: DocumentId
+  nativeId: string | null
   path: string | null
+  workspaceId: string | null
+  relativePath: string | null
   name: string
   content: string
   revision: DocumentRevision
@@ -20,8 +23,11 @@ export type OpenDocument = {
 }
 
 export type LoadedDocument = {
+  id: string
   path: string
   content: string
+  workspaceId: string | null
+  relativePath: string | null
 }
 
 type DocumentStateOptions = {
@@ -67,7 +73,10 @@ export function createDocumentState(options: DocumentStateOptions) {
   function createDocument(path: string | null, content: string, fallbackName?: string): OpenDocument {
     return {
       id: crypto.randomUUID(),
+      nativeId: null,
       path,
+      workspaceId: null,
+      relativePath: null,
       name: path ? options.fileNameFromPath(path) : fallbackName ?? 'Untitled.md',
       content,
       revision: INITIAL_DOCUMENT_REVISION,
@@ -93,10 +102,18 @@ export function createDocumentState(options: DocumentStateOptions) {
     const existingDocument = findDocumentByPath(document.path)
 
     if (existingDocument) {
+      existingDocument.nativeId = document.id
+      existingDocument.workspaceId = document.workspaceId
+      existingDocument.relativePath = document.relativePath
       return existingDocument
     }
 
-    return registerDocument(createDocument(document.path, document.content))
+    return registerDocument({
+      ...createDocument(document.path, document.content),
+      nativeId: document.id,
+      workspaceId: document.workspaceId,
+      relativePath: document.relativePath,
+    })
   }
 
   function updateDocumentContent(documentId: DocumentId | null, nextContent: string) {
@@ -114,7 +131,7 @@ export function createDocumentState(options: DocumentStateOptions) {
     document.revision = nextDocumentRevision(document.revision)
   }
 
-  function markDocumentSaved(documentId: DocumentId, savedPath: string) {
+  function markDocumentSaved(documentId: DocumentId, documentSnapshot: LoadedDocument) {
     const document = getDocument(documentId)
 
     if (!document) {
@@ -122,11 +139,14 @@ export function createDocumentState(options: DocumentStateOptions) {
     }
 
     setPathIndex(document.path, null)
-    document.path = savedPath
-    document.name = options.fileNameFromPath(savedPath)
+    document.nativeId = documentSnapshot.id
+    document.path = documentSnapshot.path
+    document.workspaceId = documentSnapshot.workspaceId
+    document.relativePath = documentSnapshot.relativePath
+    document.name = options.fileNameFromPath(documentSnapshot.path)
     document.persistedRevision = document.revision
 
-    if (!options.isMarkdownPath(savedPath)) {
+    if (!options.isMarkdownPath(documentSnapshot.path)) {
       document.defaultMode = 'source'
     }
 
@@ -138,11 +158,11 @@ export function createDocumentState(options: DocumentStateOptions) {
     const normalizedPreviousPath = options.normalizePath(previousPath)
 
     for (const document of documents.value) {
-      if (!document.path) {
+      if (!document.relativePath) {
         continue
       }
 
-      const normalizedDocumentPath = options.normalizePath(document.path)
+      const normalizedDocumentPath = options.normalizePath(document.relativePath)
 
       if (
         normalizedDocumentPath !== normalizedPreviousPath &&
@@ -151,12 +171,10 @@ export function createDocumentState(options: DocumentStateOptions) {
         continue
       }
 
-      setPathIndex(document.path, null)
-      document.path = document.path === previousPath
+      document.relativePath = document.relativePath === previousPath
         ? nextPath
-        : `${nextPath}${document.path.slice(previousPath.length)}`
-      document.name = options.fileNameFromPath(document.path)
-      setPathIndex(document.path, document.id)
+        : `${nextPath}${document.relativePath.slice(previousPath.length)}`
+      document.name = options.fileNameFromPath(document.relativePath)
     }
   }
 
