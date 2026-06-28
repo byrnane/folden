@@ -1,6 +1,32 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum FileErrorCode {
+    NotFound,
+    PermissionDenied,
+    OutsideWorkspace,
+    InvalidName,
+    AlreadyExists,
+    EncodingUnsupported,
+    BinaryFile,
+    TooLarge,
+    Unknown,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeError {
+    code: FileErrorCode,
+    operation: String,
+    user_message: String,
+    technical_message: Option<String>,
+    retryable: bool,
+}
+
 #[derive(serde::Serialize)]
 struct OpenedDocument {
     path: String,
@@ -53,6 +79,23 @@ fn validate_name(name: &str) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[allow(dead_code)]
+fn native_error(
+    code: FileErrorCode,
+    operation: &str,
+    user_message: &str,
+    technical_message: Option<String>,
+    retryable: bool,
+) -> NativeError {
+    NativeError {
+        code,
+        operation: operation.to_string(),
+        user_message: user_message.to_string(),
+        technical_message,
+        retryable,
+    }
 }
 
 fn workspace_child_path(root: &str, parent_path: &str, name: &str) -> Result<PathBuf, String> {
@@ -318,4 +361,101 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct TempWorkspace {
+        path: PathBuf,
+    }
+
+    impl TempWorkspace {
+        fn new() -> Self {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time before unix epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("folden-tests-{unique}"));
+
+            fs::create_dir_all(&path).expect("failed to create temp workspace");
+
+            Self { path }
+        }
+
+        fn child(&self, name: &str) -> PathBuf {
+            self.path.join(name)
+        }
+    }
+
+    impl Drop for TempWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    #[test]
+    fn validate_name_rejects_empty_and_separators() {
+        assert_eq!(
+            validate_name("   "),
+            Err("Name cannot be empty".to_string())
+        );
+        assert_eq!(
+            validate_name("nested/file.md"),
+            Err("Name cannot contain path separators".to_string())
+        );
+        assert!(validate_name("draft.md").is_ok());
+    }
+
+    #[test]
+    fn workspace_helpers_keep_paths_inside_temp_root() {
+        let workspace = TempWorkspace::new();
+        let root = workspace.path.to_string_lossy().to_string();
+        let notes = workspace.child("notes");
+        fs::create_dir_all(&notes).expect("failed to create notes directory");
+
+        let child = workspace_child_path(&root, &notes.to_string_lossy(), "draft.md")
+            .expect("expected child path inside workspace");
+
+        assert_eq!(
+            path_to_string(&child),
+            path_to_string(&notes.join("draft.md"))
+        );
+
+        let outside_file = workspace
+            .path
+            .parent()
+            .expect("temp dir must have parent")
+            .join("outside.md");
+        fs::write(&outside_file, "").expect("failed to create outside file");
+
+        let result = workspace_existing_path(&root, &outside_file.to_string_lossy());
+        assert_eq!(result, Err("Path is outside of the workspace".to_string()));
+
+        let _ = fs::remove_file(outside_file);
+    }
+
+    #[test]
+    fn native_error_serializes_with_stable_shape() {
+        let error = native_error(
+            FileErrorCode::InvalidName,
+            "create_file",
+            "Name is invalid.",
+            Some("control characters are not allowed".to_string()),
+            false,
+        );
+
+        let payload = serde_json::to_value(error).expect("failed to serialize native error");
+
+        assert_eq!(payload["code"], "invalid_name");
+        assert_eq!(payload["operation"], "create_file");
+        assert_eq!(payload["userMessage"], "Name is invalid.");
+        assert_eq!(
+            payload["technicalMessage"],
+            "control characters are not allowed"
+        );
+        assert_eq!(payload["retryable"], false);
+    }
 }
