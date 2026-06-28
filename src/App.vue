@@ -8,7 +8,7 @@ import {
   Save,
   X,
 } from 'lucide-vue-next'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import SourceEditor from './SourceEditor.vue'
 import {
   createDirectory,
@@ -87,6 +87,17 @@ const activeDocument = computed(() => {
   return getDocument(activePane.value.activeDocumentId)
 })
 const activePath = computed(() => activeDocument.value?.path ?? null)
+const activeLocation = computed(() => {
+  if (!activeDocument.value?.path) {
+    return 'Scratch'
+  }
+
+  if (!workspace.value) {
+    return activeDocument.value.path
+  }
+
+  return relativePath(workspace.value.rootPath, activeDocument.value.path) ?? activeDocument.value.path
+})
 const visiblePanes = computed(() =>
   splitEnabled.value ? panes.value : panes.value.filter((pane) => pane.id === 'left'),
 )
@@ -156,6 +167,29 @@ function isMarkdownPath(path: string | null) {
   return /\.(md|markdown)$/i.test(path)
 }
 
+function normalizePath(path: string) {
+  return path.replaceAll('/', '\\').toLowerCase()
+}
+
+function pathsMatch(left: string, right: string) {
+  return normalizePath(left) === normalizePath(right)
+}
+
+function relativePath(root: string, path: string) {
+  const normalizedRoot = normalizePath(root)
+  const normalizedPath = normalizePath(path)
+
+  if (normalizedPath === normalizedRoot) {
+    return fileNameFromPath(path)
+  }
+
+  if (!normalizedPath.startsWith(`${normalizedRoot}\\`)) {
+    return null
+  }
+
+  return path.slice(root.length + 1).replaceAll('\\', ' / ')
+}
+
 function formatError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
@@ -169,7 +203,7 @@ function getDocument(id: string) {
 }
 
 function findDocumentByPath(path: string) {
-  return documents.value.find((document) => document.path === path) ?? null
+  return documents.value.find((document) => document.path && pathsMatch(document.path, path)) ?? null
 }
 
 function isDirty(document: OpenDocument) {
@@ -214,6 +248,10 @@ function findEntry(entries: WorkspaceEntry[], path: string): WorkspaceEntry | nu
 
 function setActivePane(paneId: EditorPane['id']) {
   activePaneId.value = paneId
+}
+
+function clearSidebarSelection() {
+  selectedPath.value = null
 }
 
 function setActiveDocument(pane: EditorPane, documentId: string) {
@@ -336,7 +374,11 @@ async function saveDocument(document = activeDocument.value) {
   }
 
   await runFileTask(async () => {
-    const savedPath = await saveTextFile(document.path, document.content)
+    const savedPath = await saveTextFile(
+      document.path,
+      document.content,
+      document.path ? undefined : suggestFileName(document.content),
+    )
 
     if (!savedPath) {
       return
@@ -345,6 +387,7 @@ async function saveDocument(document = activeDocument.value) {
     document.path = savedPath
     document.name = fileNameFromPath(savedPath)
     document.savedContent = document.content
+    selectedPath.value = savedPath
 
     if (!isMarkdownPath(savedPath)) {
       document.mode = 'source'
@@ -352,6 +395,25 @@ async function saveDocument(document = activeDocument.value) {
 
     await refreshWorkspace()
   }, 'Could not save file')
+}
+
+function suggestFileName(content: string) {
+  const heading = content.match(/^#\s+(.+)$/m)?.[1]
+  const fallbackText = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+  const source = heading ?? fallbackText ?? 'Untitled'
+  const cleanName = source
+    .replace(/^[#>*\-\d.\s]+/, '')
+    .replace(/[`*_~[\]()]/g, '')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 64)
+    .replace(/[.\s]+$/g, '')
+
+  return `${cleanName || 'Untitled'}.md`
 }
 
 function closeDocument(pane: EditorPane, documentId: string) {
@@ -505,7 +567,13 @@ function removeDocuments(documentIds: string[]) {
 }
 
 function isSameOrChildPath(path: string, parent: string) {
-  return path === parent || path.startsWith(`${parent}\\`) || path.startsWith(`${parent}/`)
+  const normalizedPath = normalizePath(path)
+  const normalizedParent = normalizePath(parent)
+
+  return (
+    normalizedPath === normalizedParent ||
+    normalizedPath.startsWith(`${normalizedParent}\\`)
+  )
 }
 
 async function runFileTask(task: () => Promise<void>, message: string) {
@@ -520,11 +588,64 @@ async function runFileTask(task: () => Promise<void>, message: string) {
     isFileBusy.value = false
   }
 }
+
+function handleGlobalKeydown(event: KeyboardEvent) {
+  const hasModifier = event.ctrlKey || event.metaKey
+
+  if (!hasModifier) {
+    return
+  }
+
+  const key = event.key.toLowerCase()
+
+  if (key === 's') {
+    event.preventDefault()
+    void saveDocument()
+    return
+  }
+
+  if (key === 'o' && event.shiftKey) {
+    event.preventDefault()
+    void openWorkspace()
+    return
+  }
+
+  if (key === 'o') {
+    event.preventDefault()
+    void openNativeDocument()
+    return
+  }
+
+  if (key === 'n') {
+    event.preventDefault()
+    createScratchDocument()
+    return
+  }
+
+  if (event.key === '\\') {
+    event.preventDefault()
+    splitEnabled.value = !splitEnabled.value
+    return
+  }
+
+  if (key === 'arrowright' && event.shiftKey) {
+    event.preventDefault()
+    moveActiveDocumentToRight()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+})
 </script>
 
 <template>
   <main class="app-shell">
-    <aside class="workspace-sidebar" aria-label="Workspace">
+    <aside class="workspace-sidebar" aria-label="Workspace" @click.self="clearSidebarSelection">
       <div class="workspace-header">
         <div>
           <p class="app-kicker">Folden</p>
@@ -569,18 +690,24 @@ async function runFileTask(task: () => Promise<void>, message: string) {
         {{ workspace.rootPath }}
       </div>
 
-      <WorkspaceTree
+      <div
         v-if="workspace"
-        :entries="workspace.entries"
-        :active-path="activePath"
-        :selected-path="selectedPath"
-        @open-file="openWorkspaceFile"
-        @select-path="selectedPath = $event.path"
-        @create-file="createWorkspaceFile($event.path)"
-        @create-directory="createWorkspaceDirectory($event.path)"
-        @rename-path="renameWorkspacePath"
-        @trash-path="trashWorkspacePath"
-      />
+        class="workspace-tree-shell"
+        @click.self="clearSidebarSelection"
+      >
+        <WorkspaceTree
+          :entries="workspace.entries"
+          :active-path="activePath"
+          :selected-path="selectedPath"
+          @clear-selection="clearSidebarSelection"
+          @open-file="openWorkspaceFile"
+          @select-path="selectedPath = $event.path"
+          @create-file="createWorkspaceFile($event.path)"
+          @create-directory="createWorkspaceDirectory($event.path)"
+          @rename-path="renameWorkspacePath"
+          @trash-path="trashWorkspacePath"
+        />
+      </div>
 
       <section v-else class="empty-sidebar">
         <p>Open a folder to start a workspace.</p>
@@ -732,7 +859,9 @@ async function runFileTask(task: () => Promise<void>, message: string) {
 
       <footer class="statusbar">
         <span>{{ documents.length }} open</span>
-        <span class="path-status">{{ activeDocument?.path ?? 'Scratch document' }}</span>
+        <span class="path-status" :title="activeDocument?.path ?? 'Scratch document'">
+          {{ activeLocation }}
+        </span>
         <span>{{ activeDocument ? `${activeDocument.content.length} chars` : 'No document' }}</span>
       </footer>
     </section>

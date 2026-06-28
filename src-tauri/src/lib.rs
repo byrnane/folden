@@ -169,16 +169,24 @@ fn open_text_file() -> Result<Option<OpenedDocument>, String> {
 }
 
 #[tauri::command]
-fn save_text_file(path: Option<String>, content: String) -> Result<Option<String>, String> {
+fn save_text_file(
+    path: Option<String>,
+    content: String,
+    suggested_file_name: Option<String>,
+) -> Result<Option<String>, String> {
     let path = match path {
         Some(path) => std::path::PathBuf::from(path),
         None => {
-            let Some(path) = rfd::FileDialog::new()
+            let mut dialog = rfd::FileDialog::new()
                 .add_filter("Markdown", &["md", "markdown"])
                 .add_filter("Text", &["txt"])
-                .add_filter("All files", &["*"])
-                .save_file()
-            else {
+                .add_filter("All files", &["*"]);
+
+            if let Some(file_name) = suggested_file_name.filter(|value| !value.trim().is_empty()) {
+                dialog = dialog.set_file_name(file_name);
+            }
+
+            let Some(path) = dialog.save_file() else {
                 return Ok(None);
             };
 
