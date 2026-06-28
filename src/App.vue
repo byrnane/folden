@@ -93,11 +93,7 @@ const activeLocation = computed(() => {
     return 'Scratch'
   }
 
-  if (!workspace.value) {
-    return cleanDisplayPath(activeDocument.value.path)
-  }
-
-  return relativePath(workspace.value.rootPath, activeDocument.value.path) ?? cleanDisplayPath(activeDocument.value.path)
+  return cleanDisplayPath(activeDocument.value.path)
 })
 const visiblePanes = computed(() =>
   splitEnabled.value ? panes.value : panes.value.filter((pane) => pane.id === 'left'),
@@ -186,23 +182,6 @@ function normalizePath(path: string) {
 
 function pathsMatch(left: string, right: string) {
   return normalizePath(left) === normalizePath(right)
-}
-
-function relativePath(root: string, path: string) {
-  const cleanRoot = cleanDisplayPath(root)
-  const cleanPath = cleanDisplayPath(path)
-  const normalizedRoot = normalizePath(cleanRoot)
-  const normalizedPath = normalizePath(cleanPath)
-
-  if (normalizedPath === normalizedRoot) {
-    return fileNameFromPath(cleanPath)
-  }
-
-  if (!normalizedPath.startsWith(`${normalizedRoot}\\`)) {
-    return null
-  }
-
-  return cleanPath.slice(cleanRoot.length + 1).replaceAll('\\', ' / ')
 }
 
 function formatError(error: unknown) {
@@ -477,14 +456,23 @@ async function saveDocument(document = activeDocument.value) {
 }
 
 function suggestFileName(content: string) {
+  return `${safeFileBaseName(readMarkdownTitle(content))}.md`
+}
+
+function readMarkdownTitle(content: string) {
   const heading = content.match(/^#\s+(.+)$/m)?.[1]
   const fallbackText = content
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find((line) => line.length > 0)
-  const source = heading ?? fallbackText ?? 'Untitled'
+
+  return heading ?? fallbackText ?? 'Untitled'
+}
+
+function safeFileBaseName(source: string) {
   const cleanName = source
-    .replace(/^[#>*\-\d.\s]+/, '')
+    .replace(/^[#>*\-\s]+/, '')
+    .replace(/^\d+\.\s+/, '')
     .replace(/[`*_~[\]()]/g, '')
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')
     .replace(/\s+/g, ' ')
@@ -492,7 +480,7 @@ function suggestFileName(content: string) {
     .slice(0, 64)
     .replace(/[.\s]+$/g, '')
 
-  return `${cleanName || 'Untitled'}.md`
+  return cleanName || 'Untitled'
 }
 
 function closeDocument(pane: EditorPane, documentId: string) {
