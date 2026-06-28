@@ -40,7 +40,7 @@ type OpenDocument = {
   name: string
   content: string
   savedContent: string
-  mode: EditorMode
+  defaultMode: EditorMode
 }
 
 type EditorPane = {
@@ -77,6 +77,7 @@ const splitEnabled = ref(false)
 const errorMessage = ref<string | null>(null)
 const isFileBusy = ref(false)
 const recentWorkspaces = ref(loadRecentWorkspaces())
+const paneDocumentModes = ref<Record<string, EditorMode>>({})
 
 const activePane = computed(() => getPane(activePaneId.value) ?? panes.value[0])
 const activeDocument = computed(() => {
@@ -93,10 +94,10 @@ const activeLocation = computed(() => {
   }
 
   if (!workspace.value) {
-    return activeDocument.value.path
+    return cleanDisplayPath(activeDocument.value.path)
   }
 
-  return relativePath(workspace.value.rootPath, activeDocument.value.path) ?? activeDocument.value.path
+  return relativePath(workspace.value.rootPath, activeDocument.value.path) ?? cleanDisplayPath(activeDocument.value.path)
 })
 const visiblePanes = computed(() =>
   splitEnabled.value ? panes.value : panes.value.filter((pane) => pane.id === 'left'),
@@ -137,12 +138,12 @@ function createDocumentFromContent(
     name: path ? fileNameFromPath(path) : fallbackName ?? 'Untitled.md',
     content,
     savedContent: content,
-    mode: path && !isMarkdownPath(path) ? 'source' : 'visual',
+    defaultMode: path && !isMarkdownPath(path) ? 'source' : 'visual',
   }
 }
 
 function fileNameFromPath(path: string) {
-  return path.split(/[\\/]/).at(-1) || path
+  return cleanDisplayPath(path).split(/[\\/]/).at(-1) || path
 }
 
 function workspaceNameFromPath(path: string) {
@@ -167,8 +168,20 @@ function isMarkdownPath(path: string | null) {
   return /\.(md|markdown)$/i.test(path)
 }
 
+function cleanDisplayPath(path: string) {
+  if (path.startsWith('\\\\?\\UNC\\')) {
+    return `\\\\${path.slice('\\\\?\\UNC\\'.length)}`
+  }
+
+  if (path.startsWith('\\\\?\\')) {
+    return path.slice('\\\\?\\'.length)
+  }
+
+  return path
+}
+
 function normalizePath(path: string) {
-  return path.replaceAll('/', '\\').toLowerCase()
+  return cleanDisplayPath(path).replaceAll('/', '\\').toLowerCase()
 }
 
 function pathsMatch(left: string, right: string) {
@@ -176,18 +189,20 @@ function pathsMatch(left: string, right: string) {
 }
 
 function relativePath(root: string, path: string) {
-  const normalizedRoot = normalizePath(root)
-  const normalizedPath = normalizePath(path)
+  const cleanRoot = cleanDisplayPath(root)
+  const cleanPath = cleanDisplayPath(path)
+  const normalizedRoot = normalizePath(cleanRoot)
+  const normalizedPath = normalizePath(cleanPath)
 
   if (normalizedPath === normalizedRoot) {
-    return fileNameFromPath(path)
+    return fileNameFromPath(cleanPath)
   }
 
   if (!normalizedPath.startsWith(`${normalizedRoot}\\`)) {
     return null
   }
 
-  return path.slice(root.length + 1).replaceAll('\\', ' / ')
+  return cleanPath.slice(cleanRoot.length + 1).replaceAll('\\', ' / ')
 }
 
 function formatError(error: unknown) {
@@ -254,6 +269,25 @@ function clearSidebarSelection() {
   selectedPath.value = null
 }
 
+function paneDocumentModeKey(paneId: EditorPane['id'], documentId: string) {
+  return `${paneId}:${documentId}`
+}
+
+function getDocumentMode(pane: EditorPane, document: OpenDocument) {
+  return paneDocumentModes.value[paneDocumentModeKey(pane.id, document.id)] ?? document.defaultMode
+}
+
+function setPaneDocumentMode(pane: EditorPane, document: OpenDocument, mode: EditorMode) {
+  if (mode === 'visual' && !isMarkdownPath(document.path)) {
+    return
+  }
+
+  paneDocumentModes.value = {
+    ...paneDocumentModes.value,
+    [paneDocumentModeKey(pane.id, document.id)]: mode,
+  }
+}
+
 function setActiveDocument(pane: EditorPane, documentId: string) {
   pane.activeDocumentId = documentId
   activePaneId.value = pane.id
@@ -271,6 +305,51 @@ function addDocumentToPane(document: OpenDocument, paneId = activePaneId.value) 
   }
 
   setActiveDocument(pane, document.id)
+}
+
+function setSplitEnabled(enabled: boolean) {
+  if (enabled) {
+    splitEnabled.value = true
+    return
+  }
+
+  mergeRightPaneIntoLeft()
+  splitEnabled.value = false
+  activePaneId.value = 'left'
+}
+
+function mergeRightPaneIntoLeft() {
+  const leftPane = getPane('left')
+  const rightPane = getPane('right')
+  const nextPaneDocumentModes = { ...paneDocumentModes.value }
+
+  if (!leftPane || !rightPane) {
+    return
+  }
+
+  for (const documentId of rightPane.documentIds) {
+    if (!leftPane.documentIds.includes(documentId)) {
+      leftPane.documentIds.push(documentId)
+    }
+
+    const rightMode = paneDocumentModes.value[paneDocumentModeKey('right', documentId)]
+
+    if (rightMode) {
+      nextPaneDocumentModes[paneDocumentModeKey('left', documentId)] = rightMode
+    }
+
+    delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
+  }
+
+  if (rightPane.activeDocumentId) {
+    leftPane.activeDocumentId = rightPane.activeDocumentId
+  } else if (!leftPane.activeDocumentId) {
+    leftPane.activeDocumentId = leftPane.documentIds.at(-1) ?? null
+  }
+
+  rightPane.documentIds = []
+  rightPane.activeDocumentId = null
+  paneDocumentModes.value = nextPaneDocumentModes
 }
 
 function openLoadedDocument(document: OpenedDocument, paneId = activePaneId.value) {
@@ -348,7 +427,7 @@ async function openWorkspaceFile(entry: WorkspaceEntry, paneId = activePaneId.va
 }
 
 async function openEntryInRight(entry: WorkspaceEntry) {
-  splitEnabled.value = true
+  setSplitEnabled(true)
   await openWorkspaceFile(entry, 'right')
 }
 
@@ -358,11 +437,11 @@ function moveActiveDocumentToRight() {
   const targetPane = getPane('right')
 
   if (!document || !sourcePane || !targetPane || sourcePane.id === 'right') {
-    splitEnabled.value = true
+    setSplitEnabled(true)
     return
   }
 
-  splitEnabled.value = true
+  setSplitEnabled(true)
   addDocumentToPane(document, 'right')
   sourcePane.documentIds = sourcePane.documentIds.filter((documentId) => documentId !== document.id)
   sourcePane.activeDocumentId = sourcePane.documentIds.at(-1) ?? null
@@ -390,7 +469,7 @@ async function saveDocument(document = activeDocument.value) {
     selectedPath.value = savedPath
 
     if (!isMarkdownPath(savedPath)) {
-      document.mode = 'source'
+      document.defaultMode = 'source'
     }
 
     await refreshWorkspace()
@@ -428,6 +507,8 @@ function closeDocument(pane: EditorPane, documentId: string) {
   }
 
   pane.documentIds = pane.documentIds.filter((id) => id !== documentId)
+  const nextPaneDocumentModes = { ...paneDocumentModes.value }
+  delete nextPaneDocumentModes[paneDocumentModeKey(pane.id, documentId)]
 
   if (pane.activeDocumentId === documentId) {
     pane.activeDocumentId = pane.documentIds.at(-1) ?? null
@@ -435,15 +516,11 @@ function closeDocument(pane: EditorPane, documentId: string) {
 
   if (!panes.value.some((openPane) => openPane.documentIds.includes(documentId))) {
     documents.value = documents.value.filter((openDocument) => openDocument.id !== documentId)
-  }
-}
-
-function setDocumentMode(document: OpenDocument, mode: EditorMode) {
-  if (mode === 'visual' && !isMarkdownPath(document.path)) {
-    return
+    delete nextPaneDocumentModes[paneDocumentModeKey('left', documentId)]
+    delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
   }
 
-  document.mode = mode
+  paneDocumentModes.value = nextPaneDocumentModes
 }
 
 function updateDocumentContent(documentId: string | null, value: string) {
@@ -564,6 +641,15 @@ function removeDocuments(documentIds: string[]) {
       pane.activeDocumentId = pane.documentIds.at(-1) ?? null
     }
   }
+
+  const nextPaneDocumentModes = { ...paneDocumentModes.value }
+
+  for (const documentId of documentIds) {
+    delete nextPaneDocumentModes[paneDocumentModeKey('left', documentId)]
+    delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
+  }
+
+  paneDocumentModes.value = nextPaneDocumentModes
 }
 
 function isSameOrChildPath(path: string, parent: string) {
@@ -596,39 +682,39 @@ function handleGlobalKeydown(event: KeyboardEvent) {
     return
   }
 
-  const key = event.key.toLowerCase()
+  const code = event.code
 
-  if (key === 's') {
+  if (code === 'KeyS') {
     event.preventDefault()
     void saveDocument()
     return
   }
 
-  if (key === 'o' && event.shiftKey) {
+  if (code === 'KeyO' && event.shiftKey) {
     event.preventDefault()
     void openWorkspace()
     return
   }
 
-  if (key === 'o') {
+  if (code === 'KeyO') {
     event.preventDefault()
     void openNativeDocument()
     return
   }
 
-  if (key === 'n') {
+  if (code === 'KeyN') {
     event.preventDefault()
     createScratchDocument()
     return
   }
 
-  if (event.key === '\\') {
+  if (code === 'Backslash') {
     event.preventDefault()
-    splitEnabled.value = !splitEnabled.value
+    setSplitEnabled(!splitEnabled.value)
     return
   }
 
-  if (key === 'arrowright' && event.shiftKey) {
+  if (code === 'ArrowRight' && event.shiftKey) {
     event.preventDefault()
     moveActiveDocumentToRight()
   }
@@ -756,7 +842,7 @@ onBeforeUnmount(() => {
             class="icon-button"
             title="Toggle split view"
             :class="{ active: splitEnabled }"
-            @click="splitEnabled = !splitEnabled"
+            @click="setSplitEnabled(!splitEnabled)"
           >
             <Columns2 :size="16" />
           </button>
@@ -808,21 +894,21 @@ onBeforeUnmount(() => {
             <div class="mode-switch">
               <button
                 type="button"
-                :class="{ active: getDocument(pane.activeDocumentId)?.mode === 'visual' }"
+                :class="{ active: getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'visual' }"
                 :disabled="!isMarkdownPath(getDocument(pane.activeDocumentId)?.path ?? null)"
-                @click="setDocumentMode(getDocument(pane.activeDocumentId)!, 'visual')"
+                @click="setPaneDocumentMode(pane, getDocument(pane.activeDocumentId)!, 'visual')"
               >
                 Visual
               </button>
               <button
                 type="button"
-                :class="{ active: getDocument(pane.activeDocumentId)?.mode === 'source' }"
-                @click="setDocumentMode(getDocument(pane.activeDocumentId)!, 'source')"
+                :class="{ active: getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'source' }"
+                @click="setPaneDocumentMode(pane, getDocument(pane.activeDocumentId)!, 'source')"
               >
                 Source
               </button>
               <button
-                v-if="workspace && getDocument(pane.activeDocumentId)?.path"
+                v-if="pane.id !== 'right' && workspace && getDocument(pane.activeDocumentId)?.path"
                 type="button"
                 class="open-right-button"
                 @click="
@@ -839,7 +925,7 @@ onBeforeUnmount(() => {
             </div>
 
             <VisualMarkdownEditor
-              v-if="getDocument(pane.activeDocumentId)?.mode === 'visual'"
+              v-if="getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'visual'"
               :model-value="getDocument(pane.activeDocumentId)!.content"
               @update:model-value="updateDocumentContent(pane.activeDocumentId, $event)"
             />
@@ -859,7 +945,7 @@ onBeforeUnmount(() => {
 
       <footer class="statusbar">
         <span>{{ documents.length }} open</span>
-        <span class="path-status" :title="activeDocument?.path ?? 'Scratch document'">
+        <span class="path-status" :title="activeDocument?.path ? cleanDisplayPath(activeDocument.path) : 'Scratch document'">
           {{ activeLocation }}
         </span>
         <span>{{ activeDocument ? `${activeDocument.content.length} chars` : 'No document' }}</span>
