@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -19,6 +20,7 @@ enum FileErrorCode {
     BinaryFile,
     TooLarge,
     WorkspaceRootProtected,
+    FileChangedExternally,
     Unknown,
 }
 
@@ -46,9 +48,22 @@ struct AuthorizedWorkspace {
 #[derive(Clone)]
 struct AuthorizedDocument {
     path: PathBuf,
-    display_path: String,
     workspace_id: Option<String>,
     relative_path: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FileFingerprint {
+    size: u64,
+    modified_at_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TextFileFormat {
+    line_ending: String,
+    has_utf8_bom: bool,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -67,6 +82,8 @@ struct OpenedDocument {
     content: String,
     workspace_id: Option<String>,
     relative_path: Option<String>,
+    file_format: TextFileFormat,
+    fingerprint: Option<FileFingerprint>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -140,6 +157,87 @@ fn path_to_string(path: &Path) -> String {
     }
 
     value.strip_prefix(r"\\?\").unwrap_or(&value).to_string()
+}
+
+fn create_file_fingerprint(metadata: &fs::Metadata) -> NativeResult<FileFingerprint> {
+    let modified_at_ms = metadata
+        .modified()
+        .map_err(|error| io_error("read_metadata", error))?
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+
+    Ok(FileFingerprint {
+        size: metadata.len(),
+        modified_at_ms,
+    })
+}
+
+fn detect_line_ending(content: &str) -> String {
+    if content.contains("\r\n") {
+        "crlf".to_string()
+    } else {
+        "lf".to_string()
+    }
+}
+
+fn decode_text_file(
+    path: &Path,
+    operation: &str,
+) -> NativeResult<(String, TextFileFormat, FileFingerprint)> {
+    let bytes = fs::read(path).map_err(|error| io_error(operation, error))?;
+    let metadata = fs::metadata(path).map_err(|error| io_error(operation, error))?;
+    let has_utf8_bom = bytes.starts_with(&[0xEF, 0xBB, 0xBF]);
+    let text_bytes = if has_utf8_bom {
+        &bytes[3..]
+    } else {
+        &bytes[..]
+    };
+
+    if text_bytes.contains(&0) {
+        return Err(native_error(
+            FileErrorCode::BinaryFile,
+            operation,
+            "Binary files are not supported.",
+            Some(path_to_string(path)),
+            false,
+        ));
+    }
+
+    let content = String::from_utf8(text_bytes.to_vec()).map_err(|error| {
+        native_error(
+            FileErrorCode::EncodingUnsupported,
+            operation,
+            "This file encoding is not supported yet.",
+            Some(error.to_string()),
+            false,
+        )
+    })?;
+    let file_format = TextFileFormat {
+        line_ending: detect_line_ending(&content),
+        has_utf8_bom,
+    };
+    let fingerprint = create_file_fingerprint(&metadata)?;
+
+    Ok((content, file_format, fingerprint))
+}
+
+fn encode_text_content(content: &str, file_format: &TextFileFormat) -> Vec<u8> {
+    let normalized = content.replace("\r\n", "\n").replace('\r', "\n");
+    let line_ending = if file_format.line_ending == "crlf" {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let text = normalized.replace('\n', line_ending);
+    let mut bytes = Vec::new();
+
+    if file_format.has_utf8_bom {
+        bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+    }
+
+    bytes.extend_from_slice(text.as_bytes());
+    bytes
 }
 
 fn canonical_root(path: &Path, operation: &str) -> NativeResult<PathBuf> {
@@ -315,6 +413,121 @@ fn validate_name(name: &str) -> NativeResult<String> {
     Ok(trimmed.to_string())
 }
 
+#[cfg(windows)]
+fn replace_existing_path(target_path: &Path, replacement_path: &Path) -> std::io::Result<()> {
+    use std::iter::once;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        ReplaceFileW, REPLACEFILE_IGNORE_ACL_ERRORS, REPLACEFILE_IGNORE_MERGE_ERRORS,
+    };
+
+    let target_wide = target_path
+        .as_os_str()
+        .encode_wide()
+        .chain(once(0))
+        .collect::<Vec<_>>();
+    let replacement_wide = replacement_path
+        .as_os_str()
+        .encode_wide()
+        .chain(once(0))
+        .collect::<Vec<_>>();
+
+    let result = unsafe {
+        ReplaceFileW(
+            target_wide.as_ptr(),
+            replacement_wide.as_ptr(),
+            std::ptr::null(),
+            REPLACEFILE_IGNORE_MERGE_ERRORS | REPLACEFILE_IGNORE_ACL_ERRORS,
+            std::ptr::null(),
+            std::ptr::null(),
+        )
+    };
+
+    if result == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_existing_path(target_path: &Path, replacement_path: &Path) -> std::io::Result<()> {
+    fs::rename(replacement_path, target_path)
+}
+
+fn write_atomic_bytes_with<F>(
+    target_path: &Path,
+    bytes: &[u8],
+    replace_fn: F,
+) -> std::io::Result<()>
+where
+    F: Fn(&Path, &Path) -> std::io::Result<()>,
+{
+    let parent = target_path.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "missing parent directory for target path",
+        )
+    })?;
+    let temp_path = parent.join(format!(".folden-save-{}.tmp", next_id("write")));
+
+    let write_result = (|| -> std::io::Result<()> {
+        let mut file = fs::File::create(&temp_path)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+
+        if target_path.exists() {
+            replace_fn(target_path, &temp_path)?;
+        } else {
+            fs::rename(&temp_path, target_path)?;
+        }
+
+        Ok(())
+    })();
+
+    if write_result.is_err() && temp_path.exists() {
+        let _ = fs::remove_file(&temp_path);
+    }
+
+    write_result
+}
+
+fn write_atomic_text_file(
+    target_path: &Path,
+    bytes: &[u8],
+    operation: &str,
+) -> NativeResult<FileFingerprint> {
+    write_atomic_bytes_with(target_path, bytes, replace_existing_path)
+        .map_err(|error| io_error(operation, error))?;
+    let metadata = fs::metadata(target_path).map_err(|error| io_error(operation, error))?;
+
+    create_file_fingerprint(&metadata)
+}
+
+fn ensure_expected_fingerprint(
+    path: &Path,
+    expected_fingerprint: Option<&FileFingerprint>,
+    operation: &str,
+) -> NativeResult<Option<FileFingerprint>> {
+    let metadata = fs::metadata(path).map_err(|error| io_error(operation, error))?;
+    let actual_fingerprint = create_file_fingerprint(&metadata)?;
+
+    if let Some(expected_fingerprint) = expected_fingerprint {
+        if actual_fingerprint != *expected_fingerprint {
+            return Err(native_error(
+                FileErrorCode::FileChangedExternally,
+                operation,
+                "The file changed on disk before Folden could save it.",
+                Some(path_to_string(path)),
+                true,
+            ));
+        }
+    }
+
+    Ok(Some(actual_fingerprint))
+}
+
 fn is_text_file(path: &Path) -> bool {
     let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
         return false;
@@ -461,6 +674,8 @@ fn register_document(
     workspace_id: Option<String>,
     relative_path: Option<String>,
     content: String,
+    file_format: TextFileFormat,
+    fingerprint: Option<FileFingerprint>,
 ) -> OpenedDocument {
     let document_id =
         find_existing_document_id(state, &path).unwrap_or_else(|| next_id("document"));
@@ -470,7 +685,6 @@ fn register_document(
         document_id.clone(),
         AuthorizedDocument {
             path,
-            display_path: display_path.clone(),
             workspace_id: workspace_id.clone(),
             relative_path: relative_path.clone(),
         },
@@ -482,6 +696,8 @@ fn register_document(
         content,
         workspace_id,
         relative_path,
+        file_format,
+        fingerprint,
     }
 }
 
@@ -581,7 +797,6 @@ fn update_registered_document_paths(
 
         let next_path = workspace_root.join(&next_relative);
         document.path = next_path.clone();
-        document.display_path = path_to_string(&next_path);
         document.relative_path = Some(next_relative);
     }
 }
@@ -634,8 +849,7 @@ fn open_text_file(
     };
 
     let canonical_path = canonical_root(&path, "open_text_file")?;
-    let content =
-        fs::read_to_string(&canonical_path).map_err(|error| io_error("open_text_file", error))?;
+    let (content, file_format, fingerprint) = decode_text_file(&canonical_path, "open_text_file")?;
     let mut state = state.lock().unwrap();
     let (workspace_id, relative_path) = detect_workspace_membership(&state, &canonical_path);
 
@@ -645,6 +859,8 @@ fn open_text_file(
         workspace_id,
         relative_path,
         content,
+        file_format,
+        Some(fingerprint),
     )))
 }
 
@@ -653,11 +869,14 @@ fn save_text_file(
     state: tauri::State<'_, Mutex<NativeAppState>>,
     document_id: Option<String>,
     content: String,
+    expected_fingerprint: Option<FileFingerprint>,
+    file_format: TextFileFormat,
     suggested_file_name: Option<String>,
 ) -> NativeResult<Option<OpenedDocument>> {
     let mut state = state.lock().unwrap();
+    let bytes = encode_text_content(&content, &file_format);
 
-    let path = if let Some(document_id) = document_id {
+    let (path, workspace_id, relative_path, fingerprint) = if let Some(document_id) = document_id {
         let document = state.documents.get(&document_id).cloned().ok_or_else(|| {
             native_error(
                 FileErrorCode::NotFound,
@@ -668,8 +887,19 @@ fn save_text_file(
             )
         })?;
 
-        fs::write(&document.path, &content).map_err(|error| io_error("save_text_file", error))?;
-        document.path
+        ensure_expected_fingerprint(
+            &document.path,
+            expected_fingerprint.as_ref(),
+            "save_text_file",
+        )?;
+        let fingerprint = write_atomic_text_file(&document.path, &bytes, "save_text_file")?;
+
+        (
+            document.path,
+            document.workspace_id,
+            document.relative_path,
+            Some(fingerprint),
+        )
     } else {
         let mut dialog = rfd::FileDialog::new()
             .add_filter("Markdown", &["md", "markdown"])
@@ -709,19 +939,35 @@ fn save_text_file(
             })?;
 
         let target_path = canonical_parent.join(validate_name(file_name)?);
-        fs::write(&target_path, &content).map_err(|error| io_error("save_text_file", error))?;
-        target_path
-    };
+        let fingerprint = if target_path.exists() {
+            ensure_expected_fingerprint(
+                &target_path,
+                expected_fingerprint.as_ref(),
+                "save_text_file",
+            )?;
+            write_atomic_text_file(&target_path, &bytes, "save_text_file")?
+        } else {
+            write_atomic_text_file(&target_path, &bytes, "save_text_file")?
+        };
+        let canonical_path = canonical_root(&target_path, "save_text_file")?;
+        let (workspace_id, relative_path) = detect_workspace_membership(&state, &canonical_path);
 
-    let canonical_path = canonical_root(&path, "save_text_file")?;
-    let (workspace_id, relative_path) = detect_workspace_membership(&state, &canonical_path);
+        (
+            canonical_path,
+            workspace_id,
+            relative_path,
+            Some(fingerprint),
+        )
+    };
 
     Ok(Some(register_document(
         &mut state,
-        canonical_path,
+        path,
         workspace_id,
         relative_path,
         content,
+        file_format,
+        fingerprint,
     )))
 }
 
@@ -777,8 +1023,8 @@ fn open_text_file_by_path(
     let workspace = get_workspace(&state, &workspace_id, "open_text_file_by_path")?.clone();
     let (canonical_path, relative_path) =
         resolve_workspace_path(&workspace, &path, "open_text_file_by_path")?;
-    let content = fs::read_to_string(&canonical_path)
-        .map_err(|error| io_error("open_text_file_by_path", error))?;
+    let (content, file_format, fingerprint) =
+        decode_text_file(&canonical_path, "open_text_file_by_path")?;
 
     Ok(register_document(
         &mut state,
@@ -786,6 +1032,8 @@ fn open_text_file_by_path(
         Some(workspace_id),
         Some(relative_path_to_string(&relative_path)),
         content,
+        file_format,
+        Some(fingerprint),
     ))
 }
 
@@ -1070,5 +1318,63 @@ mod tests {
             "control characters are not allowed"
         );
         assert_eq!(payload["retryable"], false);
+    }
+
+    #[test]
+    fn decode_and_encode_preserve_utf8_bom_and_line_endings() {
+        let temp = TempWorkspace::new();
+        let path = temp.path.join("format.md");
+        fs::write(&path, [0xEF, 0xBB, 0xBF, b'a', b'\r', b'\n', b'b'])
+            .expect("failed to write test file");
+
+        let (content, format, fingerprint) =
+            decode_text_file(&path, "decode_text_file").expect("expected text file to decode");
+
+        assert_eq!(content, "a\r\nb");
+        assert_eq!(
+            format,
+            TextFileFormat {
+                line_ending: "crlf".to_string(),
+                has_utf8_bom: true,
+            }
+        );
+        assert!(fingerprint.size > 0);
+        assert_eq!(
+            encode_text_content(&content, &format),
+            vec![0xEF, 0xBB, 0xBF, b'a', b'\r', b'\n', b'b']
+        );
+    }
+
+    #[test]
+    fn stale_fingerprint_is_rejected() {
+        let temp = TempWorkspace::new();
+        let path = temp.path.join("draft.md");
+        fs::write(&path, "first").expect("failed to write initial file");
+        let stale_fingerprint = FileFingerprint {
+            size: 999,
+            modified_at_ms: 1,
+        };
+
+        let error = ensure_expected_fingerprint(&path, Some(&stale_fingerprint), "save_text_file")
+            .expect_err("expected stale fingerprint conflict");
+
+        assert_eq!(error.code, FileErrorCode::FileChangedExternally);
+    }
+
+    #[test]
+    fn failed_atomic_replace_keeps_original_content() {
+        let temp = TempWorkspace::new();
+        let path = temp.path.join("draft.md");
+        fs::write(&path, "original").expect("failed to write original file");
+
+        let result = write_atomic_bytes_with(&path, b"updated", |_target, _replacement| {
+            Err(std::io::Error::other("simulated replace failure"))
+        });
+
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read_to_string(&path).expect("failed to read original file"),
+            "original"
+        );
     }
 }

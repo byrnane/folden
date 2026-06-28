@@ -1,11 +1,15 @@
 import { computed, ref } from 'vue'
 import {
+  createTextFileFormat,
   INITIAL_DOCUMENT_REVISION,
   isDocumentDirty,
   nextDocumentRevision,
+  type FileFingerprint,
   type DocumentId,
   type DocumentRevision,
+  type TextFileFormat,
 } from './domain/document'
+import type { NativeError } from './tauriFiles'
 
 export type EditorMode = 'visual' | 'source'
 
@@ -20,6 +24,10 @@ export type OpenDocument = {
   revision: DocumentRevision
   persistedRevision: DocumentRevision
   defaultMode: EditorMode
+  fileFormat: TextFileFormat
+  diskFingerprint: FileFingerprint | null
+  saveState: 'idle' | 'queued' | 'saving' | 'error'
+  saveError: NativeError | null
 }
 
 export type LoadedDocument = {
@@ -28,6 +36,8 @@ export type LoadedDocument = {
   content: string
   workspaceId: string | null
   relativePath: string | null
+  fileFormat: TextFileFormat
+  fingerprint: FileFingerprint | null
 }
 
 type DocumentStateOptions = {
@@ -82,6 +92,10 @@ export function createDocumentState(options: DocumentStateOptions) {
       revision: INITIAL_DOCUMENT_REVISION,
       persistedRevision: INITIAL_DOCUMENT_REVISION,
       defaultMode: path && !options.isMarkdownPath(path) ? 'source' : 'visual',
+      fileFormat: createTextFileFormat(),
+      diskFingerprint: null,
+      saveState: 'idle',
+      saveError: null,
     }
   }
 
@@ -105,6 +119,10 @@ export function createDocumentState(options: DocumentStateOptions) {
       existingDocument.nativeId = document.id
       existingDocument.workspaceId = document.workspaceId
       existingDocument.relativePath = document.relativePath
+      existingDocument.fileFormat = document.fileFormat
+      existingDocument.diskFingerprint = document.fingerprint
+      existingDocument.saveState = 'idle'
+      existingDocument.saveError = null
       return existingDocument
     }
 
@@ -113,6 +131,10 @@ export function createDocumentState(options: DocumentStateOptions) {
       nativeId: document.id,
       workspaceId: document.workspaceId,
       relativePath: document.relativePath,
+      fileFormat: document.fileFormat,
+      diskFingerprint: document.fingerprint,
+      saveState: 'idle',
+      saveError: null,
     })
   }
 
@@ -131,7 +153,35 @@ export function createDocumentState(options: DocumentStateOptions) {
     document.revision = nextDocumentRevision(document.revision)
   }
 
-  function markDocumentSaved(documentId: DocumentId, documentSnapshot: LoadedDocument) {
+  function markDocumentQueued(documentId: DocumentId) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    document.saveState = 'queued'
+    document.saveError = null
+    return document
+  }
+
+  function markDocumentSaving(documentId: DocumentId) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    document.saveState = 'saving'
+    document.saveError = null
+    return document
+  }
+
+  function markDocumentSaved(
+    documentId: DocumentId,
+    savedRevision: DocumentRevision,
+    documentSnapshot: LoadedDocument,
+  ) {
     const document = getDocument(documentId)
 
     if (!document) {
@@ -144,13 +194,29 @@ export function createDocumentState(options: DocumentStateOptions) {
     document.workspaceId = documentSnapshot.workspaceId
     document.relativePath = documentSnapshot.relativePath
     document.name = options.fileNameFromPath(documentSnapshot.path)
-    document.persistedRevision = document.revision
+    document.fileFormat = documentSnapshot.fileFormat
+    document.diskFingerprint = documentSnapshot.fingerprint
+    document.persistedRevision = savedRevision
+    document.saveState = 'idle'
+    document.saveError = null
 
     if (!options.isMarkdownPath(documentSnapshot.path)) {
       document.defaultMode = 'source'
     }
 
     setPathIndex(document.path, document.id)
+    return document
+  }
+
+  function markDocumentSaveError(documentId: DocumentId, error: NativeError) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    document.saveState = 'error'
+    document.saveError = error
     return document
   }
 
@@ -206,7 +272,10 @@ export function createDocumentState(options: DocumentStateOptions) {
     createScratchDocument,
     openLoadedDocument,
     updateDocumentContent,
+    markDocumentQueued,
+    markDocumentSaving,
     markDocumentSaved,
+    markDocumentSaveError,
     updateDocumentPaths,
     removeDocuments,
   }

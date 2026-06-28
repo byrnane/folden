@@ -26,7 +26,8 @@ import {
   type WorkspaceEntry,
 } from './tauriFiles'
 import { createDocumentState, type EditorMode, type OpenDocument } from './documentState'
-import { isDocumentDirty } from './domain/document'
+import { createTextFileFormat, isDocumentDirty } from './domain/document'
+import { createDocumentSaveQueue } from './saveQueue'
 import VisualMarkdownEditor from './VisualMarkdownEditor.vue'
 import WorkspaceTree from './WorkspaceTree.vue'
 
@@ -58,7 +59,10 @@ const {
   createScratchDocument: createDocumentDraft,
   openLoadedDocument: openDocumentState,
   updateDocumentContent,
+  markDocumentQueued,
+  markDocumentSaving,
   markDocumentSaved,
+  markDocumentSaveError,
   updateDocumentPaths,
   removeDocuments,
 } = documentState
@@ -86,6 +90,43 @@ const errorMessage = ref<string | null>(null)
 const isFileBusy = ref(false)
 const recentWorkspaces = ref(loadRecentWorkspaces())
 const paneDocumentModes = ref<Record<string, EditorMode>>({})
+const saveQueue = createDocumentSaveQueue({
+  performSave: (job) => saveTextFile(
+    job.documentNativeId,
+    job.contentSnapshot,
+    job.expectedFingerprint,
+    job.fileFormat,
+    job.suggestedFileName,
+  ),
+  onQueued: (job) => {
+    markDocumentQueued(job.documentId)
+  },
+  onSaving: (job) => {
+    markDocumentSaving(job.documentId)
+  },
+  onSaved: (job, savedDocument) => {
+    const nextDocument = markDocumentSaved(job.documentId, job.revision, savedDocument)
+
+    if (!nextDocument) {
+      return
+    }
+
+    if (nextDocument.workspaceId === workspace.value?.id) {
+      selectedPath.value = nextDocument.relativePath
+    }
+
+    const didPathChange = job.pathBeforeSave !== savedDocument.path
+      || job.relativePathBeforeSave !== savedDocument.relativePath
+      || job.workspaceIdBeforeSave !== savedDocument.workspaceId
+
+    if (didPathChange && nextDocument.workspaceId === workspace.value?.id) {
+      void refreshWorkspace()
+    }
+  },
+  onError: (job, error) => {
+    markDocumentSaveError(job.documentId, error)
+  },
+})
 
 const activePane = computed(() => getPane(activePaneId.value) ?? panes.value[0])
 const activeDocument = computed(() => {
@@ -425,23 +466,19 @@ async function saveDocument(document = activeDocument.value) {
   }
 
   await runFileTask(async () => {
-    const savedDocument = await saveTextFile(
-      document.nativeId,
-      document.content,
-      document.nativeId ? undefined : suggestFileName(document.content),
-    )
-
-    if (!savedDocument) {
-      return
-    }
-
-    const nextDocument = markDocumentSaved(document.id, savedDocument)
-
-    if (nextDocument && nextDocument.workspaceId === workspace.value?.id) {
-      selectedPath.value = nextDocument.relativePath
-    }
-
-    await refreshWorkspace()
+    await saveQueue.enqueue({
+      documentId: document.id,
+      documentNativeId: document.nativeId,
+      pathBeforeSave: document.path,
+      workspaceIdBeforeSave: document.workspaceId,
+      relativePathBeforeSave: document.relativePath,
+      revision: document.revision,
+      contentSnapshot: document.content,
+      expectedFingerprint: document.diskFingerprint,
+      fileFormat: document.fileFormat ?? createTextFileFormat(),
+      suggestedFileName: document.nativeId ? undefined : suggestFileName(document.content),
+      reason: 'manual',
+    })
   }, 'Could not save file')
 }
 
