@@ -6,6 +6,13 @@ export type FileFingerprint = {
   modifiedAtMs: number
 }
 
+export type LineEnding = 'lf' | 'crlf'
+
+export type TextFileFormat = {
+  lineEnding: LineEnding
+  hasUtf8Bom: boolean
+}
+
 export type DirtyState = {
   revision: DocumentRevision
   persistedRevision: DocumentRevision
@@ -38,5 +45,15 @@ export function createFileFingerprint(size: number, modifiedAtMs: number): FileF
   return {
     size: Math.max(0, Math.trunc(size)),
     modifiedAtMs: Math.max(0, Math.trunc(modifiedAtMs)),
+  }
+}
+
+export function createTextFileFormat(
+  lineEnding: LineEnding = 'lf',
+  hasUtf8Bom = false,
+): TextFileFormat {
+  return {
+    lineEnding,
+    hasUtf8Bom,
   }
 }

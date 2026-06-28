@@ -6,6 +6,7 @@ import {
   isDocumentDirty,
   markRevisionPersisted,
   nextDocumentRevision,
+  createTextFileFormat,
 } from './document'
 
 describe('document domain', () => {
@@ -40,6 +41,13 @@ describe('document domain', () => {
     expect(createFileFingerprint(128.8, -42)).toEqual({
       size: 128,
       modifiedAtMs: 0,
+    })
+  })
+
+  it('creates explicit text file format metadata for save preservation', () => {
+    expect(createTextFileFormat('crlf', true)).toEqual({
+      lineEnding: 'crlf',
+      hasUtf8Bom: true,
     })
   })
 })

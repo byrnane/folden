@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import type { FileFingerprint, TextFileFormat } from './domain/document'
 
 export type WorkspaceDescriptor = {
   id: string
@@ -19,15 +20,19 @@ export type OpenedDocument = {
   content: string
   workspaceId: string | null
   relativePath: string | null
+  fileFormat: TextFileFormat
+  fingerprint: FileFingerprint | null
 }
 
-type NativeError = {
+export type NativeError = {
   code: string
   operation: string
   userMessage: string
   technicalMessage: string | null
   retryable: boolean
 }
+
+export type SaveDocumentResult = OpenedDocument
 
 function normalizeNativeError(error: unknown): NativeError {
   if (typeof error === 'object' && error !== null) {
@@ -67,11 +72,15 @@ export async function openTextFile() {
 export async function saveTextFile(
   documentId: string | null,
   content: string,
+  expectedFingerprint: FileFingerprint | null,
+  fileFormat: TextFileFormat,
   suggestedFileName?: string,
 ) {
-  return invokeNative<OpenedDocument | null>('save_text_file', {
+  return invokeNative<SaveDocumentResult | null>('save_text_file', {
     documentId,
     content,
+    expectedFingerprint,
+    fileFormat,
     suggestedFileName,
   })
 }
