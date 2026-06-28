@@ -14,15 +14,22 @@ describe('document state', () => {
     const state = createState()
 
     const first = state.openLoadedDocument({
+      id: 'document-1',
       path: 'C:\\Docs\\Draft.md',
       content: '# Draft',
+      workspaceId: 'workspace-1',
+      relativePath: 'Draft.md',
     })
     const second = state.openLoadedDocument({
+      id: 'document-2',
       path: 'c:/docs/draft.md',
       content: '# Draft changed elsewhere',
+      workspaceId: 'workspace-1',
+      relativePath: 'Draft.md',
     })
 
     expect(second.id).toBe(first.id)
+    expect(first.nativeId).toBe('document-2')
     expect(state.documents.value).toHaveLength(1)
   })
 
@@ -36,9 +43,16 @@ describe('document state', () => {
     expect(document.persistedRevision).toBe(0)
     expect(state.dirtyDocuments.value.map((item) => item.id)).toEqual([document.id])
 
-    state.markDocumentSaved(document.id, 'C:\\Docs\\Updated.md')
+    state.markDocumentSaved(document.id, {
+      id: 'document-9',
+      path: 'C:\\Docs\\Updated.md',
+      content: '# Updated\n',
+      workspaceId: null,
+      relativePath: null,
+    })
 
     expect(document.path).toBe('C:\\Docs\\Updated.md')
+    expect(document.nativeId).toBe('document-9')
     expect(document.persistedRevision).toBe(1)
     expect(state.dirtyDocuments.value).toHaveLength(0)
   })
@@ -46,17 +60,23 @@ describe('document state', () => {
   it('updates renamed document paths across descendants', () => {
     const state = createState()
     const root = state.openLoadedDocument({
+      id: 'document-a',
       path: 'C:\\Docs\\folder\\note.md',
       content: 'A',
+      workspaceId: 'workspace-1',
+      relativePath: 'folder\\note.md',
     })
     const child = state.openLoadedDocument({
+      id: 'document-b',
       path: 'C:\\Docs\\folder\\nested\\deep.md',
       content: 'B',
+      workspaceId: 'workspace-1',
+      relativePath: 'folder\\nested\\deep.md',
     })
 
-    state.updateDocumentPaths('C:\\Docs\\folder', 'C:\\Docs\\archive')
+    state.updateDocumentPaths('folder', 'archive')
 
-    expect(root.path).toBe('C:\\Docs\\archive\\note.md')
-    expect(child.path).toBe('C:\\Docs\\archive\\nested\\deep.md')
+    expect(root.relativePath).toBe('archive\\note.md')
+    expect(child.relativePath).toBe('archive\\nested\\deep.md')
   })
 })
