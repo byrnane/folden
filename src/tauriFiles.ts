@@ -16,10 +16,15 @@ export async function openTextFile() {
   return invoke<OpenedDocument | null>('open_text_file')
 }
 
-export async function saveTextFile(path: string | null, content: string) {
+export async function saveTextFile(
+  path: string | null,
+  content: string,
+  suggestedFileName?: string,
+) {
   return invoke<string | null>('save_text_file', {
     path,
     content,
+    suggestedFileName,
   })
 }
 

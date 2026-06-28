@@ -24,6 +24,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  clearSelection: []
   openFile: [entry: WorkspaceEntry]
   selectPath: [entry: WorkspaceEntry]
   createFile: [entry: WorkspaceEntry]
@@ -40,6 +41,14 @@ function isDirectory(entry: WorkspaceEntry) {
 
 function isExpanded(entry: WorkspaceEntry) {
   return !collapsedPaths.value.has(entry.path)
+}
+
+function normalizePath(path: string) {
+  return path.replaceAll('/', '\\').toLowerCase()
+}
+
+function pathMatches(left: string | null, right: string) {
+  return left ? normalizePath(left) === normalizePath(right) : false
 }
 
 function toggleDirectory(entry: WorkspaceEntry) {
@@ -67,13 +76,17 @@ function selectEntry(entry: WorkspaceEntry) {
 </script>
 
 <template>
-  <ul class="workspace-tree" :style="{ '--tree-level': level ?? 0 }">
+  <ul
+    class="workspace-tree"
+    :style="{ '--tree-level': level ?? 0 }"
+    @click.self="emit('clearSelection')"
+  >
     <li v-for="entry in props.entries" :key="entry.path" class="workspace-tree-item">
       <div
         class="tree-row"
         :class="{
-          active: activePath === entry.path,
-          selected: selectedPath === entry.path,
+          active: pathMatches(activePath, entry.path),
+          selected: pathMatches(selectedPath, entry.path),
         }"
         :title="entry.path"
         @click="selectEntry(entry)"
@@ -139,6 +152,7 @@ function selectEntry(entry: WorkspaceEntry) {
         :selected-path="selectedPath"
         :level="(level ?? 0) + 1"
         @open-file="emit('openFile', $event)"
+        @clear-selection="emit('clearSelection')"
         @select-path="emit('selectPath', $event)"
         @create-file="emit('createFile', $event)"
         @create-directory="emit('createDirectory', $event)"
