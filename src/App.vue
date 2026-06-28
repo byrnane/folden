@@ -8,7 +8,12 @@ import {
   Save,
   X,
 } from 'lucide-vue-next'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import ConfirmDialog from './components/ConfirmDialog.vue'
+import PromptDialog from './components/PromptDialog.vue'
+import UnsavedChangesDialog from './components/UnsavedChangesDialog.vue'
+import { shouldPromptToDiscardDocument } from './closeProtection'
 import SourceEditor from './SourceEditor.vue'
 import {
   createDirectory,
@@ -54,6 +59,39 @@ type EditorPane = {
 
 type EditorAdapter = {
   flushContent: () => string
+}
+
+type PromptDialogState = {
+  title: string
+  message: string
+  initialValue: string
+  placeholder: string
+  confirmLabel: string
+  inputLabel: string
+  validate?: (value: string) => string | null
+  normalize?: (value: string) => string
+  resolve: (value: string | null) => void
+}
+
+type ConfirmDialogState = {
+  title: string
+  message: string
+  confirmLabel: string
+  cancelLabel: string
+  confirmTone: 'default' | 'danger'
+  resolve: (confirmed: boolean) => void
+}
+
+type UnsavedDialogDecision = 'save' | 'discard' | 'cancel'
+
+type UnsavedDialogState = {
+  title: string
+  message: string
+  saveLabel: string
+  discardLabel: string
+  cancelLabel: string
+  showSave: boolean
+  resolve: (decision: UnsavedDialogDecision) => void
 }
 
 const initialText = '# Untitled\n\nStart writing in Folden.\n'
@@ -105,6 +143,11 @@ const recentWorkspaces = ref(loadRecentWorkspaces())
 const paneDocumentModes = ref<Record<string, EditorMode>>({})
 const viewSessions = ref<Record<string, EditorViewSession>>({})
 const paneEditors = ref<Partial<Record<EditorPane['id'], EditorAdapter | null>>>({})
+const promptDialog = ref<PromptDialogState | null>(null)
+const promptDialogError = ref<string | null>(null)
+const confirmDialog = ref<ConfirmDialogState | null>(null)
+const unsavedDialog = ref<UnsavedDialogState | null>(null)
+let tauriWindowCloseUnlisten: (() => void) | null = null
 const saveQueue = createDocumentSaveQueue({
   performSave: (job) => saveTextFile(
     job.documentNativeId,
@@ -311,6 +354,95 @@ function loadRecentWorkspaces() {
 function saveRecentWorkspaces(paths: string[]) {
   recentWorkspaces.value = [...new Set(paths)].slice(0, 6)
   window.localStorage.setItem(recentWorkspaceStorageKey, JSON.stringify(recentWorkspaces.value))
+}
+
+function validateEntryName(value: string) {
+  const trimmedValue = value.trim()
+
+  if (!trimmedValue) {
+    return 'Name is required.'
+  }
+
+  if (trimmedValue === '.' || trimmedValue === '..') {
+    return 'Name is not allowed.'
+  }
+
+  if (/[\\/]/.test(trimmedValue)) {
+    return 'Name cannot contain path separators.'
+  }
+
+  return null
+}
+
+function normalizePromptValue(value: string) {
+  return value.trim()
+}
+
+function openPromptDialog(options: Omit<PromptDialogState, 'resolve'>) {
+  promptDialogError.value = null
+
+  return new Promise<string | null>((resolve) => {
+    promptDialog.value = {
+      ...options,
+      resolve,
+    }
+  })
+}
+
+function submitPromptDialog(value: string) {
+  const currentDialog = promptDialog.value
+
+  if (!currentDialog) {
+    return
+  }
+
+  const validationError = currentDialog.validate?.(value) ?? null
+
+  if (validationError) {
+    promptDialogError.value = validationError
+    return
+  }
+
+  promptDialogError.value = null
+  promptDialog.value = null
+  currentDialog.resolve(currentDialog.normalize ? currentDialog.normalize(value) : value)
+}
+
+function cancelPromptDialog() {
+  const currentDialog = promptDialog.value
+  promptDialogError.value = null
+  promptDialog.value = null
+  currentDialog?.resolve(null)
+}
+
+function openConfirmDialog(options: Omit<ConfirmDialogState, 'resolve'>) {
+  return new Promise<boolean>((resolve) => {
+    confirmDialog.value = {
+      ...options,
+      resolve,
+    }
+  })
+}
+
+function resolveConfirmDialog(confirmed: boolean) {
+  const currentDialog = confirmDialog.value
+  confirmDialog.value = null
+  currentDialog?.resolve(confirmed)
+}
+
+function openUnsavedDialog(options: Omit<UnsavedDialogState, 'resolve'>) {
+  return new Promise<UnsavedDialogDecision>((resolve) => {
+    unsavedDialog.value = {
+      ...options,
+      resolve,
+    }
+  })
+}
+
+function resolveUnsavedDialog(decision: UnsavedDialogDecision) {
+  const currentDialog = unsavedDialog.value
+  unsavedDialog.value = null
+  currentDialog?.resolve(decision)
 }
 
 function findEntry(entries: WorkspaceEntry[], path: string): WorkspaceEntry | null {
@@ -689,6 +821,29 @@ async function saveDocument(document = activeDocument.value) {
   }, 'Could not save file')
 }
 
+async function saveDirtyDocuments(documentIds: string[]) {
+  for (const documentId of documentIds) {
+    const document = getDocument(documentId)
+
+    if (!document || !isDirty(document)) {
+      continue
+    }
+
+    await saveDocument(document)
+
+    const nextDocument = getDocument(documentId)
+
+    if (nextDocument && isDirty(nextDocument)) {
+      return false
+    }
+  }
+
+  return documentIds.every((documentId) => {
+    const document = getDocument(documentId)
+    return !document || !isDirty(document)
+  })
+}
+
 function suggestFileName(content: string) {
   return `${safeFileBaseName(readMarkdownTitle(content))}.md`
 }
@@ -717,22 +872,14 @@ function safeFileBaseName(source: string) {
   return cleanName || 'Untitled'
 }
 
-function closeDocument(pane: EditorPane, documentId: string) {
-  const document = getDocument(documentId)
-
-  if (!document) {
-    return
-  }
-
-  flushPaneEditorContent(pane.id)
-
-  if (isDirty(document) && !window.confirm(`Close ${document.name} without saving?`)) {
-    return
-  }
-
+function removeDocumentView(pane: EditorPane, documentId: string) {
   pane.documentIds = pane.documentIds.filter((id) => id !== documentId)
+  const document = getDocument(documentId)
   const nextPaneDocumentModes = { ...paneDocumentModes.value }
+  const nextViewSessions = { ...viewSessions.value }
+
   delete nextPaneDocumentModes[paneDocumentModeKey(pane.id, documentId)]
+  delete nextViewSessions[paneDocumentModeKey(pane.id, documentId)]
 
   if (pane.activeDocumentId === documentId) {
     pane.activeDocumentId = pane.documentIds.at(-1) ?? null
@@ -742,9 +889,53 @@ function closeDocument(pane: EditorPane, documentId: string) {
     removeDocuments([documentId])
     delete nextPaneDocumentModes[paneDocumentModeKey('left', documentId)]
     delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
+    delete nextViewSessions[paneDocumentModeKey('left', documentId)]
+    delete nextViewSessions[paneDocumentModeKey('right', documentId)]
   }
 
   paneDocumentModes.value = nextPaneDocumentModes
+  viewSessions.value = nextViewSessions
+}
+
+async function closeDocument(pane: EditorPane, documentId: string) {
+  flushPaneEditorContent(pane.id)
+
+  const document = getDocument(documentId)
+
+  if (!document) {
+    removeDocumentView(pane, documentId)
+    return
+  }
+
+  if (!shouldPromptToDiscardDocument(panes.value, documentId, isDirty(document))) {
+    removeDocumentView(pane, documentId)
+    return
+  }
+
+  const decision = await openUnsavedDialog({
+    title: `Close ${document.name}?`,
+    message: `Save changes to ${document.name} before closing this document?`,
+    saveLabel: 'Save',
+    discardLabel: 'Discard',
+    cancelLabel: 'Cancel',
+    showSave: true,
+  })
+
+  if (decision === 'cancel') {
+    return
+  }
+
+  if (decision === 'save') {
+    await saveDocument(document)
+
+    const nextDocument = getDocument(documentId)
+
+    if (nextDocument && isDirty(nextDocument)) {
+      return
+    }
+  }
+
+  removeDocumentView(pane, documentId)
 }
 
 async function createWorkspaceFile(parentPath = selectedDirectoryPath.value) {
@@ -752,14 +943,23 @@ async function createWorkspaceFile(parentPath = selectedDirectoryPath.value) {
     return
   }
 
-  const name = window.prompt('New file name', 'Untitled.md')
+  const name = await openPromptDialog({
+    title: 'Create file',
+    message: 'Enter a name for the new file.',
+    initialValue: 'Untitled.md',
+    placeholder: 'Untitled.md',
+    confirmLabel: 'Create',
+    inputLabel: 'File name',
+    validate: validateEntryName,
+    normalize: normalizePromptValue,
+  })
 
-  if (!name?.trim()) {
+  if (!name) {
     return
   }
 
   await runFileTask(async () => {
-    const path = await createFile(workspace.value!.id, parentPath, name.trim())
+    const path = await createFile(workspace.value!.id, parentPath, name)
     await refreshWorkspace()
     const document = await openTextFileByPath(workspace.value!.id, path)
     openLoadedDocument(document)
@@ -771,14 +971,23 @@ async function createWorkspaceDirectory(parentPath = selectedDirectoryPath.value
     return
   }
 
-  const name = window.prompt('New folder name', 'New Folder')
+  const name = await openPromptDialog({
+    title: 'Create folder',
+    message: 'Enter a name for the new folder.',
+    initialValue: 'New Folder',
+    placeholder: 'New Folder',
+    confirmLabel: 'Create',
+    inputLabel: 'Folder name',
+    validate: validateEntryName,
+    normalize: normalizePromptValue,
+  })
 
-  if (!name?.trim()) {
+  if (!name) {
     return
   }
 
   await runFileTask(async () => {
-    await createDirectory(workspace.value!.id, parentPath, name.trim())
+    await createDirectory(workspace.value!.id, parentPath, name)
     await refreshWorkspace()
   }, 'Could not create folder')
 }
@@ -788,14 +997,23 @@ async function renameWorkspacePath(entry: WorkspaceEntry) {
     return
   }
 
-  const newName = window.prompt('Rename', entry.name)
+  const newName = await openPromptDialog({
+    title: 'Rename',
+    message: `Enter a new name for ${entry.name}.`,
+    initialValue: entry.name,
+    placeholder: entry.name,
+    confirmLabel: 'Rename',
+    inputLabel: 'Name',
+    validate: validateEntryName,
+    normalize: normalizePromptValue,
+  })
 
-  if (!newName?.trim() || newName.trim() === entry.name) {
+  if (!newName || newName === entry.name) {
     return
   }
 
   await runFileTask(async () => {
-    const nextPath = await renamePath(workspace.value!.id, entry.path, newName.trim())
+    const nextPath = await renamePath(workspace.value!.id, entry.path, newName)
     updateDocumentPaths(entry.path, nextPath)
     for (const document of documents.value) {
       if (document.workspaceId !== workspace.value?.id || !document.relativePath) {
@@ -824,12 +1042,39 @@ async function trashWorkspacePath(entry: WorkspaceEntry) {
     document.relativePath ? isSameOrChildPath(document.relativePath, entry.path) : false,
   )
   const hasDirtyDocument = affectedDocuments.some(isDirty)
-  const prompt = hasDirtyDocument
-    ? `Move ${entry.name} to trash and close unsaved files?`
-    : `Move ${entry.name} to trash?`
+  if (hasDirtyDocument) {
+    const decision = await openUnsavedDialog({
+      title: `Move ${entry.name} to trash?`,
+      message: `Save changes before moving ${entry.name} to trash?`,
+      saveLabel: 'Save and move',
+      discardLabel: 'Move without saving',
+      cancelLabel: 'Cancel',
+      showSave: true,
+    })
 
-  if (!window.confirm(prompt)) {
-    return
+    if (decision === 'cancel') {
+      return
+    }
+
+    if (decision === 'save') {
+      const saved = await saveDirtyDocuments(affectedDocuments.map((document) => document.id))
+
+      if (!saved) {
+        return
+      }
+    }
+  } else {
+    const confirmed = await openConfirmDialog({
+      title: `Move ${entry.name} to trash?`,
+      message: `Move ${entry.name} to trash?`,
+      confirmLabel: 'Move to trash',
+      cancelLabel: 'Cancel',
+      confirmTone: 'danger',
+    })
+
+    if (!confirmed) {
+      return
+    }
   }
 
   await runFileTask(async () => {
@@ -883,6 +1128,46 @@ async function runFileTask(task: () => Promise<void>, message: string) {
   } finally {
     isFileBusy.value = false
   }
+}
+
+function isTauriRuntime() {
+  return '__TAURI_INTERNALS__' in window
+}
+
+async function confirmWindowClose() {
+  const dirtyDocumentIds = dirtyDocuments.value.map((document) => document.id)
+
+  if (!dirtyDocumentIds.length) {
+    return true
+  }
+
+  const decision = await openUnsavedDialog({
+    title: 'Close Folden?',
+    message: `Save changes to ${dirtyDocumentIds.length} unsaved ${dirtyDocumentIds.length === 1 ? 'document' : 'documents'} before closing?`,
+    saveLabel: 'Save all',
+    discardLabel: 'Discard changes',
+    cancelLabel: 'Cancel',
+    showSave: true,
+  })
+
+  if (decision === 'cancel') {
+    return false
+  }
+
+  if (decision === 'save') {
+    return saveDirtyDocuments(dirtyDocumentIds)
+  }
+
+  return true
+}
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!dirtyDocuments.value.length) {
+    return
+  }
+
+  event.preventDefault()
+  event.returnValue = ''
 }
 
 function handleGlobalKeydown(event: KeyboardEvent) {
@@ -950,10 +1235,41 @@ function handleGlobalKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown)
+  window.addEventListener('beforeunload', handleBeforeUnload)
+
+  if (!isTauriRuntime()) {
+    return
+  }
+
+  let isProgrammaticWindowClose = false
+
+  void getCurrentWindow().onCloseRequested(async (event) => {
+    if (isProgrammaticWindowClose) {
+      return
+    }
+
+    event.preventDefault()
+
+    if (!(await confirmWindowClose())) {
+      return
+    }
+
+    isProgrammaticWindowClose = true
+
+    try {
+      await getCurrentWindow().close()
+    } finally {
+      isProgrammaticWindowClose = false
+    }
+  }).then((unlisten) => {
+    tauriWindowCloseUnlisten = unlisten
+  })
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  tauriWindowCloseUnlisten?.()
 })
 </script>
 
@@ -1193,4 +1509,41 @@ onBeforeUnmount(() => {
       </footer>
     </section>
   </main>
+
+  <PromptDialog
+    :open="!!promptDialog"
+    :title="promptDialog?.title ?? ''"
+    :message="promptDialog?.message ?? ''"
+    :initial-value="promptDialog?.initialValue ?? ''"
+    :placeholder="promptDialog?.placeholder ?? ''"
+    :confirm-label="promptDialog?.confirmLabel ?? 'Save'"
+    :input-label="promptDialog?.inputLabel ?? 'Value'"
+    :error="promptDialogError"
+    @submit="submitPromptDialog"
+    @cancel="cancelPromptDialog"
+  />
+
+  <ConfirmDialog
+    :open="!!confirmDialog"
+    :title="confirmDialog?.title ?? ''"
+    :message="confirmDialog?.message ?? ''"
+    :confirm-label="confirmDialog?.confirmLabel ?? 'Confirm'"
+    :cancel-label="confirmDialog?.cancelLabel ?? 'Cancel'"
+    :confirm-tone="confirmDialog?.confirmTone ?? 'default'"
+    @confirm="resolveConfirmDialog(true)"
+    @cancel="resolveConfirmDialog(false)"
+  />
+
+  <UnsavedChangesDialog
+    :open="!!unsavedDialog"
+    :title="unsavedDialog?.title ?? ''"
+    :message="unsavedDialog?.message ?? ''"
+    :save-label="unsavedDialog?.saveLabel ?? 'Save'"
+    :discard-label="unsavedDialog?.discardLabel ?? 'Discard'"
+    :cancel-label="unsavedDialog?.cancelLabel ?? 'Cancel'"
+    :show-save="unsavedDialog?.showSave ?? true"
+    @save="resolveUnsavedDialog('save')"
+    @discard="resolveUnsavedDialog('discard')"
+    @cancel="resolveUnsavedDialog('cancel')"
+  />
 </template>

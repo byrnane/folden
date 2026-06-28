@@ -679,6 +679,109 @@ h1 {
   white-space: nowrap;
 }
 
+.app-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 10, 14, 0.72);
+  padding: 20px;
+}
+
+.app-dialog {
+  width: min(100%, 460px);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: #181b20;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.app-dialog-header {
+  border-bottom: 1px solid var(--border);
+  padding: 16px 18px 12px;
+}
+
+.app-dialog-header h2 {
+  margin: 0;
+  color: var(--strong-text);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.app-dialog-body {
+  padding: 16px 18px;
+}
+
+.app-dialog-message {
+  margin: 0;
+  color: var(--soft-text);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding: 12px 18px 16px;
+}
+
+.dialog-form {
+  display: grid;
+  gap: 14px;
+}
+
+.dialog-field {
+  display: grid;
+  gap: 7px;
+}
+
+.dialog-field-label {
+  color: var(--muted-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dialog-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #111419;
+  color: var(--strong-text);
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.dialog-input:focus {
+  border-color: var(--accent);
+  outline: 1px solid rgba(90, 169, 167, 0.32);
+}
+
+.dialog-error {
+  margin: -4px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.dialog-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+button.danger {
+  border-color: rgba(242, 121, 131, 0.35);
+  color: #ffd2d6;
+}
+
+button.danger:hover:not(:disabled) {
+  border-color: rgba(242, 121, 131, 0.6);
+  background: rgba(242, 121, 131, 0.14);
+  color: #ffe7ea;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 230px minmax(0, 1fr);
@@ -722,5 +825,10 @@ h1 {
 
   .path-status {
     text-align: left;
+  }
+
+  .app-dialog-actions,
+  .dialog-inline-actions {
+    flex-wrap: wrap;
   }
 }

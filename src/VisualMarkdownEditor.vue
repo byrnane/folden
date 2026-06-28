@@ -19,6 +19,7 @@ import {
   Strikethrough,
 } from 'lucide-vue-next'
 import { onBeforeUnmount, ref, watch } from 'vue'
+import PromptDialog from './components/PromptDialog.vue'
 import type { DocumentUpdate } from './editorSync'
 
 const props = defineProps<{
@@ -31,9 +32,24 @@ const props = defineProps<{
 const emit = defineEmits<{
   'document-update': [update: DocumentUpdate]
 }>()
+
+type InputDialogState = {
+  title: string
+  message: string
+  initialValue: string
+  placeholder: string
+  confirmLabel: string
+  inputLabel: string
+  validate?: (value: string) => string | null
+  normalize?: (value: string) => string
+}
+
 const scrollHost = ref<HTMLDivElement | null>(null)
+const inputDialog = ref<InputDialogState | null>(null)
+const inputDialogError = ref<string | null>(null)
 let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
+let resolveInputDialog: ((value: string | null) => void) | null = null
 
 const editor = useEditor({
   content: props.modelValue,
@@ -124,13 +140,59 @@ function runCommand(command: () => void) {
   editor.value.commands.focus()
 }
 
-function setLink() {
+function openInputDialog(options: InputDialogState) {
+  inputDialogError.value = null
+  inputDialog.value = options
+
+  return new Promise<string | null>((resolve) => {
+    resolveInputDialog = resolve
+  })
+}
+
+function submitInputDialog(value: string) {
+  const currentDialog = inputDialog.value
+
+  if (!currentDialog) {
+    return
+  }
+
+  const validationError = currentDialog.validate?.(value) ?? null
+
+  if (validationError) {
+    inputDialogError.value = validationError
+    return
+  }
+
+  const resolve = resolveInputDialog
+  inputDialogError.value = null
+  inputDialog.value = null
+  resolveInputDialog = null
+  resolve?.(currentDialog.normalize ? currentDialog.normalize(value) : value)
+}
+
+function cancelInputDialog() {
+  const resolve = resolveInputDialog
+  inputDialogError.value = null
+  inputDialog.value = null
+  resolveInputDialog = null
+  resolve?.(null)
+}
+
+async function setLink() {
   if (!editor.value) {
     return
   }
 
   const previousUrl = editor.value.getAttributes('link').href as string | undefined
-  const url = window.prompt('Link URL', previousUrl ?? '')
+  const url = await openInputDialog({
+    title: 'Edit link',
+    message: 'Enter a URL for the selected link. Leave it empty to remove the link.',
+    initialValue: previousUrl ?? '',
+    placeholder: 'https://example.com',
+    confirmLabel: 'Apply',
+    inputLabel: 'Link URL',
+    normalize: (value) => value.trim(),
+  })
 
   if (url === null) {
     return
@@ -151,22 +213,33 @@ function setLink() {
   )
 }
 
-function setImage() {
+async function setImage() {
   if (!editor.value) {
     return
   }
 
-  const url = window.prompt('Image URL')
+  const url = await openInputDialog({
+    title: 'Insert image',
+    message: 'Enter an image URL to insert into the document.',
+    initialValue: '',
+    placeholder: 'https://example.com/image.png',
+    confirmLabel: 'Insert',
+    inputLabel: 'Image URL',
+    validate: (value) => value.trim() ? null : 'Image URL is required.',
+    normalize: (value) => value.trim(),
+  })
 
-  if (!url?.trim()) {
+  if (!url) {
     return
   }
 
-  runCommand(() => editor.value?.chain().focus().setImage({ src: url.trim() }).run())
+  runCommand(() => editor.value?.chain().focus().setImage({ src: url }).run())
 }
 
 onBeforeUnmount(() => {
   editor.value?.destroy()
+  resolveInputDialog?.(null)
+  resolveInputDialog = null
 })
 </script>
 
@@ -293,5 +366,18 @@ onBeforeUnmount(() => {
     <div ref="scrollHost" class="visual-editor-scroll">
       <EditorContent :editor="editor" class="visual-editor-content" />
     </div>
+
+    <PromptDialog
+      :open="!!inputDialog"
+      :title="inputDialog?.title ?? ''"
+      :message="inputDialog?.message ?? ''"
+      :initial-value="inputDialog?.initialValue ?? ''"
+      :placeholder="inputDialog?.placeholder ?? ''"
+      :confirm-label="inputDialog?.confirmLabel ?? 'Save'"
+      :input-label="inputDialog?.inputLabel ?? 'Value'"
+      :error="inputDialogError"
+      @submit="submitInputDialog"
+      @cancel="cancelInputDialog"
+    />
   </div>
 </template>
