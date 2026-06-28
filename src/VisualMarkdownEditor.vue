@@ -15,6 +15,7 @@ import {
   List,
   ListOrdered,
   Quote,
+  RemoveFormatting,
   Strikethrough,
 } from 'lucide-vue-next'
 import { onBeforeUnmount, watch } from 'vue'
@@ -179,6 +180,14 @@ onBeforeUnmount(() => {
         @click="runCommand(() => editor?.chain().focus().toggleCode().run())"
       >
         <Code :size="16" />
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        title="Clear formatting"
+        @click="runCommand(() => editor?.chain().focus().unsetAllMarks().clearNodes().run())"
+      >
+        <RemoveFormatting :size="16" />
       </button>
       <span class="toolbar-divider" />
       <button
