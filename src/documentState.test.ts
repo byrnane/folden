@@ -78,6 +78,7 @@ describe('document state', () => {
     expect(document.nativeId).toBe('document-9')
     expect(document.persistedRevision).toBe(1)
     expect(document.saveState).toBe('idle')
+    expect(document.externalState).toBe('idle')
     expect(state.dirtyDocuments.value).toHaveLength(0)
   })
 
@@ -120,5 +121,46 @@ describe('document state', () => {
 
     expect(root.relativePath).toBe('archive\\note.md')
     expect(child.relativePath).toBe('archive\\nested\\deep.md')
+  })
+
+  it('replaces a clean document from disk and keeps it non-dirty', () => {
+    const state = createState()
+    const document = state.openLoadedDocument(createLoadedDocument({
+      id: 'document-clean',
+      path: 'C:\\Docs\\Draft.md',
+      content: 'before',
+    }))
+
+    const reloaded = state.replaceDocumentFromDisk(document.id, {
+      id: 'document-clean',
+      path: 'C:\\Docs\\Draft.md',
+      content: 'after',
+      workspaceId: 'workspace-1',
+      relativePath: 'Draft.md',
+      fileFormat: createTextFileFormat(),
+      fingerprint: {
+        size: 5,
+        modifiedAtMs: 99,
+      },
+    })
+
+    expect(reloaded?.content).toBe('after')
+    expect(reloaded?.revision).toBe(reloaded?.persistedRevision)
+    expect(reloaded?.externalState).toBe('idle')
+  })
+
+  it('tracks conflict and missing external states explicitly', () => {
+    const state = createState()
+    const document = state.createScratchDocument('draft', 'Untitled.md')
+
+    state.markDocumentConflict(document.id, 'changed outside Folden')
+    expect(document.externalState).toBe('conflict')
+
+    state.markDocumentMissing(document.id, 'file was removed')
+    expect(document.externalState).toBe('missing')
+
+    state.clearDocumentExternalState(document.id)
+    expect(document.externalState).toBe('idle')
+    expect(document.externalMessage).toBeNull()
   })
 })

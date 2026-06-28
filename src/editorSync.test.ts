@@ -20,6 +20,8 @@ function createDocument(): OpenDocument {
     diskFingerprint: null,
     saveState: 'idle',
     saveError: null,
+    externalState: 'idle',
+    externalMessage: null,
     history: createDocumentHistoryState(),
   }
 }

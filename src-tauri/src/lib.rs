@@ -1,11 +1,15 @@
+use notify::{
+    event::{ModifyKind, RenameMode},
+    RecommendedWatcher, RecursiveMode, Watcher,
+};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{Manager, Runtime};
+use tauri::{Emitter, Manager, Runtime};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -35,10 +39,12 @@ struct NativeError {
     retryable: bool,
 }
 
-#[derive(Default)]
 struct NativeAppState {
     workspaces: HashMap<String, AuthorizedWorkspace>,
     documents: HashMap<String, AuthorizedDocument>,
+    watcher: Option<RecommendedWatcher>,
+    watched_paths: HashMap<String, WatchPathMode>,
+    self_write_suppressions: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 #[derive(Clone)]
@@ -51,6 +57,33 @@ struct AuthorizedDocument {
     path: PathBuf,
     workspace_id: Option<String>,
     relative_path: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WatchPathMode {
+    Recursive,
+    NonRecursive,
+}
+
+impl WatchPathMode {
+    fn recursive_mode(self) -> RecursiveMode {
+        match self {
+            Self::Recursive => RecursiveMode::Recursive,
+            Self::NonRecursive => RecursiveMode::NonRecursive,
+        }
+    }
+}
+
+impl Default for NativeAppState {
+    fn default() -> Self {
+        Self {
+            workspaces: HashMap::new(),
+            documents: HashMap::new(),
+            watcher: None,
+            watched_paths: HashMap::new(),
+            self_write_suppressions: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -148,6 +181,13 @@ struct RecoveryLoadResult {
 }
 
 #[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeFsEvent {
+    kind: String,
+    path: String,
+}
+
+#[derive(Clone, serde::Serialize)]
 struct WorkspaceEntry {
     name: String,
     path: String,
@@ -156,6 +196,13 @@ struct WorkspaceEntry {
 }
 
 type NativeResult<T> = Result<T, NativeError>;
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
 
 fn next_id(prefix: &str) -> String {
     let nanos = SystemTime::now()
@@ -336,6 +383,213 @@ fn relative_path_to_string(path: &Path) -> String {
 
 fn normalize_key(value: &str) -> String {
     value.replace('/', "\\").to_lowercase()
+}
+
+fn create_native_watcher<R: Runtime>(
+    app_handle: tauri::AppHandle<R>,
+    self_write_suppressions: Arc<Mutex<HashMap<String, u64>>>,
+) -> notify::Result<RecommendedWatcher> {
+    RecommendedWatcher::new(
+        move |result: Result<notify::Event, notify::Error>| {
+            let event = match result {
+                Ok(event) => event,
+                Err(error) => {
+                    let _ = app_handle.emit(
+                        "folden://watcher-warning",
+                        format!("Filesystem watcher error: {error}"),
+                    );
+                    return;
+                }
+            };
+
+            let emit_event = |kind: &str, path: &Path| {
+                let path_string = path_to_string(path);
+                let normalized_path = normalize_key(&path_string);
+                let current_time = now_ms();
+                let mut suppressions = self_write_suppressions.lock().unwrap();
+                suppressions.retain(|_, expires_at_ms| *expires_at_ms > current_time);
+
+                if suppressions.contains_key(&normalized_path) {
+                    return;
+                }
+
+                let _ = app_handle.emit(
+                    "folden://fs-event",
+                    NativeFsEvent {
+                        kind: kind.to_string(),
+                        path: path_string,
+                    },
+                );
+            };
+
+            match event.kind {
+                notify::EventKind::Create(_) => {
+                    for path in &event.paths {
+                        emit_event("create", path);
+                    }
+                }
+                notify::EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                    for path in &event.paths {
+                        emit_event("remove", path);
+                    }
+                }
+                notify::EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                    for path in &event.paths {
+                        emit_event("create", path);
+                    }
+                }
+                notify::EventKind::Modify(ModifyKind::Name(_)) => {
+                    if let Some(path) = event.paths.first() {
+                        emit_event("remove", path);
+                    }
+
+                    if let Some(path) = event.paths.get(1) {
+                        emit_event("create", path);
+                    }
+                }
+                notify::EventKind::Modify(_) => {
+                    for path in &event.paths {
+                        emit_event("modify", path);
+                    }
+                }
+                notify::EventKind::Remove(_) => {
+                    for path in &event.paths {
+                        emit_event("remove", path);
+                    }
+                }
+                _ => {}
+            }
+        },
+        notify::Config::default(),
+    )
+}
+
+fn register_self_write_suppression(state: &NativeAppState, path: &Path) {
+    let expires_at_ms = now_ms() + 1_500;
+    let normalized_path = normalize_key(&path_to_string(path));
+    let mut suppressions = state.self_write_suppressions.lock().unwrap();
+    suppressions.insert(normalized_path, expires_at_ms);
+}
+
+fn desired_watch_paths(state: &NativeAppState) -> HashMap<String, WatchPathMode> {
+    let mut desired_paths = HashMap::new();
+
+    for workspace in state.workspaces.values() {
+        desired_paths.insert(path_to_string(&workspace.root_path), WatchPathMode::Recursive);
+    }
+
+    for document in state.documents.values() {
+        let is_inside_workspace = state
+            .workspaces
+            .values()
+            .any(|workspace| document.path.starts_with(&workspace.root_path));
+
+        if is_inside_workspace {
+            continue;
+        }
+
+        desired_paths
+            .entry(path_to_string(&document.path))
+            .or_insert(WatchPathMode::NonRecursive);
+    }
+
+    desired_paths
+}
+
+fn sync_native_watcher<R: Runtime>(
+    state: &mut NativeAppState,
+    app_handle: &tauri::AppHandle<R>,
+) -> NativeResult<()> {
+    let desired_paths = desired_watch_paths(state);
+
+    if desired_paths.is_empty() {
+        if let Some(watcher) = state.watcher.as_mut() {
+            for path in state.watched_paths.keys() {
+                let _ = watcher.unwatch(Path::new(path));
+            }
+        }
+
+        state.watcher = None;
+        state.watched_paths.clear();
+        return Ok(());
+    }
+
+    if state.watcher.is_none() {
+        state.watcher = Some(
+            create_native_watcher(app_handle.clone(), state.self_write_suppressions.clone()).map_err(
+                |error| {
+                    native_error(
+                        FileErrorCode::Unknown,
+                        "sync_native_watcher",
+                        "Could not start the filesystem watcher.",
+                        Some(error.to_string()),
+                        true,
+                    )
+                },
+            )?,
+        );
+    }
+
+    let watcher = state.watcher.as_mut().unwrap();
+    let current_paths = state.watched_paths.clone();
+
+    for path in current_paths.keys() {
+        if desired_paths.contains_key(path) {
+            continue;
+        }
+
+        watcher.unwatch(Path::new(path)).map_err(|error| {
+            native_error(
+                FileErrorCode::Unknown,
+                "sync_native_watcher",
+                "Could not stop watching a filesystem path.",
+                Some(error.to_string()),
+                true,
+            )
+        })?;
+        state.watched_paths.remove(path);
+    }
+
+    for (path, mode) in desired_paths {
+        let should_rewatch = state
+            .watched_paths
+            .get(&path)
+            .map(|current_mode| current_mode != &mode)
+            .unwrap_or(true);
+
+        if !should_rewatch {
+            continue;
+        }
+
+        if state.watched_paths.contains_key(&path) {
+            watcher.unwatch(Path::new(&path)).map_err(|error| {
+                native_error(
+                    FileErrorCode::Unknown,
+                    "sync_native_watcher",
+                    "Could not update a watched filesystem path.",
+                    Some(error.to_string()),
+                    true,
+                )
+            })?;
+        }
+
+        watcher
+            .watch(Path::new(&path), mode.recursive_mode())
+            .map_err(|error| {
+                native_error(
+                    FileErrorCode::Unknown,
+                    "sync_native_watcher",
+                    "Could not watch a filesystem path.",
+                    Some(format!("{path}: {error}")),
+                    true,
+                )
+            })?;
+        state.watched_paths.insert(path, mode);
+    }
+
+    let _ = app_handle.emit("folden://watcher-warning", Option::<String>::None);
+
+    Ok(())
 }
 
 fn ensure_relative_path(path: &str, operation: &str) -> NativeResult<PathBuf> {
@@ -1005,6 +1259,7 @@ fn remove_registered_documents(
 #[tauri::command]
 fn open_text_file(
     state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
 ) -> NativeResult<Option<OpenedDocument>> {
     let Some(path) = rfd::FileDialog::new()
         .add_filter(
@@ -1023,8 +1278,7 @@ fn open_text_file(
     let (content, file_format, fingerprint) = decode_text_file(&canonical_path, "open_text_file")?;
     let mut state = state.lock().unwrap();
     let (workspace_id, relative_path) = detect_workspace_membership(&state, &canonical_path);
-
-    Ok(Some(register_document(
+    let opened_document = register_document(
         &mut state,
         canonical_path,
         workspace_id,
@@ -1032,12 +1286,16 @@ fn open_text_file(
         content,
         file_format,
         Some(fingerprint),
-    )))
+    );
+    sync_native_watcher(&mut state, &app_handle)?;
+
+    Ok(Some(opened_document))
 }
 
 #[tauri::command]
 fn open_text_file_at_path(
     state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
     path: String,
 ) -> NativeResult<OpenedDocument> {
     let canonical_path = canonical_root(Path::new(&path), "open_text_file_at_path")?;
@@ -1045,8 +1303,7 @@ fn open_text_file_at_path(
         decode_text_file(&canonical_path, "open_text_file_at_path")?;
     let mut state = state.lock().unwrap();
     let (workspace_id, relative_path) = detect_workspace_membership(&state, &canonical_path);
-
-    Ok(register_document(
+    let opened_document = register_document(
         &mut state,
         canonical_path,
         workspace_id,
@@ -1054,12 +1311,16 @@ fn open_text_file_at_path(
         content,
         file_format,
         Some(fingerprint),
-    ))
+    );
+    sync_native_watcher(&mut state, &app_handle)?;
+
+    Ok(opened_document)
 }
 
 #[tauri::command]
 fn save_text_file(
     state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
     document_id: Option<String>,
     content: String,
     expected_fingerprint: Option<FileFingerprint>,
@@ -1086,6 +1347,7 @@ fn save_text_file(
             "save_text_file",
         )?;
         let fingerprint = write_atomic_text_file(&document.path, &bytes, "save_text_file")?;
+        register_self_write_suppression(&state, &document.path);
 
         (
             document.path,
@@ -1138,9 +1400,13 @@ fn save_text_file(
                 expected_fingerprint.as_ref(),
                 "save_text_file",
             )?;
-            write_atomic_text_file(&target_path, &bytes, "save_text_file")?
+            let fingerprint = write_atomic_text_file(&target_path, &bytes, "save_text_file")?;
+            register_self_write_suppression(&state, &target_path);
+            fingerprint
         } else {
-            write_atomic_text_file(&target_path, &bytes, "save_text_file")?
+            let fingerprint = write_atomic_text_file(&target_path, &bytes, "save_text_file")?;
+            register_self_write_suppression(&state, &target_path);
+            fingerprint
         };
         let canonical_path = canonical_root(&target_path, "save_text_file")?;
         let (workspace_id, relative_path) = detect_workspace_membership(&state, &canonical_path);
@@ -1153,7 +1419,7 @@ fn save_text_file(
         )
     };
 
-    Ok(Some(register_document(
+    let saved_document = register_document(
         &mut state,
         path,
         workspace_id,
@@ -1161,12 +1427,16 @@ fn save_text_file(
         content,
         file_format,
         fingerprint,
-    )))
+    );
+    sync_native_watcher(&mut state, &app_handle)?;
+
+    Ok(Some(saved_document))
 }
 
 #[tauri::command]
 fn open_workspace_directory(
     state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
 ) -> NativeResult<Option<WorkspaceDescriptor>> {
     let Some(path) = rfd::FileDialog::new().pick_folder() else {
         return Ok(None);
@@ -1174,19 +1444,24 @@ fn open_workspace_directory(
 
     let canonical_path = canonical_root(&path, "open_workspace_directory")?;
     let mut state = state.lock().unwrap();
+    let descriptor = register_workspace(&mut state, canonical_path);
+    sync_native_watcher(&mut state, &app_handle)?;
 
-    Ok(Some(register_workspace(&mut state, canonical_path)))
+    Ok(Some(descriptor))
 }
 
 #[tauri::command]
 fn restore_workspace_by_path(
     state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
     root_path: String,
 ) -> NativeResult<WorkspaceDescriptor> {
     let canonical_path = canonical_root(Path::new(&root_path), "restore_workspace_by_path")?;
     let mut state = state.lock().unwrap();
+    let descriptor = register_workspace(&mut state, canonical_path);
+    sync_native_watcher(&mut state, &app_handle)?;
 
-    Ok(register_workspace(&mut state, canonical_path))
+    Ok(descriptor)
 }
 
 #[tauri::command]
@@ -1220,6 +1495,26 @@ fn load_recovery_snapshots<R: Runtime>(app_handle: tauri::AppHandle<R>) -> Nativ
     )?;
 
     Ok(load_recovery_snapshots_from_path(&path))
+}
+
+#[tauri::command]
+fn close_native_documents(
+    state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
+    document_ids: Vec<String>,
+) -> NativeResult<()> {
+    if document_ids.is_empty() {
+        return Ok(());
+    }
+
+    let mut state = state.lock().unwrap();
+
+    for document_id in document_ids {
+        state.documents.remove(&document_id);
+    }
+
+    sync_native_watcher(&mut state, &app_handle)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1262,6 +1557,7 @@ fn list_directory(
 #[tauri::command]
 fn open_text_file_by_path(
     state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
     workspace_id: String,
     path: String,
 ) -> NativeResult<OpenedDocument> {
@@ -1271,8 +1567,7 @@ fn open_text_file_by_path(
         resolve_workspace_path(&workspace, &path, "open_text_file_by_path")?;
     let (content, file_format, fingerprint) =
         decode_text_file(&canonical_path, "open_text_file_by_path")?;
-
-    Ok(register_document(
+    let opened_document = register_document(
         &mut state,
         canonical_path,
         Some(workspace_id),
@@ -1280,7 +1575,10 @@ fn open_text_file_by_path(
         content,
         file_format,
         Some(fingerprint),
-    ))
+    );
+    sync_native_watcher(&mut state, &app_handle)?;
+
+    Ok(opened_document)
 }
 
 #[tauri::command]
@@ -1396,6 +1694,7 @@ fn rename_path(
 #[tauri::command]
 fn trash_path(
     state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
     workspace_id: String,
     path: String,
 ) -> NativeResult<()> {
@@ -1419,6 +1718,7 @@ fn trash_path(
         &workspace_id,
         &relative_path_to_string(&relative_path),
     );
+    sync_native_watcher(&mut state, &app_handle)?;
 
     Ok(())
 }
@@ -1447,6 +1747,7 @@ pub fn run() {
             save_session_state,
             load_recovery_snapshots,
             save_recovery_snapshots,
+            close_native_documents,
             list_directory,
             open_text_file_by_path,
             create_file,

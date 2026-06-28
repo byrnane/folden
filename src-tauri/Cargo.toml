@@ -25,4 +25,5 @@ rfd = "0.17.2"
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 trash = "5.2.6"
+notify = "8.2.0"
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
