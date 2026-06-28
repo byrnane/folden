@@ -81,6 +81,24 @@ describe('document state', () => {
     expect(state.dirtyDocuments.value).toHaveLength(0)
   })
 
+  it('supports shared document undo and redo over the revision stream', () => {
+    const state = createState()
+    const document = state.createScratchDocument('first', 'Untitled.md')
+
+    state.applyDocumentUpdate(document.id, document.revision, 'second')
+    state.applyDocumentUpdate(document.id, document.revision, 'third')
+
+    const undone = state.undoDocument(document.id)
+
+    expect(undone?.content).toBe('second')
+    expect(undone?.revision).toBe(3)
+
+    const redone = state.redoDocument(document.id)
+
+    expect(redone?.content).toBe('third')
+    expect(redone?.revision).toBe(4)
+  })
+
   it('updates renamed document paths across descendants', () => {
     const state = createState()
     const root = state.openLoadedDocument(createLoadedDocument({

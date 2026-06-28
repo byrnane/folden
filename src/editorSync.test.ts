@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { acceptDocumentUpdate, createEditorViewSession, getSynchronizedSessionIds } from './editorSync'
 import { createTextFileFormat } from './domain/document'
+import { createDocumentHistoryState } from './documentHistory'
 import type { OpenDocument } from './documentState'
 
 function createDocument(): OpenDocument {
@@ -19,6 +20,7 @@ function createDocument(): OpenDocument {
     diskFingerprint: null,
     saveState: 'idle',
     saveError: null,
+    history: createDocumentHistoryState(),
   }
 }
 

@@ -9,6 +9,13 @@ import {
   type DocumentRevision,
   type TextFileFormat,
 } from './domain/document'
+import {
+  createDocumentHistoryState,
+  recordDocumentHistory,
+  redoDocumentHistory,
+  undoDocumentHistory,
+  type DocumentHistoryState,
+} from './documentHistory'
 import type { NativeError } from './tauriFiles'
 
 export type EditorMode = 'visual' | 'source'
@@ -28,6 +35,7 @@ export type OpenDocument = {
   diskFingerprint: FileFingerprint | null
   saveState: 'idle' | 'queued' | 'saving' | 'error'
   saveError: NativeError | null
+  history: DocumentHistoryState
 }
 
 export type LoadedDocument = {
@@ -96,6 +104,7 @@ export function createDocumentState(options: DocumentStateOptions) {
       diskFingerprint: null,
       saveState: 'idle',
       saveError: null,
+      history: createDocumentHistoryState(),
     }
   }
 
@@ -135,6 +144,7 @@ export function createDocumentState(options: DocumentStateOptions) {
       diskFingerprint: document.fingerprint,
       saveState: 'idle',
       saveError: null,
+      history: createDocumentHistoryState(),
     })
   }
 
@@ -165,10 +175,49 @@ export function createDocumentState(options: DocumentStateOptions) {
     }
 
     if (document.content !== nextContent) {
+      document.history = recordDocumentHistory(document.history, document.content)
       document.content = nextContent
       document.revision = nextDocumentRevision(document.revision)
     }
 
+    return document
+  }
+
+  function undoDocument(documentId: DocumentId) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    const result = undoDocumentHistory(document.history, document.content)
+
+    if (!result) {
+      return null
+    }
+
+    document.history = result.history
+    document.content = result.nextContent
+    document.revision = nextDocumentRevision(document.revision)
+    return document
+  }
+
+  function redoDocument(documentId: DocumentId) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    const result = redoDocumentHistory(document.history, document.content)
+
+    if (!result) {
+      return null
+    }
+
+    document.history = result.history
+    document.content = result.nextContent
+    document.revision = nextDocumentRevision(document.revision)
     return document
   }
 
@@ -292,6 +341,8 @@ export function createDocumentState(options: DocumentStateOptions) {
     openLoadedDocument,
     updateDocumentContent,
     applyDocumentUpdate,
+    undoDocument,
+    redoDocument,
     markDocumentQueued,
     markDocumentSaving,
     markDocumentSaved,
