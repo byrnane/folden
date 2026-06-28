@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
     "app:dev": "node scripts/tauri.mjs dev",
     "app:build": "node scripts/tauri.mjs build --no-bundle",
@@ -30,6 +33,7 @@
     "@vitejs/plugin-vue": "^6.0.7",
     "typescript": "^6.0.3",
     "vite": "^8.1.0",
+    "vitest": "^4.1.9",
     "vue-tsc": "^3.3.5"
   }
 }
