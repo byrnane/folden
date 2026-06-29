@@ -3,7 +3,7 @@ import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
-import { EditorContent, useEditor } from '@tiptap/vue-3'
+import { Editor } from '@tiptap/vue-3'
 import {
   Bold,
   Code,
@@ -18,7 +18,7 @@ import {
   RemoveFormatting,
   Strikethrough,
 } from 'lucide-vue-next'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import PromptDialog from './components/PromptDialog.vue'
 import type { DocumentUpdate } from './editorSync'
 import { validateImageTarget, validateLinkTarget } from './markdownSafety'
@@ -46,6 +46,8 @@ type InputDialogState = {
 }
 
 const scrollHost = ref<HTMLDivElement | null>(null)
+const editorHost = ref<HTMLDivElement | null>(null)
+const editor = shallowRef<Editor | null>(null)
 const inputDialog = ref<InputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
 let lastAppliedRevision = props.revision
@@ -60,18 +62,22 @@ function applyExternalContent(value: string, revision: number, preserveViewState
   const scrollTop = scrollHost.value?.scrollTop ?? 0
   const selection = editor.value.state.selection
   isApplyingExternalContent = true
-  editor.value.commands.setContent(value, {
-    contentType: 'markdown',
-    emitUpdate: false,
-  })
-  const nextMaxPosition = editor.value.state.doc.content.size
-  if (nextMaxPosition > 0) {
-    const from = Math.max(1, Math.min(selection.from, nextMaxPosition))
-    const to = Math.max(1, Math.min(selection.to, nextMaxPosition))
-    editor.value.commands.setTextSelection({ from, to })
+
+  try {
+    editor.value.commands.setContent(value, {
+      contentType: 'markdown',
+      emitUpdate: false,
+    })
+    const nextMaxPosition = editor.value.state.doc.content.size
+    if (nextMaxPosition > 0) {
+      const from = Math.max(1, Math.min(selection.from, nextMaxPosition))
+      const to = Math.max(1, Math.min(selection.to, nextMaxPosition))
+      editor.value.commands.setTextSelection({ from, to })
+    }
+    lastAppliedRevision = revision
+  } finally {
+    isApplyingExternalContent = false
   }
-  lastAppliedRevision = revision
-  isApplyingExternalContent = false
 
   if (preserveViewState) {
     requestAnimationFrame(() => {
@@ -82,38 +88,44 @@ function applyExternalContent(value: string, revision: number, preserveViewState
   }
 }
 
-const editor = useEditor({
-  content: props.modelValue,
-  contentType: 'markdown',
-  extensions: [
-    StarterKit.configure({
-      link: false,
-    }),
-    Link.configure({
-      openOnClick: false,
-      autolink: true,
-    }),
-    Image.configure({
-      inline: false,
-      allowBase64: false,
-    }),
-    Markdown,
-  ],
-  onUpdate: ({ editor }) => {
-    if (isApplyingExternalContent) {
-      return
-    }
+function createEditor(element: HTMLDivElement) {
+  return new Editor({
+    element,
+    content: props.modelValue,
+    contentType: 'markdown',
+    extensions: [
+      StarterKit.configure({
+        link: false,
+      }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+      }),
+      Image.configure({
+        inline: false,
+        allowBase64: false,
+      }),
+      Markdown,
+    ],
+    onCreate: () => {
+      lastAppliedRevision = props.revision
+    },
+    onUpdate: ({ editor }) => {
+      if (isApplyingExternalContent) {
+        return
+      }
 
-    emit('document-update', {
-      documentId: props.documentId,
-      originViewId: props.viewId,
-      baseRevision: lastAppliedRevision,
-      nextContent: editor.getMarkdown(),
-      updateKind: 'visual-edit',
-    })
-    lastAppliedRevision += 1
-  },
-})
+      emit('document-update', {
+        documentId: props.documentId,
+        originViewId: props.viewId,
+        baseRevision: lastAppliedRevision,
+        nextContent: editor.getMarkdown(),
+        updateKind: 'visual-edit',
+      })
+      lastAppliedRevision += 1
+    },
+  })
+}
 
 watch(
   () => [props.documentId, props.modelValue, props.revision] as const,
@@ -134,18 +146,11 @@ watch(
 )
 
 onMounted(() => {
-  requestAnimationFrame(() => {
-    if (!editor.value) {
-      return
-    }
+  if (!editorHost.value) {
+    return
+  }
 
-    if (editor.value.getMarkdown() === props.modelValue) {
-      lastAppliedRevision = props.revision
-      return
-    }
-
-    applyExternalContent(props.modelValue, props.revision, false)
-  })
+  editor.value = createEditor(editorHost.value)
 })
 
 function flushContent() {
@@ -264,6 +269,7 @@ async function setImage() {
 
 onBeforeUnmount(() => {
   editor.value?.destroy()
+  editor.value = null
   resolveInputDialog?.(null)
   resolveInputDialog = null
 })
@@ -390,7 +396,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div ref="scrollHost" class="visual-editor-scroll">
-      <EditorContent :editor="editor" class="visual-editor-content" />
+      <div ref="editorHost" class="visual-editor-content" />
     </div>
 
     <PromptDialog

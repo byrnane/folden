@@ -117,10 +117,23 @@ describe('document state', () => {
       relativePath: 'folder\\nested\\deep.md',
     }))
 
-    state.updateDocumentPaths('folder', 'archive')
+    state.updateDocumentPaths('folder', 'archive', 'C:\\Docs')
 
     expect(root.relativePath).toBe('archive\\note.md')
+    expect(root.path).toBe('C:\\Docs\\archive\\note.md')
     expect(child.relativePath).toBe('archive\\nested\\deep.md')
+    expect(child.path).toBe('C:\\Docs\\archive\\nested\\deep.md')
+
+    const reopened = state.openLoadedDocument(createLoadedDocument({
+      id: 'document-c',
+      path: 'C:\\Docs\\archive\\nested\\deep.md',
+      content: 'C',
+      workspaceId: 'workspace-1',
+      relativePath: 'archive\\nested\\deep.md',
+    }))
+
+    expect(reopened.id).toBe(child.id)
+    expect(state.documents.value).toHaveLength(2)
   })
 
   it('replaces a clean document from disk and keeps it non-dirty', () => {

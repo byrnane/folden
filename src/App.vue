@@ -1767,18 +1767,7 @@ async function renameWorkspacePath(entry: WorkspaceEntry) {
   await runFileTask(async () => {
     const nextPath = await renamePath(workspace.value!.id, entry.path, newName)
     remapWorkspacePathState(entry.path, nextPath)
-    updateDocumentPaths(entry.path, nextPath)
-    for (const document of documents.value) {
-      if (document.workspaceId !== workspace.value?.id || !document.relativePath) {
-        continue
-      }
-
-      if (!isSameOrChildPath(document.relativePath, entry.path)) {
-        continue
-      }
-
-      document.path = joinWorkspacePath(workspace.value.rootPath, document.relativePath)
-    }
+    updateDocumentPaths(entry.path, nextPath, workspace.value!.rootPath)
     selectedPath.value = nextPath
     await refreshWorkspaceBranch(parentPath(nextPath) ?? '')
   }, 'Could not rename path')

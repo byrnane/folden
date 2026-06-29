@@ -370,7 +370,11 @@ export function createDocumentState(options: DocumentStateOptions) {
     return document
   }
 
-  function updateDocumentPaths(previousPath: string, nextPath: string) {
+  function joinWorkspacePath(rootPath: string, relativePath: string) {
+    return `${rootPath.replace(/[\\/]+$/u, '')}\\${relativePath.replace(/^[\\/]+/u, '')}`
+  }
+
+  function updateDocumentPaths(previousPath: string, nextPath: string, workspaceRootPath?: string) {
     const normalizedPreviousPath = options.normalizePath(previousPath)
 
     for (const document of documents.value) {
@@ -387,10 +391,17 @@ export function createDocumentState(options: DocumentStateOptions) {
         continue
       }
 
+      setPathIndex(document.path, null)
       document.relativePath = document.relativePath === previousPath
         ? nextPath
         : `${nextPath}${document.relativePath.slice(previousPath.length)}`
       document.name = options.fileNameFromPath(document.relativePath)
+
+      if (workspaceRootPath) {
+        document.path = joinWorkspacePath(workspaceRootPath, document.relativePath)
+      }
+
+      setPathIndex(document.path, document.id)
     }
   }
 
