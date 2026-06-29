@@ -81,6 +81,12 @@ Low-level Tauri CLI access is still available when needed:
 npm run tauri -- <command>
 ```
 
+Prepare the next app version across the tracked release files:
+
+```powershell
+npm run version:bump -- patch
+```
+
 ## Desktop Setup
 
 Tauri development requires Rust and Windows native build tools.
