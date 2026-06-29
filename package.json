@@ -1,7 +1,7 @@
 {
   "name": "folden",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Local-first desktop Markdown and text editor.",
   "author": "byrnane",
   "license": "UNLICENSED",
@@ -11,17 +11,20 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "typecheck": "vue-tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "build": "npm run typecheck && vite build",
-    "preview": "vite preview",
     "app:dev": "node scripts/tauri.mjs dev",
     "app:build": "node scripts/tauri.mjs build --no-bundle",
     "app:run": "node scripts/run-app.mjs",
+    "vue:dev": "vite",
+    "vue:typecheck": "vue-tsc --noEmit",
+    "vue:build": "npm run vue:typecheck && vite build",
+    "vue:preview": "vite preview",
     "tauri": "node scripts/tauri.mjs",
-    "version:check": "node scripts/check-version.mjs"
+    "version:check": "node scripts/check-version.mjs",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
@@ -36,6 +39,7 @@
     "vue": "^3.5.38"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tauri-apps/cli": "^2.11.3",
     "@types/node": "^26.0.0",
     "@vitejs/plugin-vue": "^6.0.7",

@@ -143,6 +143,7 @@ type MarkdownSafetyDialogState = {
 
 const initialText = '# Untitled\n\nStart writing in Folden.\n'
 const recentWorkspaceStorageKey = 'folden:recent-workspaces'
+const hasNativeRuntimeOnStartup = isTauriRuntime()
 const documentState = createDocumentState({
   fileNameFromPath,
   isMarkdownPath,
@@ -392,7 +393,7 @@ function buildPersistedRecoverySnapshots(excludedKeys = new Set<string>()) {
 }
 
 async function persistSessionAndRecoveryState() {
-  if (!sessionRestoreComplete) {
+  if (!hasNativeRuntimeOnStartup || !sessionRestoreComplete) {
     return
   }
 
@@ -419,7 +420,7 @@ async function persistSessionAndRecoveryState() {
 }
 
 function scheduleSessionPersistence() {
-  if (!sessionRestoreComplete) {
+  if (!hasNativeRuntimeOnStartup || !sessionRestoreComplete) {
     return
   }
 
@@ -1004,6 +1005,10 @@ function addDocumentToPane(document: OpenDocument, paneId = activePaneId.value) 
 }
 
 function setPaneEditorAdapter(paneId: EditorPane['id'], adapter: EditorAdapter | null) {
+  if (paneEditors.value[paneId] === adapter) {
+    return
+  }
+
   paneEditors.value = {
     ...paneEditors.value,
     [paneId]: adapter,
@@ -2413,7 +2418,7 @@ onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('beforeunload', handleBeforeUnload)
 
-  if (!isTauriRuntime()) {
+  if (!hasNativeRuntimeOnStartup) {
     sessionRestoreComplete = true
     return
   }
@@ -2501,7 +2506,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="app-shell">
+  <main class="app-shell" data-testid="app-shell">
     <aside class="workspace-sidebar" aria-label="Workspace" @click.self="clearSidebarSelection">
       <div class="workspace-header">
         <div>
@@ -2543,7 +2548,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div v-if="workspace" class="workspace-root" :title="workspace.rootPath">
+      <div v-if="workspace" class="workspace-root" :title="workspace.rootPath" data-testid="workspace-root">
         {{ workspace.rootPath }}
       </div>
 
@@ -2572,7 +2577,14 @@ onBeforeUnmount(() => {
 
       <section v-else class="empty-sidebar">
         <p>Open a folder to start a workspace.</p>
-        <button type="button" :disabled="isFileBusy" @click="openWorkspace">Open Folder</button>
+        <button
+          type="button"
+          :disabled="isFileBusy"
+          data-testid="open-folder-empty"
+          @click="openWorkspace"
+        >
+          Open Folder
+        </button>
 
         <div v-if="recentWorkspaces.length" class="recent-workspaces">
           <p class="sidebar-label">Recent</p>
@@ -2598,8 +2610,8 @@ onBeforeUnmount(() => {
     <section class="workbench">
       <header class="topbar">
         <div class="topbar-title">
-          <span class="document-title">{{ activeDocument?.name ?? 'No document' }}</span>
-          <span v-if="dirtyDocuments.length" class="dirty-marker">
+          <span class="document-title" data-testid="document-title">{{ activeDocument?.name ?? 'No document' }}</span>
+          <span v-if="dirtyDocuments.length" class="dirty-marker" data-testid="dirty-marker">
             {{ dirtyDocuments.length }} unsaved
           </span>
         </div>
@@ -2608,13 +2620,14 @@ onBeforeUnmount(() => {
           <button type="button" title="Open file" :disabled="isFileBusy" @click="openNativeDocument">
             Open
           </button>
-          <button type="button" title="Open logs folder" :disabled="!isTauriRuntime()" @click="openLogsFolder">
+          <button type="button" title="Open logs folder" :disabled="!hasNativeRuntimeOnStartup" @click="openLogsFolder">
             Logs
           </button>
           <button
             type="button"
             class="icon-button"
             title="Save"
+            data-testid="save-document"
             :disabled="isFileBusy || !activeDocument || (activeDocument.externalState !== 'idle' && !!activeDocument.nativeId)"
             @click="saveDocument()"
           >
@@ -2780,7 +2793,11 @@ onBeforeUnmount(() => {
 
       <footer class="statusbar">
         <span>{{ documents.length }} open</span>
-        <span class="path-status" :title="activeDocument?.path ? cleanDisplayPath(activeDocument.path) : 'Scratch document'">
+        <span
+          class="path-status"
+          :title="activeDocument?.path ? cleanDisplayPath(activeDocument.path) : 'Scratch document'"
+          data-testid="status-path"
+        >
           {{ activeLocation }}
         </span>
         <span>{{ activeDocument ? `${activeDocument.content.length} chars` : 'No document' }}</span>

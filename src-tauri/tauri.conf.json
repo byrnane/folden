@@ -1,13 +1,13 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Folden",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "identifier": "com.folden.editor",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeDevCommand": "npm run vue:dev",
+    "beforeBuildCommand": "npm run vue:build"
   },
   "app": {
     "windows": [

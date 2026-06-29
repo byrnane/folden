@@ -75,12 +75,14 @@ function selectEntry(entry: WorkspaceEntry) {
 <template>
   <ul
     class="workspace-tree"
+    data-testid="workspace-tree"
     :style="{ '--tree-level': level ?? 0 }"
     @click.self="emit('clearSelection')"
   >
     <li v-for="entry in props.entries" :key="entry.path" class="workspace-tree-item">
       <div
         class="tree-row"
+        :data-testid="`workspace-entry-${entry.path}`"
         :class="{
           active: pathMatches(activePath, entry.path),
           selected: pathMatches(selectedPath, entry.path),

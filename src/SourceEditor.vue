@@ -106,5 +106,5 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="editorHost" class="source-editor" />
+  <div ref="editorHost" class="source-editor" data-testid="source-editor" />
 </template>

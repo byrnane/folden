@@ -54,6 +54,10 @@ let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
 
+function normalizeVisualMarkdown(value: string) {
+  return value.trimEnd()
+}
+
 function applyExternalContent(value: string, revision: number, preserveViewState: boolean) {
   if (!editor.value) {
     return
@@ -115,11 +119,18 @@ function createEditor(element: HTMLDivElement) {
         return
       }
 
+      const nextContent = editor.getMarkdown()
+
+      if (normalizeVisualMarkdown(nextContent) === normalizeVisualMarkdown(props.modelValue)) {
+        lastAppliedRevision = props.revision
+        return
+      }
+
       emit('document-update', {
         documentId: props.documentId,
         originViewId: props.viewId,
         baseRevision: lastAppliedRevision,
-        nextContent: editor.getMarkdown(),
+        nextContent,
         updateKind: 'visual-edit',
       })
       lastAppliedRevision += 1
@@ -136,7 +147,7 @@ watch(
 
     const isDocumentSwitch = documentId !== previousDocumentId
 
-    if (!isDocumentSwitch && editor.value.getMarkdown() === value) {
+    if (!isDocumentSwitch && normalizeVisualMarkdown(editor.value.getMarkdown()) === normalizeVisualMarkdown(value)) {
       lastAppliedRevision = revision
       return
     }
@@ -276,7 +287,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="visual-editor">
+  <div class="visual-editor" data-testid="visual-editor">
     <div v-if="editor" class="format-toolbar" aria-label="Markdown formatting">
       <button
         type="button"

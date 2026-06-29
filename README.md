@@ -40,7 +40,7 @@ npm install
 Start the development server:
 
 ```powershell
-npm run dev
+npm run vue:dev
 ```
 
 This runs only the Vue/Vite frontend in the browser. Native file dialogs and workspace commands require the desktop app.
@@ -48,7 +48,7 @@ This runs only the Vue/Vite frontend in the browser. Native file dialogs and wor
 Build the frontend:
 
 ```powershell
-npm run build
+npm run vue:build
 ```
 
 ## Run Desktop
