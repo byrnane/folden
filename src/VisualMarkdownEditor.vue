@@ -54,8 +54,12 @@ let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
 
-function normalizeVisualMarkdown(value: string) {
-  return value.trimEnd()
+function normalizeVisualMarkdownForComparison(value: string) {
+  return value.replace(/\r\n?/g, '\n').trimEnd()
+}
+
+function isVisuallyEquivalentMarkdown(firstValue: string, secondValue: string) {
+  return normalizeVisualMarkdownForComparison(firstValue) === normalizeVisualMarkdownForComparison(secondValue)
 }
 
 function applyExternalContent(value: string, revision: number, preserveViewState: boolean) {
@@ -121,7 +125,7 @@ function createEditor(element: HTMLDivElement) {
 
       const nextContent = editor.getMarkdown()
 
-      if (normalizeVisualMarkdown(nextContent) === normalizeVisualMarkdown(props.modelValue)) {
+      if (isVisuallyEquivalentMarkdown(nextContent, props.modelValue)) {
         lastAppliedRevision = props.revision
         return
       }
@@ -147,7 +151,7 @@ watch(
 
     const isDocumentSwitch = documentId !== previousDocumentId
 
-    if (!isDocumentSwitch && normalizeVisualMarkdown(editor.value.getMarkdown()) === normalizeVisualMarkdown(value)) {
+    if (!isDocumentSwitch && isVisuallyEquivalentMarkdown(editor.value.getMarkdown(), value)) {
       lastAppliedRevision = revision
       return
     }
@@ -165,7 +169,13 @@ onMounted(() => {
 })
 
 function flushContent() {
-  return editor.value?.getMarkdown() ?? props.modelValue
+  const nextContent = editor.value?.getMarkdown() ?? props.modelValue
+
+  if (isVisuallyEquivalentMarkdown(nextContent, props.modelValue)) {
+    return props.modelValue
+  }
+
+  return nextContent
 }
 
 defineExpose({

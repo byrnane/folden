@@ -26,32 +26,28 @@ const {
   appSettings,
   cleanDisplayPath,
   closeDocument,
+  canExecuteCommand,
   clearDocumentExternalState,
   clearSidebarSelection,
   confirmDialog,
-  createScratchDocument,
   createWorkspaceDirectory,
   createWorkspaceFile,
   dirtyDocuments,
   documents,
   errorMessage,
+  executeCommand,
   expandedWorkspacePaths,
   getDocument,
   getDocumentMode,
   getViewSessionId,
   handleDocumentUpdate,
-  hasNativeRuntimeOnStartup,
   isDirty,
   isFileBusy,
   isMarkdownPath,
   loadWorkspace,
   loadingWorkspacePaths,
   markdownSafetyDialog,
-  moveActiveDocumentToRight,
   openEntryInRight,
-  openLogsFolder,
-  openNativeDocument,
-  openWorkspace,
   openWorkspaceFile,
   promptDialog,
   promptDialogError,
@@ -65,14 +61,12 @@ const {
   resolveUnsavedDialog,
   restoreWorkspaceByPath,
   runFileTask,
-  saveDocument,
   saveDocumentAsCopy,
   selectedPath,
   setActiveDocument,
   setActivePane,
   setPaneDocumentMode,
   setPaneEditorAdapter,
-  setSplitEnabled,
   splitEnabled,
   submitPromptDialog,
   cancelPromptDialog,
@@ -99,23 +93,29 @@ const {
           type="button"
           class="icon-button"
           title="Open folder"
-          :disabled="isFileBusy"
-          @click="openWorkspace"
+          :disabled="!canExecuteCommand('workspace.open')"
+          @click="executeCommand('workspace.open')"
         >
           <FolderOpen :size="17" />
         </button>
       </div>
 
       <div class="workspace-actions">
-        <button type="button" class="icon-button" title="New scratch document" @click="createScratchDocument">
+        <button
+          type="button"
+          class="icon-button"
+          title="New scratch document"
+          :disabled="!canExecuteCommand('document.new')"
+          @click="executeCommand('document.new')"
+        >
           <FilePlus :size="16" />
         </button>
         <button
           type="button"
           class="icon-button"
           title="New file"
-          :disabled="!workspace"
-          @click="createWorkspaceFile()"
+          :disabled="!canExecuteCommand('workspace.createFile')"
+          @click="executeCommand('workspace.createFile')"
         >
           <FilePlus :size="16" />
         </button>
@@ -123,8 +123,8 @@ const {
           type="button"
           class="icon-button"
           title="New folder"
-          :disabled="!workspace"
-          @click="createWorkspaceDirectory()"
+          :disabled="!canExecuteCommand('workspace.createDirectory')"
+          @click="executeCommand('workspace.createDirectory')"
         >
           <FolderPlus :size="16" />
         </button>
@@ -161,9 +161,9 @@ const {
         <p>Open a folder to start a workspace.</p>
         <button
           type="button"
-          :disabled="isFileBusy"
+          :disabled="!canExecuteCommand('workspace.open')"
           data-testid="open-folder-empty"
-          @click="openWorkspace"
+          @click="executeCommand('workspace.open')"
         >
           Open Folder
         </button>
@@ -206,10 +206,20 @@ const {
             >
             <span>Autosave</span>
           </label>
-          <button type="button" title="Open file" :disabled="isFileBusy" @click="openNativeDocument">
+          <button
+            type="button"
+            title="Open file"
+            :disabled="!canExecuteCommand('document.open')"
+            @click="executeCommand('document.open')"
+          >
             Open
           </button>
-          <button type="button" title="Open logs folder" :disabled="!hasNativeRuntimeOnStartup" @click="openLogsFolder">
+          <button
+            type="button"
+            title="Open logs folder"
+            :disabled="!canExecuteCommand('logs.open')"
+            @click="executeCommand('logs.open')"
+          >
             Logs
           </button>
           <button
@@ -217,8 +227,8 @@ const {
             class="icon-button"
             title="Save"
             data-testid="save-document"
-            :disabled="isFileBusy || !activeDocument || (activeDocument.externalState !== 'idle' && !!activeDocument.nativeId)"
-            @click="saveDocument()"
+            :disabled="!canExecuteCommand('document.save')"
+            @click="executeCommand('document.save')"
           >
             <Save :size="16" />
           </button>
@@ -227,7 +237,8 @@ const {
             class="icon-button"
             title="Toggle split view"
             :class="{ active: splitEnabled }"
-            @click="setSplitEnabled(!splitEnabled)"
+            :disabled="!canExecuteCommand('layout.toggleSplit')"
+            @click="executeCommand('layout.toggleSplit')"
           >
             <Columns2 :size="16" />
           </button>
@@ -235,8 +246,8 @@ const {
             type="button"
             class="icon-button"
             title="Move active tab right"
-            :disabled="!activeDocument"
-            @click="moveActiveDocumentToRight"
+            :disabled="!canExecuteCommand('layout.moveViewRight')"
+            @click="executeCommand('layout.moveViewRight')"
           >
             <PanelRightOpen :size="16" />
           </button>
