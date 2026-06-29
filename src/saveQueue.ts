@@ -12,7 +12,7 @@ export type SaveJob = {
   expectedFingerprint: FileFingerprint | null
   fileFormat: TextFileFormat
   suggestedFileName?: string
-  reason: 'manual'
+  reason: 'manual' | 'autosave'
 }
 
 type SaveQueueEvents = {

@@ -320,6 +320,22 @@ h1 {
   gap: 8px;
 }
 
+.autosave-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-text);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.autosave-toggle input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
 .dirty-marker {
   border: 1px solid var(--warning-border);
   border-radius: 999px;
