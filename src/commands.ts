@@ -4,6 +4,9 @@ export type CommandId =
   | 'document.save'
   | 'document.undo'
   | 'document.redo'
+  | 'logs.open'
+  | 'workspace.createDirectory'
+  | 'workspace.createFile'
   | 'workspace.open'
   | 'layout.toggleSplit'
   | 'layout.moveViewRight'
@@ -18,7 +21,7 @@ export type CommandShortcut = {
 export type AppCommand = {
   id: CommandId
   title: string
-  shortcut?: CommandShortcut
+  shortcuts?: CommandShortcut[]
   canExecute?: () => boolean
   execute: () => void | Promise<void>
 }
@@ -51,9 +54,24 @@ export function createCommandRegistry(commands: AppCommand[]) {
     return true
   }
 
+  function canExecuteById(commandId: CommandId) {
+    const command = commandsById.get(commandId)
+    return command ? canExecute(command) : false
+  }
+
+  function getCommand(commandId: CommandId) {
+    return commandsById.get(commandId) ?? null
+  }
+
   function handleKeyboardEvent(event: KeyboardEvent) {
+    if (event.defaultPrevented || event.isComposing) {
+      return false
+    }
+
     for (const command of orderedCommands) {
-      if (!command.shortcut || !matchesShortcut(event, command.shortcut)) {
+      const hasMatchingShortcut = command.shortcuts?.some((shortcut) => matchesShortcut(event, shortcut)) ?? false
+
+      if (!hasMatchingShortcut) {
         continue
       }
 
@@ -70,7 +88,9 @@ export function createCommandRegistry(commands: AppCommand[]) {
   }
 
   return {
+    canExecute: canExecuteById,
     execute,
+    getCommand,
     handleKeyboardEvent,
   }
 }

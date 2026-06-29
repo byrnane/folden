@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { createCommandRegistry } from './commands'
+import { createCommandRegistry, type CommandId } from './commands'
 import {
   analyzeMarkdownSafety,
   type MarkdownSafetyReport,
@@ -1158,6 +1158,23 @@ export function useApplicationShell() {
     }
 
     updateDocumentSessions(nextDocument.id, nextDocument.revision)
+  }
+
+  function canSaveActiveDocument() {
+    const document = activeDocument.value
+    return Boolean(
+      document &&
+      !isFileBusy.value &&
+      (document.externalState === 'idle' || !document.nativeId),
+    )
+  }
+
+  function canUndoActiveDocument() {
+    return (activeDocument.value?.history.past.length ?? 0) > 0
+  }
+
+  function canRedoActiveDocument() {
+    return (activeDocument.value?.history.future.length ?? 0) > 0
   }
 
   function setSplitEnabled(enabled: boolean) {
@@ -2390,63 +2407,87 @@ export function useApplicationShell() {
     {
       id: 'document.save',
       title: 'Save Document',
-      shortcut: { code: 'KeyS', mod: true },
-      canExecute: () => activeDocument.value !== null,
+      shortcuts: [{ code: 'KeyS', mod: true }],
+      canExecute: canSaveActiveDocument,
       execute: () => saveDocument(),
     },
     {
       id: 'document.undo',
       title: 'Undo',
-      shortcut: { code: 'KeyZ', mod: true },
-      canExecute: () => activeDocument.value !== null,
+      shortcuts: [{ code: 'KeyZ', mod: true }],
+      canExecute: canUndoActiveDocument,
       execute: () => runDocumentUndo(),
     },
     {
       id: 'document.redo',
       title: 'Redo',
-      shortcut: { code: 'KeyZ', mod: true, shift: true },
-      canExecute: () => activeDocument.value !== null,
-      execute: () => runDocumentRedo(),
-    },
-    {
-      id: 'document.redo',
-      title: 'Redo',
-      shortcut: { code: 'KeyY', mod: true },
-      canExecute: () => activeDocument.value !== null,
+      shortcuts: [
+        { code: 'KeyZ', mod: true, shift: true },
+        { code: 'KeyY', mod: true },
+      ],
+      canExecute: canRedoActiveDocument,
       execute: () => runDocumentRedo(),
     },
     {
       id: 'workspace.open',
       title: 'Open Workspace',
-      shortcut: { code: 'KeyO', mod: true, shift: true },
+      shortcuts: [{ code: 'KeyO', mod: true, shift: true }],
+      canExecute: () => !isFileBusy.value,
       execute: () => openWorkspace(),
     },
     {
       id: 'document.open',
       title: 'Open Document',
-      shortcut: { code: 'KeyO', mod: true },
+      shortcuts: [{ code: 'KeyO', mod: true }],
+      canExecute: () => !isFileBusy.value,
       execute: () => openNativeDocument(),
     },
     {
       id: 'document.new',
       title: 'New Scratch Document',
-      shortcut: { code: 'KeyN', mod: true },
+      shortcuts: [{ code: 'KeyN', mod: true }],
       execute: () => createScratchDocument(),
+    },
+    {
+      id: 'workspace.createFile',
+      title: 'New File',
+      canExecute: () => workspace.value !== null,
+      execute: () => createWorkspaceFile(),
+    },
+    {
+      id: 'workspace.createDirectory',
+      title: 'New Folder',
+      canExecute: () => workspace.value !== null,
+      execute: () => createWorkspaceDirectory(),
+    },
+    {
+      id: 'logs.open',
+      title: 'Open Logs Folder',
+      canExecute: () => hasNativeRuntimeOnStartup,
+      execute: () => openLogsFolder(),
     },
     {
       id: 'layout.toggleSplit',
       title: 'Toggle Split View',
-      shortcut: { code: 'Backslash', mod: true },
+      shortcuts: [{ code: 'Backslash', mod: true }],
       execute: () => setSplitEnabled(!splitEnabled.value),
     },
     {
       id: 'layout.moveViewRight',
       title: 'Move Active Tab Right',
-      shortcut: { code: 'ArrowRight', mod: true, shift: true },
+      shortcuts: [{ code: 'ArrowRight', mod: true, shift: true }],
       canExecute: () => activeDocument.value !== null,
       execute: () => moveActiveDocumentToRight(),
     },
   ])
+
+  function canExecuteCommand(commandId: CommandId) {
+    return commandRegistry.canExecute(commandId)
+  }
+
+  function executeCommand(commandId: CommandId) {
+    commandRegistry.execute(commandId)
+  }
 
   function handleGlobalKeydown(event: KeyboardEvent) {
     commandRegistry.handleKeyboardEvent(event)
@@ -2612,6 +2653,7 @@ export function useApplicationShell() {
     appSettings,
     cleanDisplayPath,
     closeDocument,
+    canExecuteCommand,
     clearDocumentExternalState,
     clearSidebarSelection,
     confirmDialog,
@@ -2621,6 +2663,7 @@ export function useApplicationShell() {
     dirtyDocuments,
     documents,
     errorMessage,
+    executeCommand,
     expandedWorkspacePaths,
     getDocument,
     getDocumentMode,

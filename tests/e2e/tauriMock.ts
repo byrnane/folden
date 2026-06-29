@@ -31,7 +31,7 @@ export async function installTauriMock(page: Page) {
       name: 'FoldenE2E',
     }
     const files = new Map<string, string>([
-      ['README.md', '# E2E Note\n\nOriginal content.\n'],
+      ['README.md', '# E2E Note\r\n\r\nOriginal content.\r\n'],
       ['notes\\daily.md', '# Daily\n\nNested note.\n'],
     ])
     const callbacks = new Map<number, (data: unknown) => unknown>()

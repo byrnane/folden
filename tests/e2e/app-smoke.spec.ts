@@ -78,3 +78,17 @@ test('asks before closing a dirty document tab', async ({ page }) => {
   await page.getByRole('button', { name: 'Discard' }).click()
   await expect(page.getByTestId('document-title')).toHaveText('Untitled.md')
 })
+
+test('closes an unchanged visual document without dirty prompt', async ({ page }) => {
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+
+  await expect(page.getByTestId('document-title')).toHaveText('README.md')
+  await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'README.md' }).locator('.tab-close').click()
+
+  await expect(page.getByRole('dialog', { name: 'Close README.md?' })).toHaveCount(0)
+  await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
+  await expect(page.getByTestId('document-title')).toHaveText('Untitled.md')
+})

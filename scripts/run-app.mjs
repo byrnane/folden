@@ -18,8 +18,35 @@ if (!existsSync(appPath)) {
 
 const child = spawn(appPath, [], {
   cwd: rootDir,
-  detached: true,
-  stdio: 'ignore',
+  stdio: 'inherit',
 })
 
-child.unref()
+function stopChild() {
+  if (child.killed || child.exitCode !== null || child.signalCode !== null) {
+    return
+  }
+
+  child.kill()
+}
+
+process.on('SIGINT', () => {
+  stopChild()
+})
+
+process.on('SIGTERM', () => {
+  stopChild()
+})
+
+child.on('exit', (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal)
+    return
+  }
+
+  process.exit(code ?? 0)
+})
+
+child.on('error', (error) => {
+  console.error(`Could not run built app: ${error.message}`)
+  process.exit(1)
+})
