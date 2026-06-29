@@ -18,7 +18,7 @@ import {
   RemoveFormatting,
   Strikethrough,
 } from 'lucide-vue-next'
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import PromptDialog from './components/PromptDialog.vue'
 import type { DocumentUpdate } from './editorSync'
 import { validateImageTarget, validateLinkTarget } from './markdownSafety'
@@ -51,6 +51,36 @@ const inputDialogError = ref<string | null>(null)
 let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
+
+function applyExternalContent(value: string, revision: number, preserveViewState: boolean) {
+  if (!editor.value) {
+    return
+  }
+
+  const scrollTop = scrollHost.value?.scrollTop ?? 0
+  const selection = editor.value.state.selection
+  isApplyingExternalContent = true
+  editor.value.commands.setContent(value, {
+    contentType: 'markdown',
+    emitUpdate: false,
+  })
+  const nextMaxPosition = editor.value.state.doc.content.size
+  if (nextMaxPosition > 0) {
+    const from = Math.max(1, Math.min(selection.from, nextMaxPosition))
+    const to = Math.max(1, Math.min(selection.to, nextMaxPosition))
+    editor.value.commands.setTextSelection({ from, to })
+  }
+  lastAppliedRevision = revision
+  isApplyingExternalContent = false
+
+  if (preserveViewState) {
+    requestAnimationFrame(() => {
+      if (scrollHost.value) {
+        scrollHost.value.scrollTop = scrollTop
+      }
+    })
+  }
+}
 
 const editor = useEditor({
   content: props.modelValue,
@@ -92,37 +122,31 @@ watch(
       return
     }
 
-    if (editor.value.getMarkdown() === value) {
+    const isDocumentSwitch = documentId !== previousDocumentId
+
+    if (!isDocumentSwitch && editor.value.getMarkdown() === value) {
       lastAppliedRevision = revision
       return
     }
 
-    const isDocumentSwitch = documentId !== previousDocumentId
-    const scrollTop = scrollHost.value?.scrollTop ?? 0
-    const selection = editor.value.state.selection
-    isApplyingExternalContent = true
-    editor.value.commands.setContent(value, {
-      contentType: 'markdown',
-      emitUpdate: false,
-    })
-    const nextMaxPosition = editor.value.state.doc.content.size
-    if (nextMaxPosition > 0) {
-      const from = Math.max(1, Math.min(selection.from, nextMaxPosition))
-      const to = Math.max(1, Math.min(selection.to, nextMaxPosition))
-      editor.value.commands.setTextSelection({ from, to })
-    }
-    lastAppliedRevision = revision
-    isApplyingExternalContent = false
-
-    if (!isDocumentSwitch) {
-      requestAnimationFrame(() => {
-        if (scrollHost.value) {
-          scrollHost.value.scrollTop = scrollTop
-        }
-      })
-    }
+    applyExternalContent(value, revision, !isDocumentSwitch)
   },
 )
+
+onMounted(() => {
+  requestAnimationFrame(() => {
+    if (!editor.value) {
+      return
+    }
+
+    if (editor.value.getMarkdown() === props.modelValue) {
+      lastAppliedRevision = props.revision
+      return
+    }
+
+    applyExternalContent(props.modelValue, props.revision, false)
+  })
+})
 
 function flushContent() {
   return editor.value?.getMarkdown() ?? props.modelValue
