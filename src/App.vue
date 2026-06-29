@@ -11,6 +11,7 @@ import {
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { createCommandRegistry } from './commands'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import MarkdownSafetyDialog from './components/MarkdownSafetyDialog.vue'
 import PromptDialog from './components/PromptDialog.vue'
@@ -56,6 +57,10 @@ import {
   type EditorViewSession,
 } from './editorSync'
 import { createDocumentSaveQueue } from './saveQueue'
+import {
+  loadApplicationSettings,
+  saveApplicationSettings,
+} from './settings'
 import {
   buildSessionDocumentKey,
   loadRecoverySnapshots,
@@ -144,6 +149,7 @@ type MarkdownSafetyDialogState = {
 const initialText = '# Untitled\n\nStart writing in Folden.\n'
 const recentWorkspaceStorageKey = 'folden:recent-workspaces'
 const hasNativeRuntimeOnStartup = isTauriRuntime()
+const appSettings = ref(loadApplicationSettings())
 const documentState = createDocumentState({
   fileNameFromPath,
   isMarkdownPath,
@@ -219,6 +225,7 @@ const markdownSafetyCache = ref<Record<string, MarkdownSafetyReport>>({})
 const visualSafetyAcknowledgments = ref<Record<string, number>>({})
 const pendingWorkspaceRefreshes = new Map<string, number>()
 const pendingDocumentReloads = new Map<string, number>()
+const pendingAutosaves = new Map<string, number>()
 const saveQueue = createDocumentSaveQueue({
   performSave: (job) => saveTextFile(
     job.documentNativeId,
@@ -568,6 +575,15 @@ function acknowledgeVisualSafety(document: OpenDocument) {
 
 function isVisualSafetyAcknowledged(document: OpenDocument) {
   return visualSafetyAcknowledgments.value[document.id] === document.revision
+}
+
+function hasUnsafeUnacknowledgedVisualState(document: OpenDocument) {
+  if (!isMarkdownDocument(document)) {
+    return false
+  }
+
+  const safetyReport = getMarkdownSafetyReport(document)
+  return !safetyReport.safeForVisualEditing && !isVisualSafetyAcknowledged(document)
 }
 
 function resetVisualSafetyAcknowledgment(documentId: string, revision: number) {
@@ -1514,12 +1530,20 @@ function moveActiveDocumentToRight() {
   sourcePane.activeDocumentId = sourcePane.documentIds.at(-1) ?? null
 }
 
-async function saveDocument(document = activeDocument.value) {
+async function saveDocument(document = activeDocument.value, reason: 'manual' | 'autosave' = 'manual') {
   if (!document) {
     return
   }
 
+  if (reason === 'autosave' && !canAutosaveDocument(document)) {
+    return
+  }
+
   if (document.externalState !== 'idle' && document.nativeId) {
+    if (reason === 'autosave') {
+      return
+    }
+
     errorMessage.value = 'Resolve the external file conflict before saving to the original path.'
     return
   }
@@ -1543,9 +1567,70 @@ async function saveDocument(document = activeDocument.value) {
       expectedFingerprint: currentDocument.diskFingerprint,
       fileFormat: currentDocument.fileFormat ?? createTextFileFormat(),
       suggestedFileName: currentDocument.nativeId ? undefined : suggestFileName(currentDocument.content),
-      reason: 'manual',
+      reason,
     })
   }, 'Could not save file')
+}
+
+function canAutosaveDocument(document: OpenDocument) {
+  return appSettings.value.autosave.enabled &&
+    isDirty(document) &&
+    document.nativeId !== null &&
+    document.externalState === 'idle' &&
+    document.saveState !== 'queued' &&
+    document.saveState !== 'saving' &&
+    document.saveState !== 'error' &&
+    !hasUnsafeUnacknowledgedVisualState(document)
+}
+
+function clearPendingAutosave(documentId: string) {
+  const timeoutId = pendingAutosaves.get(documentId)
+
+  if (timeoutId === undefined) {
+    return
+  }
+
+  window.clearTimeout(timeoutId)
+  pendingAutosaves.delete(documentId)
+}
+
+function scheduleAutosave(document: OpenDocument) {
+  clearPendingAutosave(document.id)
+
+  if (!canAutosaveDocument(document)) {
+    return
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    pendingAutosaves.delete(document.id)
+    const currentDocument = getDocument(document.id)
+
+    if (!currentDocument || !canAutosaveDocument(currentDocument)) {
+      return
+    }
+
+    void saveDocument(currentDocument, 'autosave')
+  }, appSettings.value.autosave.debounceMs)
+
+  pendingAutosaves.set(document.id, timeoutId)
+}
+
+function syncAutosaveTimers() {
+  const documentIds = new Set(documents.value.map((document) => document.id))
+
+  for (const documentId of pendingAutosaves.keys()) {
+    if (!documentIds.has(documentId)) {
+      clearPendingAutosave(documentId)
+    }
+  }
+
+  for (const document of documents.value) {
+    if (canAutosaveDocument(document)) {
+      scheduleAutosave(document)
+    } else {
+      clearPendingAutosave(document.id)
+    }
+  }
 }
 
 async function saveDocumentAsCopy(document = activeDocument.value) {
@@ -2317,68 +2402,95 @@ function handleBeforeUnload(event: BeforeUnloadEvent) {
   event.returnValue = ''
 }
 
+const commandRegistry = createCommandRegistry([
+  {
+    id: 'document.save',
+    title: 'Save Document',
+    shortcut: { code: 'KeyS', mod: true },
+    canExecute: () => activeDocument.value !== null,
+    execute: () => saveDocument(),
+  },
+  {
+    id: 'document.undo',
+    title: 'Undo',
+    shortcut: { code: 'KeyZ', mod: true },
+    canExecute: () => activeDocument.value !== null,
+    execute: () => runDocumentUndo(),
+  },
+  {
+    id: 'document.redo',
+    title: 'Redo',
+    shortcut: { code: 'KeyZ', mod: true, shift: true },
+    canExecute: () => activeDocument.value !== null,
+    execute: () => runDocumentRedo(),
+  },
+  {
+    id: 'document.redo',
+    title: 'Redo',
+    shortcut: { code: 'KeyY', mod: true },
+    canExecute: () => activeDocument.value !== null,
+    execute: () => runDocumentRedo(),
+  },
+  {
+    id: 'workspace.open',
+    title: 'Open Workspace',
+    shortcut: { code: 'KeyO', mod: true, shift: true },
+    execute: () => openWorkspace(),
+  },
+  {
+    id: 'document.open',
+    title: 'Open Document',
+    shortcut: { code: 'KeyO', mod: true },
+    execute: () => openNativeDocument(),
+  },
+  {
+    id: 'document.new',
+    title: 'New Scratch Document',
+    shortcut: { code: 'KeyN', mod: true },
+    execute: () => createScratchDocument(),
+  },
+  {
+    id: 'layout.toggleSplit',
+    title: 'Toggle Split View',
+    shortcut: { code: 'Backslash', mod: true },
+    execute: () => setSplitEnabled(!splitEnabled.value),
+  },
+  {
+    id: 'layout.moveViewRight',
+    title: 'Move Active Tab Right',
+    shortcut: { code: 'ArrowRight', mod: true, shift: true },
+    canExecute: () => activeDocument.value !== null,
+    execute: () => moveActiveDocumentToRight(),
+  },
+])
+
 function handleGlobalKeydown(event: KeyboardEvent) {
-  const hasModifier = event.ctrlKey || event.metaKey
-
-  if (!hasModifier) {
-    return
-  }
-
-  const code = event.code
-
-  if (code === 'KeyS') {
-    event.preventDefault()
-    void saveDocument()
-    return
-  }
-
-  if (code === 'KeyZ' && event.shiftKey) {
-    event.preventDefault()
-    runDocumentRedo()
-    return
-  }
-
-  if (code === 'KeyZ') {
-    event.preventDefault()
-    runDocumentUndo()
-    return
-  }
-
-  if (code === 'KeyY') {
-    event.preventDefault()
-    runDocumentRedo()
-    return
-  }
-
-  if (code === 'KeyO' && event.shiftKey) {
-    event.preventDefault()
-    void openWorkspace()
-    return
-  }
-
-  if (code === 'KeyO') {
-    event.preventDefault()
-    void openNativeDocument()
-    return
-  }
-
-  if (code === 'KeyN') {
-    event.preventDefault()
-    createScratchDocument()
-    return
-  }
-
-  if (code === 'Backslash') {
-    event.preventDefault()
-    setSplitEnabled(!splitEnabled.value)
-    return
-  }
-
-  if (code === 'ArrowRight' && event.shiftKey) {
-    event.preventDefault()
-    moveActiveDocumentToRight()
-  }
+  commandRegistry.handleKeyboardEvent(event)
 }
+
+watch(
+  appSettings,
+  (settings) => {
+    saveApplicationSettings(settings)
+    syncAutosaveTimers()
+  },
+  { deep: true },
+)
+
+watch(
+  () => documents.value.map((document) => ({
+    id: document.id,
+    revision: document.revision,
+    persistedRevision: document.persistedRevision,
+    nativeId: document.nativeId,
+    externalState: document.externalState,
+    saveState: document.saveState,
+  })),
+  () => {
+    syncAutosaveTimers()
+  },
+  { deep: true },
+)
 
 watch(
   () => ({
@@ -2502,6 +2614,10 @@ onBeforeUnmount(() => {
   for (const timeoutId of pendingDocumentReloads.values()) {
     window.clearTimeout(timeoutId)
   }
+
+  for (const timeoutId of pendingAutosaves.values()) {
+    window.clearTimeout(timeoutId)
+  }
 })
 </script>
 
@@ -2617,6 +2733,13 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="topbar-actions">
+          <label class="autosave-toggle" title="Automatically save changed existing files after a short pause">
+            <input
+              v-model="appSettings.autosave.enabled"
+              type="checkbox"
+            >
+            <span>Autosave</span>
+          </label>
           <button type="button" title="Open file" :disabled="isFileBusy" @click="openNativeDocument">
             Open
           </button>
