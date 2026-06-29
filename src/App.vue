@@ -1230,6 +1230,10 @@ async function openWorkspace() {
       return
     }
 
+    if (!(await prepareWorkspaceSwitch(descriptor.rootPath))) {
+      return
+    }
+
     await loadWorkspace(descriptor)
   }, 'Could not open workspace')
 }
@@ -1248,6 +1252,73 @@ async function loadWorkspace(descriptor: WorkspaceDescriptor) {
   workspaceLoadErrors.value = {}
   selectedPath.value = null
   saveRecentWorkspaces([descriptor.rootPath, ...recentWorkspaces.value])
+}
+
+function getWorkspaceDocumentIds(workspaceId: string) {
+  return documents.value
+    .filter((document) => document.workspaceId === workspaceId)
+    .map((document) => document.id)
+}
+
+function normalizePaneState() {
+  if (splitEnabled.value && panes.value[1].documentIds.length === 0) {
+    setSplitEnabled(false)
+  }
+
+  const currentActivePane = getPane(activePaneId.value)
+
+  if (currentActivePane?.documentIds.length) {
+    return
+  }
+
+  if (panes.value[0].documentIds.length) {
+    activePaneId.value = 'left'
+    return
+  }
+
+  if (splitEnabled.value && panes.value[1].documentIds.length) {
+    activePaneId.value = 'right'
+  }
+}
+
+async function prepareWorkspaceSwitch(nextRootPath: string) {
+  const currentWorkspace = workspace.value
+
+  if (!currentWorkspace || normalizePath(currentWorkspace.rootPath) === normalizePath(nextRootPath)) {
+    return true
+  }
+
+  const affectedDocumentIds = getWorkspaceDocumentIds(currentWorkspace.id)
+  const dirtyWorkspaceDocuments = affectedDocumentIds
+    .map((documentId) => getDocument(documentId))
+    .filter((document): document is OpenDocument => document !== null && isDirty(document))
+
+  if (dirtyWorkspaceDocuments.length) {
+    const decision = await openUnsavedDialog({
+      title: 'Switch workspace?',
+      message: `Save changes to ${dirtyWorkspaceDocuments.length} unsaved ${dirtyWorkspaceDocuments.length === 1 ? 'document' : 'documents'} before switching workspace?`,
+      saveLabel: 'Save and switch',
+      discardLabel: 'Switch without saving',
+      cancelLabel: 'Cancel',
+      showSave: true,
+    })
+
+    if (decision === 'cancel') {
+      return false
+    }
+
+    if (decision === 'save') {
+      const saved = await saveDirtyDocuments(dirtyWorkspaceDocuments.map((document) => document.id))
+
+      if (!saved) {
+        return false
+      }
+    }
+  }
+
+  removeDocumentsFromPanes(affectedDocumentIds)
+  normalizePaneState()
+  return true
 }
 
 async function refreshWorkspace() {
@@ -1769,6 +1840,10 @@ async function trashWorkspacePath(entry: WorkspaceEntry) {
 }
 
 function removeDocumentsFromPanes(documentIds: string[]) {
+  if (!documentIds.length) {
+    return
+  }
+
   const documentIdSet = new Set(documentIds)
 
   for (const pane of panes.value) {
@@ -1780,13 +1855,17 @@ function removeDocumentsFromPanes(documentIds: string[]) {
   }
 
   const nextPaneDocumentModes = { ...paneDocumentModes.value }
+  const nextViewSessions = { ...viewSessions.value }
 
   for (const documentId of documentIds) {
     delete nextPaneDocumentModes[paneDocumentModeKey('left', documentId)]
     delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
+    delete nextViewSessions[paneDocumentModeKey('left', documentId)]
+    delete nextViewSessions[paneDocumentModeKey('right', documentId)]
   }
 
   paneDocumentModes.value = nextPaneDocumentModes
+  viewSessions.value = nextViewSessions
   releaseClosedNativeDocuments(documentIds)
   removeDocuments(documentIds)
 }
@@ -2683,6 +2762,7 @@ onBeforeUnmount(() => {
 
             <VisualMarkdownEditor
               v-if="getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'visual'"
+              :key="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
               :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
               :document-id="getDocument(pane.activeDocumentId)!.id"
               :view-id="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
@@ -2692,6 +2772,7 @@ onBeforeUnmount(() => {
             />
             <section v-else class="source-editor-frame">
               <SourceEditor
+                :key="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
                 :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
                 :document-id="getDocument(pane.activeDocumentId)!.id"
                 :view-id="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
