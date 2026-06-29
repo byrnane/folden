@@ -38,13 +38,19 @@ jobs:
         run: npm run version:check
 
       - name: Typecheck
-        run: npm run typecheck
+        run: npm run vue:typecheck
 
       - name: Frontend tests
-        run: npm run test
+        run: npm run test:unit
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Browser E2E tests
+        run: npm run test:e2e
 
       - name: Frontend build
-        run: npm run build
+        run: npm run vue:build
 
       - name: Cargo fmt
         working-directory: src-tauri

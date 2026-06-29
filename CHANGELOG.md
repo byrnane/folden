@@ -6,6 +6,14 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.3.2 - 2026-06-29
+
+* Добавлен первый browser-level E2E слой на Playwright с мокнутым Tauri API.
+* CI теперь запускает unit-тесты, Chromium E2E, frontend build и существующие Rust/Tauri проверки.
+* Исправлен recursive update при регистрации editor adapter в Vue.
+* Browser-only режим больше не запускает desktop session persistence.
+* Npm-скрипты сгруппированы по зонам `vue:*`, `app:*`, `test:*`.
+
 ## 0.3.1 - 2026-06-29
 
 * Исправлено первичное открытие Markdown-файлов в Visual: текст больше не появляется только после переключения вкладки или режима.

@@ -8,13 +8,13 @@ For frontend-only development:
 
 ```powershell
 npm install
-npm run dev
+npm run vue:dev
 ```
 
 For production frontend build:
 
 ```powershell
-npm run build
+npm run vue:build
 ```
 
 ---
