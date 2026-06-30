@@ -63,6 +63,8 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     let nextCallbackId = 1
     let nextDocumentId = 1
     let modifiedAtMs = 1_800_000_000_000
+    let windowDestroyed = false
+    let diagnosticExportCount = 0
 
     function fingerprint(content: string) {
       modifiedAtMs += 1
@@ -207,14 +209,6 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           const relativePath = documentId ? 'README.md' : String(args?.suggestedFileName ?? 'Untitled.md')
 
           files.set(relativePath, content)
-          if (documentId) {
-            emitFsEvent('modify', `${workspace.rootPath}\\${relativePath}`)
-            const parentDirectory = normalizeRelativePath(relativePath).split('\\').slice(0, -1).join('\\')
-
-            if (parentDirectory) {
-              emitFsEvent('modify', `${workspace.rootPath}\\${parentDirectory}`)
-            }
-          }
 
           return {
             id: documentId ?? `native-doc-${nextDocumentId++}`,
@@ -248,6 +242,12 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           return undefined
         case 'plugin:window|close':
           return undefined
+        case 'plugin:window|destroy':
+          windowDestroyed = true
+          return undefined
+        case 'export_diagnostics':
+          diagnosticExportCount += 1
+          return 'C:\\FoldenAppData\\folden-diagnostics.txt'
         case 'plugin:event|listen':
           if (typeof args?.event === 'string' && typeof args?.handler === 'number') {
             const listeners = eventListeners.get(args.event) ?? new Set<number>()
@@ -293,6 +293,19 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         },
       },
       __FOLDEN_TAURI_MOCK__: {
+        async requestWindowClose() {
+          const listeners = eventListeners.get('tauri://close-requested') ?? new Set<number>()
+
+          for (const id of listeners) {
+            void callbacks.get(id)?.({ event: 'tauri://close-requested', id })
+          }
+        },
+        isWindowDestroyed() {
+          return windowDestroyed
+        },
+        getDiagnosticExportCount() {
+          return diagnosticExportCount
+        },
         emitFsChange(relativePath: string, content: string) {
           files.set(relativePath, content)
           emitFsEvent('modify', `${workspace.rootPath}\\${relativePath}`)

@@ -164,3 +164,7 @@ export async function logFrontendEvent(level: 'info' | 'warn' | 'error', message
 export async function openLogsFolder() {
   return invokeNative<void>('open_logs_folder')
 }
+
+export async function exportDiagnostics() {
+  return invokeNative<string>('export_diagnostics')
+}

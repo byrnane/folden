@@ -231,6 +231,15 @@ const {
           </button>
           <button
             type="button"
+            title="Export local diagnostics"
+            :disabled="!canExecuteCommand('diagnostics.export')"
+            data-testid="export-diagnostics"
+            @click="executeCommand('diagnostics.export')"
+          >
+            Diagnostics
+          </button>
+          <button
+            type="button"
             class="icon-button"
             title="Save"
             data-testid="save-document"
