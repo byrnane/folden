@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { applicationSettingsStorageKey } from '../../src/settings'
+import { applicationSettingsStorageKey } from '../../src/infrastructure/settings/settings'
 import { installTauriMock } from './tauriMock'
 
 type OpenAppOptions = {
