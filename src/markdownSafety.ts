@@ -7,6 +7,10 @@ export type MarkdownUnsupportedFeature = {
 export type MarkdownSafetyReport = {
   safeForVisualEditing: boolean
   unsupportedFeatures: MarkdownUnsupportedFeature[]
+  remoteImages: {
+    line: number | null
+    source: string
+  }[]
 }
 
 const allowedLinkSchemes = new Set(['http', 'https', 'mailto'])
@@ -98,7 +102,7 @@ export function validateImageTarget(value: string) {
   }
 
   if (isRemoteImageUrl(normalizedValue)) {
-    return 'Remote images are disabled in Visual mode for this release.'
+    return null
   }
 
   if (isRelativeMarkdownUrl(normalizedValue)) {
@@ -118,6 +122,7 @@ export function validateImageTarget(value: string) {
 
 export function analyzeMarkdownSafety(source: string): MarkdownSafetyReport {
   const unsupportedFeatures: MarkdownUnsupportedFeature[] = []
+  const remoteImages: MarkdownSafetyReport['remoteImages'] = []
 
   if (/^(---|\+\+\+)\s*$/m.test(source.trimStart())) {
     const firstLine = source.split(/\r?\n/)[0] ?? ''
@@ -180,17 +185,16 @@ export function analyzeMarkdownSafety(source: string): MarkdownSafetyReport {
   let remoteImageMatch = remoteImageExpression.exec(source)
 
   while (remoteImageMatch) {
-    addFeature(
-      unsupportedFeatures,
-      'remote-image',
-      lineNumberAt(source, remoteImageMatch.index),
-      'Remote images are disabled in Visual mode.',
-    )
+    remoteImages.push({
+      line: lineNumberAt(source, remoteImageMatch.index),
+      source: remoteImageMatch[1],
+    })
     remoteImageMatch = remoteImageExpression.exec(source)
   }
 
   return {
     safeForVisualEditing: unsupportedFeatures.length === 0,
     unsupportedFeatures,
+    remoteImages,
   }
 }

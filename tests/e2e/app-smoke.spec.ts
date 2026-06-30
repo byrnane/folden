@@ -157,3 +157,39 @@ test('shows a readable conflict diff and preserves the dirty copy when reloading
   await expect(page.getByTestId('source-editor')).toContainText('Disk version wins.')
   await expect(page.getByRole('button', { name: 'README (conflict copy).md' })).toBeVisible()
 })
+
+test('keeps remote images blocked until the document explicitly allows them', async ({ page }) => {
+  const remoteRequests: string[] = []
+
+  await page.route('https://example.com/**', async (route) => {
+    remoteRequests.push(route.request().url())
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/png',
+      body: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9pX6lz0AAAAASUVORK5CYII=',
+        'base64',
+      ),
+    })
+  })
+
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+  await page.getByRole('button', { name: 'Source' }).click()
+
+  const editor = page.getByTestId('source-editor').locator('.cm-content')
+  await editor.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
+  await page.keyboard.type('\n![remote](https://example.com/preview.png)\n')
+
+  await page.getByRole('button', { name: 'Visual' }).click()
+  await expect(page.getByTestId('visual-editor')).toContainText('Remote image is blocked.')
+  await expect(page.getByTestId('load-remote-images')).toBeVisible()
+
+  await page.waitForTimeout(300)
+  expect(remoteRequests).toEqual([])
+
+  await page.getByTestId('load-remote-images').click()
+  await expect.poll(() => remoteRequests.length).toBeGreaterThan(0)
+  await expect(page.locator('img[src="https://example.com/preview.png"]')).toBeVisible()
+})

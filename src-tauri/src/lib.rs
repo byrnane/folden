@@ -1100,6 +1100,25 @@ fn register_workspace(state: &mut NativeAppState, path: PathBuf) -> WorkspaceDes
     descriptor
 }
 
+fn authorize_workspace_assets<R: Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    root_path: &Path,
+    operation: &str,
+) -> NativeResult<()> {
+    app_handle
+        .asset_protocol_scope()
+        .allow_directory(root_path, true)
+        .map_err(|error| {
+            native_error(
+                FileErrorCode::Unknown,
+                operation,
+                "Could not authorize workspace assets for preview.",
+                Some(error.to_string()),
+                true,
+            )
+        })
+}
+
 fn detect_workspace_membership(
     state: &NativeAppState,
     path: &Path,
@@ -1479,6 +1498,7 @@ fn open_workspace_directory(
     };
 
     let canonical_path = canonical_root(&path, "open_workspace_directory")?;
+    authorize_workspace_assets(&app_handle, &canonical_path, "open_workspace_directory")?;
     let mut state = state.lock().unwrap();
     let descriptor = register_workspace(&mut state, canonical_path);
     sync_native_watcher(&mut state, &app_handle)?;
@@ -1493,6 +1513,7 @@ fn restore_workspace_by_path(
     root_path: String,
 ) -> NativeResult<WorkspaceDescriptor> {
     let canonical_path = canonical_root(Path::new(&root_path), "restore_workspace_by_path")?;
+    authorize_workspace_assets(&app_handle, &canonical_path, "restore_workspace_by_path")?;
     let mut state = state.lock().unwrap();
     let descriptor = register_workspace(&mut state, canonical_path);
     sync_native_watcher(&mut state, &app_handle)?;

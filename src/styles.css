@@ -502,6 +502,12 @@ h1 {
   padding: 4px 9px;
 }
 
+.load-remote-images-button {
+  border-color: rgba(90, 169, 167, 0.45);
+  background: rgba(90, 169, 167, 0.12);
+  color: var(--strong-text);
+}
+
 .open-right-button {
   margin-left: auto;
 }
@@ -646,6 +652,40 @@ h1 {
 .visual-editor-content .tiptap img {
   max-width: 100%;
   border-radius: 6px;
+}
+
+.visual-image-node {
+  margin: 1.1em 0;
+}
+
+.visual-image-placeholder {
+  display: grid;
+  gap: 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: rgba(23, 25, 29, 0.82);
+  color: var(--soft-text);
+  padding: 14px 16px;
+}
+
+.visual-image-placeholder strong {
+  color: var(--strong-text);
+  font-size: 0.94rem;
+}
+
+.visual-image-placeholder span {
+  font-size: 0.92rem;
+}
+
+.visual-image-placeholder code {
+  width: fit-content;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.visual-image-placeholder-error {
+  border-style: solid;
+  border-color: rgba(217, 119, 119, 0.4);
 }
 
 .visual-editor-content .tiptap ::selection {
