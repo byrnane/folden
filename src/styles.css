@@ -790,16 +790,21 @@ h1 {
   z-index: 1000;
   display: grid;
   place-items: center;
+  overflow: auto;
   background: rgba(8, 10, 14, 0.72);
   padding: 20px;
 }
 
 .app-dialog {
   width: min(100%, 460px);
+  max-height: calc(100vh - 40px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   border: 1px solid var(--border-strong);
   border-radius: 14px;
   background: #181b20;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
 }
 
 .app-dialog.wide {
@@ -819,6 +824,8 @@ h1 {
 }
 
 .app-dialog-body {
+  min-height: 0;
+  overflow: auto;
   padding: 16px 18px;
 }
 
