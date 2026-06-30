@@ -111,6 +111,8 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
   let watcherWarningUnlisten: (() => void) | null = null
   let tauriWindowCloseUnlisten: (() => void) | null = null
   let isProgrammaticWindowClose = false
+  let disposed = false
+  let subscriptionEpoch = 0
 
   function buildPersistedSessionState() {
     return deps.buildPersistedSessionState()
@@ -412,7 +414,8 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
         await deps.saveSessionState(buildPersistedSessionState())
         await deps.saveRecoverySnapshots(buildPersistedRecoverySnapshots(discardedKeys))
       } else {
-        await persistSessionAndRecoveryState()
+        await deps.saveSessionState(buildPersistedSessionState())
+        await deps.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
       }
     } catch (error) {
       deps.errorMessage.value = `Could not finalize session data: ${formatError(error)}`
@@ -449,6 +452,8 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
   }
 
   function mount(initialText: string) {
+    disposed = false
+    const currentSubscriptionEpoch = ++subscriptionEpoch
     deps.windowTarget.addEventListener('keydown', deps.handleGlobalKeydown)
     deps.windowTarget.addEventListener('beforeunload', handleBeforeUnload)
 
@@ -465,26 +470,46 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
     void deps.listen<NativeFsEvent>('folden://fs-event', (event) => {
       deps.handleExternalFileEvent(event.payload)
     }).then((unlisten) => {
+      if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
+        unlisten()
+        return
+      }
+
       fsEventUnlisten = unlisten
     })
 
     void deps.listen<string | null>('folden://watcher-warning', (event) => {
       deps.setWatcherWarning(event.payload)
     }).then((unlisten) => {
+      if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
+        unlisten()
+        return
+      }
+
       watcherWarningUnlisten = unlisten
     })
 
     void deps.getCurrentWindow().onCloseRequested(handleWindowCloseRequested).then((unlisten) => {
+      if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
+        unlisten()
+        return
+      }
+
       tauriWindowCloseUnlisten = unlisten
     })
   }
 
   function dispose() {
+    disposed = true
+    subscriptionEpoch += 1
     deps.windowTarget.removeEventListener('keydown', deps.handleGlobalKeydown)
     deps.windowTarget.removeEventListener('beforeunload', handleBeforeUnload)
     tauriWindowCloseUnlisten?.()
     fsEventUnlisten?.()
     watcherWarningUnlisten?.()
+    tauriWindowCloseUnlisten = null
+    fsEventUnlisten = null
+    watcherWarningUnlisten = null
     deps.disposeExternalChangesController()
     deps.disposeSessionController()
     deps.disposeDocumentWorkflowController()

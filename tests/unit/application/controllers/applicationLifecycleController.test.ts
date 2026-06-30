@@ -84,6 +84,13 @@ function createHarness() {
   const unlistenWarning = vi.fn()
   const unlistenClose = vi.fn()
   let closeHandler: ((event: { preventDefault: () => void }) => Promise<void> | void) | null = null
+  const currentWindow = {
+    onCloseRequested: vi.fn(async (handler) => {
+      closeHandler = handler
+      return unlistenClose
+    }),
+    destroy: vi.fn().mockResolvedValue(undefined),
+  }
 
   const deps = {
     hasNativeRuntime: true,
@@ -195,13 +202,7 @@ function createHarness() {
     openRecoveryDialog: vi.fn().mockResolvedValue('restore' as const),
     openUnsavedDialog: vi.fn(),
     listen: vi.fn(async (event: string) => event === 'folden://fs-event' ? unlistenFs : unlistenWarning),
-    getCurrentWindow: vi.fn(() => ({
-      onCloseRequested: vi.fn(async (handler) => {
-        closeHandler = handler
-        return unlistenClose
-      }),
-      destroy: vi.fn().mockResolvedValue(undefined),
-    })),
+    getCurrentWindow: vi.fn(() => currentWindow),
   }
 
   const controller = createApplicationLifecycleController(deps)
@@ -211,6 +212,7 @@ function createHarness() {
     controller,
     deps,
     document,
+    currentWindow,
     listeners,
     unlistenClose,
     unlistenFs,
@@ -259,12 +261,28 @@ describe('application lifecycle controller', () => {
     deps.openUnsavedDialog.mockResolvedValueOnce('save')
     await controller.handleWindowCloseRequested(closeEvent)
     expect(deps.saveDirtyDocuments).toHaveBeenCalled()
-    expect(deps.persistSessionAndRecoveryState).toHaveBeenCalled()
+    expect(deps.saveSessionState).toHaveBeenCalled()
+    expect(deps.saveRecoverySnapshots).toHaveBeenCalled()
 
     deps.openUnsavedDialog.mockResolvedValueOnce('discard')
     await controller.handleWindowCloseRequested(closeEvent)
     expect(deps.discardPendingRecoveryEntries).toHaveBeenCalled()
     expect(deps.saveRecoverySnapshots).toHaveBeenCalled()
+  })
+
+  it('keeps the window open and surfaces persistence errors on close', async () => {
+    const { controller, deps, closeEvent, currentWindow } = createHarness()
+    deps.persistSessionAndRecoveryState.mockRejectedValue(new Error('background wrapper should not be used'))
+    deps.saveSessionState.mockRejectedValueOnce(new Error('disk is read-only'))
+
+    await controller.handleWindowCloseRequested(closeEvent)
+
+    expect(closeEvent.preventDefault).toHaveBeenCalled()
+    expect(deps.saveSessionState).toHaveBeenCalled()
+    expect(deps.saveRecoverySnapshots).not.toHaveBeenCalled()
+    expect(currentWindow.destroy).not.toHaveBeenCalled()
+    expect(deps.errorMessage.value).toContain('Could not finalize session data')
+    expect(deps.errorMessage.value).toContain('disk is read-only')
   })
 
   it('mounts native subscriptions and cleans listeners on dispose', async () => {
@@ -284,5 +302,32 @@ describe('application lifecycle controller', () => {
     expect(unlistenWarning).toHaveBeenCalled()
     expect(deps.disposeSessionController).toHaveBeenCalled()
     expect(deps.disposeDocumentWorkflowController).toHaveBeenCalled()
+  })
+
+  it('immediately unlistens subscriptions resolved after dispose', async () => {
+    const { controller, deps, unlistenClose, unlistenFs, unlistenWarning } = createHarness()
+    const fsListenerPromise = Promise.resolve(unlistenFs)
+    const warningListenerPromise = Promise.resolve(unlistenWarning)
+    const closeListenerPromise = Promise.resolve(unlistenClose)
+
+    deps.listen
+      .mockReturnValueOnce(fsListenerPromise)
+      .mockReturnValueOnce(warningListenerPromise)
+    deps.getCurrentWindow().onCloseRequested.mockReturnValueOnce(closeListenerPromise)
+
+    controller.mount('# Untitled\n\n')
+    controller.dispose()
+    await Promise.all([fsListenerPromise, warningListenerPromise, closeListenerPromise])
+    await Promise.resolve()
+
+    expect(unlistenFs).toHaveBeenCalledTimes(1)
+    expect(unlistenWarning).toHaveBeenCalledTimes(1)
+    expect(unlistenClose).toHaveBeenCalledTimes(1)
+
+    controller.dispose()
+
+    expect(unlistenFs).toHaveBeenCalledTimes(1)
+    expect(unlistenWarning).toHaveBeenCalledTimes(1)
+    expect(unlistenClose).toHaveBeenCalledTimes(1)
   })
 })

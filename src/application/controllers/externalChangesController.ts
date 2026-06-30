@@ -7,19 +7,9 @@ export function createExternalChangesController() {
   const watcherWarning = ref<string | null>(null)
   const pendingWorkspaceRefreshes = new Map<string, ReturnType<typeof globalThis.setTimeout>>()
   const pendingDocumentReloads = new Map<string, ReturnType<typeof globalThis.setTimeout>>()
-  let fsEventUnlisten: (() => void) | null = null
-  let watcherWarningUnlisten: (() => void) | null = null
 
   function setWatcherWarning(message: string | null) {
     watcherWarning.value = message
-  }
-
-  function setFsEventUnlisten(unlisten: () => void) {
-    fsEventUnlisten = unlisten
-  }
-
-  function setWatcherWarningUnlisten(unlisten: () => void) {
-    watcherWarningUnlisten = unlisten
   }
 
   function scheduleWorkspaceRefresh(key: string, refresh: () => void) {
@@ -90,9 +80,6 @@ export function createExternalChangesController() {
   }
 
   function dispose() {
-    fsEventUnlisten?.()
-    watcherWarningUnlisten?.()
-
     for (const timeoutId of pendingWorkspaceRefreshes.values()) {
       globalThis.clearTimeout(timeoutId)
     }
@@ -108,8 +95,6 @@ export function createExternalChangesController() {
   return {
     watcherWarning: readonly(watcherWarning),
     setWatcherWarning,
-    setFsEventUnlisten,
-    setWatcherWarningUnlisten,
     scheduleWorkspaceRefresh,
     scheduleDocumentReload,
     handleExternalFileEvent,

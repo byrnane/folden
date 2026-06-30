@@ -53,22 +53,16 @@ describe('external changes controller', () => {
     expect(reload).toHaveBeenCalledTimes(1)
   })
 
-  it('cleans timers and native listeners on dispose', async () => {
+  it('cleans timers on dispose', async () => {
     const controller = createExternalChangesController()
-    const unlistenFs = vi.fn()
-    const unlistenWarning = vi.fn()
     const refresh = vi.fn()
     const reload = vi.fn()
 
-    controller.setFsEventUnlisten(unlistenFs)
-    controller.setWatcherWarningUnlisten(unlistenWarning)
     controller.scheduleWorkspaceRefresh('src', refresh)
     controller.scheduleDocumentReload('doc-1', reload)
     controller.dispose()
     await vi.advanceTimersByTimeAsync(180)
 
-    expect(unlistenFs).toHaveBeenCalledTimes(1)
-    expect(unlistenWarning).toHaveBeenCalledTimes(1)
     expect(refresh).not.toHaveBeenCalled()
     expect(reload).not.toHaveBeenCalled()
   })
