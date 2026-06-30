@@ -73,11 +73,6 @@ Use this format and keep it compact:
 ### Notes
 - Include only unresolved risks, limitations, migrations, or intentional omissions. Omit this section when there are none.
 
-### Usage
-- Report the model, reasoning level, input tokens, cached input tokens, output tokens, total tokens, and credits only when exact task-level values are exposed by the runtime.
-- Never estimate, calculate, or invent usage values.
-- When exact task-level metrics are unavailable, write only: `Usage: unavailable in the current runtime.`
-
 Final-response rules:
 
 - Usually use 3–8 bullets total.
