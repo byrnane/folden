@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import ConflictResolutionDialog from './components/ConflictResolutionDialog.vue'
 import MarkdownSafetyDialog from './components/MarkdownSafetyDialog.vue'
 import PromptDialog from './components/PromptDialog.vue'
 import RecoveryDialog from './components/RecoveryDialog.vue'
@@ -30,6 +31,7 @@ const {
   clearDocumentExternalState,
   clearSidebarSelection,
   confirmDialog,
+  conflictDialog,
   createWorkspaceDirectory,
   createWorkspaceFile,
   dirtyDocuments,
@@ -47,6 +49,7 @@ const {
   loadWorkspace,
   loadingWorkspacePaths,
   markdownSafetyDialog,
+  openConflictResolution,
   openEntryInRight,
   openWorkspaceFile,
   promptDialog,
@@ -56,6 +59,7 @@ const {
   reloadDocumentFromDisk,
   renameWorkspacePath,
   resolveConfirmDialog,
+  resolveConflictDialog,
   resolveMarkdownSafetyDialog,
   resolveRecoveryDialog,
   resolveUnsavedDialog,
@@ -263,19 +267,24 @@ const {
       <section
         v-if="activeDocument?.externalState === 'conflict'"
         class="document-warning"
+        data-testid="conflict-warning"
       >
         <div>
           <strong>External changes detected.</strong>
-          <span>{{ activeDocument.externalMessage }}</span>
+          <span>{{ activeDocument.externalMessage ?? 'Compare Folden and disk versions before continuing.' }}</span>
         </div>
         <div class="document-warning-actions">
-          <button type="button" @click="reloadDocumentFromDisk(activeDocument.id)">
-            Reload from disk
+          <button
+            type="button"
+            data-testid="resolve-conflict"
+            @click="runFileTask(() => openConflictResolution(activeDocument!.id), 'Could not open conflict comparison')"
+          >
+            Resolve conflict
           </button>
-          <button type="button" @click="saveDocumentAsCopy(activeDocument)">
+          <button type="button" @click="saveDocumentAsCopy(activeDocument!)">
             Save As
           </button>
-          <button type="button" @click="clearDocumentExternalState(activeDocument.id)">
+          <button type="button" @click="clearDocumentExternalState(activeDocument!.id)">
             Later
           </button>
         </div>
@@ -459,5 +468,18 @@ const {
     @open-copy="resolveRecoveryDialog('open-copy')"
     @discard="resolveRecoveryDialog('discard')"
     @later="resolveRecoveryDialog('later')"
+  />
+
+  <ConflictResolutionDialog
+    :open="!!conflictDialog"
+    :title="conflictDialog?.title ?? ''"
+    :path="conflictDialog?.path ?? null"
+    :folden-content="conflictDialog?.foldenContent ?? ''"
+    :disk-content="conflictDialog?.diskContent ?? ''"
+    @keep-folden="resolveConflictDialog({ kind: 'keep-folden' })"
+    @reload-disk="resolveConflictDialog({ kind: 'reload-disk' })"
+    @save-as="resolveConflictDialog({ kind: 'save-as' })"
+    @apply-merged="resolveConflictDialog({ kind: 'apply-merged', content: $event })"
+    @later="resolveConflictDialog({ kind: 'later' })"
   />
 </template>

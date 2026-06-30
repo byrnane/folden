@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.4.4"
+version = "0.4.5"
 description = "Local-first desktop Markdown and text editor."
 authors = ["byrnane"]
 license = "UNLICENSED"

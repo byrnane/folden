@@ -3,6 +3,7 @@ import { useSlots } from 'vue'
 
 defineProps<{
   title: string
+  width?: 'default' | 'wide'
 }>()
 
 const slots = useSlots()
@@ -12,6 +13,7 @@ const slots = useSlots()
   <div class="app-dialog-backdrop">
     <section
       class="app-dialog"
+      :class="{ wide: width === 'wide' }"
       role="dialog"
       aria-modal="true"
       :aria-label="title"
