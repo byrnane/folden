@@ -6,6 +6,12 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.4.11 - 2026-06-30
+
+* `applicationShell` доведен до тонкого composition root: логика панелей, workspace, session/recovery и внешних изменений перенесена в контроллеры.
+* Состояние контроллеров закрыто от прямых внешних мутаций, UI и shell меняют его через методы контроллеров.
+* Добавлены изолированные unit-тесты для `paneController`, `workspaceController`, `sessionController` и `externalChangesController`.
+
 ## 0.4.10 - 2026-06-30
 
 * `applicationShell` разделен на контроллеры документов, панелей, workspace, session, watcher-изменений, диалогов и команд.
