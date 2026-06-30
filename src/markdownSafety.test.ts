@@ -6,6 +6,39 @@ import {
   validateLinkTarget,
 } from './markdownSafety'
 
+const unsafeFixtures = [
+  {
+    name: 'frontmatter',
+    source: ['---', 'title: demo', '---', '', 'Body'].join('\n'),
+    expectedKinds: ['frontmatter'],
+  },
+  {
+    name: 'table',
+    source: ['| a | b |', '| - | - |', '| 1 | 2 |'].join('\n'),
+    expectedKinds: ['table'],
+  },
+  {
+    name: 'task list',
+    source: '- [x] done',
+    expectedKinds: ['task-list'],
+  },
+  {
+    name: 'footnote',
+    source: ['Text[^1]', '', '[^1]: note'].join('\n'),
+    expectedKinds: ['footnote'],
+  },
+  {
+    name: 'html comment and raw html',
+    source: ['<!-- hidden -->', '<div>html</div>'].join('\n'),
+    expectedKinds: ['comment', 'html'],
+  },
+  {
+    name: 'custom directive',
+    source: [':::note', 'Body', ':::'].join('\n'),
+    expectedKinds: ['directive'],
+  },
+] as const
+
 describe('markdown safety', () => {
   it('accepts a supported markdown subset', () => {
     const report = analyzeMarkdownSafety([
@@ -35,29 +68,16 @@ describe('markdown safety', () => {
     expect(report.remoteImages).toEqual([])
   })
 
-  it('flags unsupported constructs conservatively', () => {
-    const report = analyzeMarkdownSafety([
-      '---',
-      'title: demo',
-      '---',
-      '',
-      '| a | b |',
-      '| - | - |',
-      '- [x] task',
-      '[^1]: footnote',
-      '<div>html</div>',
-      ':::note',
-    ].join('\n'))
+  it('flags unsafe fixtures before visual mode can rewrite them', () => {
+    for (const fixture of unsafeFixtures) {
+      const report = analyzeMarkdownSafety(fixture.source)
 
-    expect(report.safeForVisualEditing).toBe(false)
-    expect(report.unsupportedFeatures.map((feature) => feature.kind)).toEqual([
-      'frontmatter',
-      'table',
-      'task-list',
-      'footnote',
-      'html',
-      'directive',
-    ])
+      expect(report.safeForVisualEditing, fixture.name).toBe(false)
+      expect(
+        [...new Set(report.unsupportedFeatures.map((feature) => feature.kind))],
+        fixture.name,
+      ).toEqual(fixture.expectedKinds)
+    }
   })
 
   it('tracks remote images without blocking visual editing by itself', () => {
