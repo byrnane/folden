@@ -1,7 +1,13 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
+import { applicationSettingsStorageKey } from '../../src/settings'
 import { installTauriMock } from './tauriMock'
 
-test.beforeEach(async ({ page }) => {
+type OpenAppOptions = {
+  mockOptions?: Parameters<typeof installTauriMock>[1]
+  storageEntries?: Record<string, string>
+}
+
+async function openApp(page: Page, options: OpenAppOptions = {}) {
   const consoleErrors: string[] = []
   const pageErrors: string[] = []
 
@@ -14,19 +20,28 @@ test.beforeEach(async ({ page }) => {
     pageErrors.push(error.message)
   })
 
-  await page.addInitScript(() => {
+  await page.addInitScript((storageEntries: Record<string, string>) => {
     window.localStorage.clear()
-  })
-  await installTauriMock(page)
+
+    for (const [key, value] of Object.entries(storageEntries)) {
+      window.localStorage.setItem(key, value)
+    }
+  }, options.storageEntries ?? {})
+  await installTauriMock(page, options.mockOptions)
   await page.goto('/')
   await expect(page.getByTestId('app-shell')).toBeVisible()
-
   await page.evaluate(() => new Promise((resolve) => window.requestAnimationFrame(resolve)))
+
   expect(pageErrors).toEqual([])
   expect(consoleErrors).toEqual([])
-})
+}
+
+function sourceEditor(host: Page | Locator) {
+  return host.getByTestId('source-editor').locator('.cm-content')
+}
 
 test('opens a mocked workspace and saves an edited Markdown document', async ({ page }) => {
+  await openApp(page)
   await page.getByTestId('open-folder-empty').click()
 
   await expect(page.getByRole('heading', { name: 'FoldenE2E' })).toBeVisible()
@@ -40,7 +55,7 @@ test('opens a mocked workspace and saves an edited Markdown document', async ({ 
   await expect(page.getByTestId('status-path')).toContainText('C:\\FoldenE2E\\README.md')
 
   await page.getByRole('button', { name: 'Source' }).click()
-  const editor = page.getByTestId('source-editor').locator('.cm-content')
+  const editor = sourceEditor(page)
   await editor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\nEdited by Playwright.\n')
@@ -59,13 +74,107 @@ test('opens a mocked workspace and saves an edited Markdown document', async ({ 
   await expect(page.getByTestId('status-path')).toContainText('C:\\FoldenE2E\\README.md')
 })
 
+test('expands workspace folders lazily and opens nested files', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+
+  await expect(page.getByTestId('workspace-tree')).toContainText('notes')
+  await expect(page.getByTestId('workspace-entry-notes\\daily.md')).toHaveCount(0)
+
+  await page.getByTestId('workspace-entry-notes').click()
+  await expect(page.getByTestId('workspace-entry-notes\\daily.md')).toBeVisible()
+
+  await page.getByTestId('workspace-entry-notes\\daily.md').click()
+  await expect(page.getByTestId('document-title')).toHaveText('daily.md')
+  await expect(page.getByTestId('status-path')).toContainText('C:\\FoldenE2E\\notes\\daily.md')
+})
+
+test('keeps nested workspace files visible after saving edits', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-notes').click()
+  await page.getByTestId('workspace-entry-notes\\daily.md').click()
+
+  await page.getByRole('button', { name: 'Source' }).click()
+  const editor = sourceEditor(page)
+  await editor.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
+  await page.keyboard.type('\nKeep me visible.\n')
+  await page.getByTestId('save-document').click()
+
+  await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
+  await expect(page.getByTestId('workspace-entry-notes\\daily.md')).toBeVisible()
+  await expect(page.getByTestId('workspace-entry-notes')).toBeVisible()
+})
+
+test('keeps split source and visual panes in sync for the same document', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+
+  await page.locator('button[title="Toggle split view"]').click()
+  await page.getByRole('button', { name: 'Open Right' }).click()
+
+  const panes = page.locator('.editor-pane')
+  const leftPane = panes.nth(0)
+  const rightPane = panes.nth(1)
+
+  await leftPane.getByRole('button', { name: 'Source' }).click()
+  const leftEditor = sourceEditor(leftPane)
+  await leftEditor.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
+  await page.keyboard.type('\nShared from source.\n')
+
+  await rightPane.getByRole('button', { name: 'Visual' }).click()
+  await expect(rightPane.getByTestId('visual-editor')).toContainText('Shared from source.')
+
+  const visualSurface = rightPane.locator('.visual-editor-content .ProseMirror')
+  await visualSurface.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
+  await page.keyboard.type('Visual side sync.')
+
+  await expect(leftPane.getByTestId('source-editor')).toContainText('Visual side sync.')
+})
+
+test('loads persisted settings before opening a workspace', async ({ page }) => {
+  await openApp(page, {
+    storageEntries: {
+      [applicationSettingsStorageKey]: JSON.stringify({
+        autosave: {
+          enabled: true,
+          debounceMs: 1200,
+        },
+        remoteImages: {
+          policy: 'blocked',
+        },
+        workspace: {
+          ignoredNames: ['notes'],
+        },
+      }),
+    },
+  })
+
+  await expect(page.getByRole('checkbox')).toBeChecked()
+  await page.getByTestId('open-folder-empty').click()
+
+  await expect(page.getByTestId('workspace-tree')).toContainText('README.md')
+  await expect(page.getByTestId('workspace-tree')).not.toContainText('.cache')
+  await expect(page.getByTestId('workspace-tree')).not.toContainText('notes')
+
+  await page.getByRole('checkbox').uncheck()
+  await expect.poll(async () => page.evaluate((storageKey) => (
+    window.localStorage.getItem(storageKey)
+  ), applicationSettingsStorageKey)).toContain('"enabled":false')
+})
+
 test('autosaves existing files but does not autosave scratch documents', async ({ page }) => {
+  await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
   await page.getByRole('checkbox').check()
   await page.getByRole('button', { name: 'Source' }).click()
 
-  const editor = page.getByTestId('source-editor').locator('.cm-content')
+  const editor = sourceEditor(page)
   await editor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\nAutosaved change.\n')
@@ -82,7 +191,7 @@ test('autosaves existing files but does not autosave scratch documents', async (
   await page.getByRole('button', { name: 'New scratch document' }).click()
   await page.getByRole('button', { name: 'Source' }).click()
 
-  const scratchEditor = page.getByTestId('source-editor').locator('.cm-content')
+  const scratchEditor = sourceEditor(page)
   await scratchEditor.click()
   await page.keyboard.type('Scratch should stay dirty')
 
@@ -91,12 +200,48 @@ test('autosaves existing files but does not autosave scratch documents', async (
   await expect(page.getByTestId('status-path')).toContainText('Scratch')
 })
 
+test('restores recovery snapshots into the original document on startup', async ({ page }) => {
+  await openApp(page, {
+    mockOptions: {
+      recoveryEntries: [
+        {
+          key: 'file:c:\\foldene2e\\readme.md',
+          kind: 'saved',
+          path: 'C:\\FoldenE2E\\README.md',
+          workspaceRootPath: 'C:\\FoldenE2E',
+          relativePath: 'README.md',
+          name: 'README.md',
+          content: '# E2E Note\n\nRecovered text.\n',
+          fileFormat: {
+            lineEnding: 'lf',
+            hasUtf8Bom: false,
+          },
+          fingerprint: {
+            size: 30,
+            modifiedAtMs: 1_800_000_000_005,
+          },
+          updatedAtMs: 1_800_000_000_010,
+        },
+      ],
+    },
+  })
+
+  await expect(page.getByRole('dialog', { name: 'Recovered changes for README.md' })).toBeVisible()
+  await page.getByRole('button', { name: 'Restore' }).click()
+
+  await page.getByRole('button', { name: 'Source' }).click()
+  await expect(page.getByTestId('document-title')).toHaveText('README.md')
+  await expect(page.getByTestId('source-editor')).toContainText('Recovered text.')
+  await expect(page.getByTestId('dirty-marker')).toContainText('1 unsaved')
+})
+
 test('asks before closing a dirty document tab', async ({ page }) => {
+  await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
   await page.getByRole('button', { name: 'Source' }).click()
 
-  const editor = page.getByTestId('source-editor').locator('.cm-content')
+  const editor = sourceEditor(page)
   await editor.click()
   await page.keyboard.type('Dirty close check')
 
@@ -113,6 +258,7 @@ test('asks before closing a dirty document tab', async ({ page }) => {
 })
 
 test('closes an unchanged visual document without dirty prompt', async ({ page }) => {
+  await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
 
@@ -127,11 +273,12 @@ test('closes an unchanged visual document without dirty prompt', async ({ page }
 })
 
 test('shows a readable conflict diff and preserves the dirty copy when reloading disk content', async ({ page }) => {
+  await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
   await page.getByRole('button', { name: 'Source' }).click()
 
-  const editor = page.getByTestId('source-editor').locator('.cm-content')
+  const editor = sourceEditor(page)
   await editor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\nLocal conflict line.\n')
@@ -161,6 +308,7 @@ test('shows a readable conflict diff and preserves the dirty copy when reloading
 test('keeps remote images blocked until the document explicitly allows them', async ({ page }) => {
   const remoteRequests: string[] = []
 
+  await openApp(page)
   await page.route('https://example.com/**', async (route) => {
     remoteRequests.push(route.request().url())
     await route.fulfill({
@@ -177,7 +325,7 @@ test('keeps remote images blocked until the document explicitly allows them', as
   await page.getByTestId('workspace-entry-README.md').click()
   await page.getByRole('button', { name: 'Source' }).click()
 
-  const editor = page.getByTestId('source-editor').locator('.cm-content')
+  const editor = sourceEditor(page)
   await editor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\n![remote](https://example.com/preview.png)\n')
