@@ -13,6 +13,7 @@ import {
   closeNativeDocuments,
   createDirectory,
   createFile,
+  exportDiagnostics,
   listDirectory,
   logFrontendEvent,
   type NativeFsEvent,
@@ -2625,6 +2626,13 @@ export function useApplicationShell() {
     event.returnValue = ''
   }
 
+  async function exportDiagnosticReport() {
+    await runFileTask(async () => {
+      const exportedPath = await exportDiagnostics()
+      watcherWarning.value = `Diagnostics exported to ${cleanDisplayPath(exportedPath)}`
+    }, 'Could not export diagnostics')
+  }
+
   const commandRegistry = createCommandRegistry([
     {
       id: 'document.save',
@@ -2687,6 +2695,12 @@ export function useApplicationShell() {
       title: 'Open Logs Folder',
       canExecute: () => hasNativeRuntimeOnStartup,
       execute: () => openLogsFolder(),
+    },
+    {
+      id: 'diagnostics.export',
+      title: 'Export Diagnostics',
+      canExecute: () => hasNativeRuntimeOnStartup,
+      execute: () => exportDiagnosticReport(),
     },
     {
       id: 'layout.toggleSplit',
@@ -2839,7 +2853,7 @@ export function useApplicationShell() {
       isProgrammaticWindowClose = true
 
       try {
-        await getCurrentWindow().close()
+        await getCurrentWindow().destroy()
       } finally {
         isProgrammaticWindowClose = false
       }
@@ -2910,6 +2924,7 @@ export function useApplicationShell() {
     moveActiveDocumentToRight,
     openConflictResolution,
     openEntryInRight,
+    exportDiagnosticReport,
     openLogsFolder,
     openNativeDocument,
     openWorkspace,

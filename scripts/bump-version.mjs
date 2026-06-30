@@ -63,6 +63,19 @@ function replaceCargoVersion(source, nextVersion) {
   return nextSource
 }
 
+function replaceCargoLockAppVersion(source, nextVersion) {
+  const nextSource = source.replace(
+    /(\[\[package\]\]\s+name\s*=\s*"app"\s+version\s*=\s*")([^"]+)(")/m,
+    `$1${nextVersion}$3`,
+  )
+
+  if (nextSource === source) {
+    throw new Error('Could not find app package version in src-tauri/Cargo.lock')
+  }
+
+  return nextSource
+}
+
 function ensureChangelogHeading(source, nextVersion) {
   const releaseHeadingRegex = /^##\s+(\d+\.\d+\.\d+)\s+-\s+\d{4}-\d{2}-\d{2}\s*$/m
   const headingMatch = releaseHeadingRegex.exec(source)
@@ -87,11 +100,12 @@ if (!versionArg) {
   process.exit(1)
 }
 
-const [packageJson, packageLock, tauriConfig, cargoToml, changelog] = await Promise.all([
+const [packageJson, packageLock, tauriConfig, cargoToml, cargoLock, changelog] = await Promise.all([
   readJson('package.json'),
   readJson('package-lock.json'),
   readJson('src-tauri/tauri.conf.json'),
   readText('src-tauri/Cargo.toml'),
+  readText('src-tauri/Cargo.lock'),
   readText('CHANGELOG.md'),
 ])
 
@@ -116,6 +130,7 @@ await Promise.all([
   writeJson('package-lock.json', packageLock),
   writeJson('src-tauri/tauri.conf.json', tauriConfig),
   writeText('src-tauri/Cargo.toml', replaceCargoVersion(cargoToml, nextVersion)),
+  writeText('src-tauri/Cargo.lock', replaceCargoLockAppVersion(cargoLock, nextVersion)),
   writeText('CHANGELOG.md', ensureChangelogHeading(changelog, nextVersion)),
 ])
 

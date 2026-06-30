@@ -6,7 +6,7 @@ The project goal is to combine a fast desktop writing tool, Markdown-friendly fi
 
 ## Current Status
 
-The repository currently contains the 0.3 desktop editor:
+The repository currently contains the 0.4 desktop editor:
 
 * Vue 3 + TypeScript + Vite;
 * Tauri 2 shell;
@@ -22,12 +22,13 @@ The repository currently contains the 0.3 desktop editor:
 * crash recovery for saved and scratch documents;
 * filesystem watcher with conflict and missing-target states;
 * lazy workspace tree loading by directory;
+* optional autosave for existing saved files;
 * Markdown safety checks before Visual mode;
 * production CSP, link validation, and remote-image blocking in Visual mode;
-* bounded local logs and logs-folder access;
+* bounded local logs, logs-folder access, and local diagnostics export;
 * centered editor canvas with a polished dark theme.
 
-Still out of scope: autosave, backlinks, SQLite indexing, custom blocks, slash commands, plugin API, and arbitrary split grids.
+Still out of scope: backlinks, SQLite indexing, custom blocks, slash commands, plugin API, and arbitrary split grids.
 
 ## Run Frontend
 
@@ -112,6 +113,7 @@ See [docs/SETUP.md](docs/SETUP.md) for the Windows setup notes.
 * [TECH_STACK.md](TECH_STACK.md) describes the intended stack.
 * [ROADMAP.md](ROADMAP.md) lists the long-term milestones.
 * [CHANGELOG.md](CHANGELOG.md) tracks version changes.
+* [specs/FOLDEN_V0.4_MEASUREMENTS.md](specs/FOLDEN_V0.4_MEASUREMENTS.md) records the 0.4 release measurement checklist.
 * [specs/FOLDEN_V0.3_MEASUREMENTS.md](specs/FOLDEN_V0.3_MEASUREMENTS.md) records the 0.3 performance baseline and repeatable measurement procedure.
 * [docs/MVP.md](docs/MVP.md) defines the proposed first useful version.
 * [docs/EDITOR_ENGINE.md](docs/EDITOR_ENGINE.md) describes the editor engine split.

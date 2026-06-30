@@ -24,6 +24,16 @@ function readCargoVersion(source) {
   return versionMatch[1]
 }
 
+function readCargoLockAppVersion(source) {
+  const versionMatch = source.match(/\[\[package\]\]\s+name\s*=\s*"app"\s+version\s*=\s*"([^"]+)"/m)
+
+  if (!versionMatch) {
+    throw new Error('Could not find app package version in src-tauri/Cargo.lock')
+  }
+
+  return versionMatch[1]
+}
+
 function readLatestChangelogVersion(source) {
   const versionMatch = source.match(/^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s+-/m)
 
@@ -34,11 +44,12 @@ function readLatestChangelogVersion(source) {
   return versionMatch[1]
 }
 
-const [packageJson, packageLock, tauriConfig, cargoToml, changelog] = await Promise.all([
+const [packageJson, packageLock, tauriConfig, cargoToml, cargoLock, changelog] = await Promise.all([
   readJson('package.json'),
   readJson('package-lock.json'),
   readJson('src-tauri/tauri.conf.json'),
   readText('src-tauri/Cargo.toml'),
+  readText('src-tauri/Cargo.lock'),
   readText('CHANGELOG.md'),
 ])
 
@@ -49,6 +60,7 @@ const checks = [
   ['package-lock.json packages[""]', packageLock.packages?.['']?.version],
   ['src-tauri/tauri.conf.json', tauriConfig.version],
   ['src-tauri/Cargo.toml', readCargoVersion(cargoToml)],
+  ['src-tauri/Cargo.lock app package', readCargoLockAppVersion(cargoLock)],
   ['CHANGELOG.md', readLatestChangelogVersion(changelog)],
 ]
 

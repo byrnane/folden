@@ -4,6 +4,7 @@ export type CommandId =
   | 'document.save'
   | 'document.undo'
   | 'document.redo'
+  | 'diagnostics.export'
   | 'logs.open'
   | 'workspace.createDirectory'
   | 'workspace.createFile'

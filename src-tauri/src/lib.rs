@@ -404,6 +404,10 @@ fn create_native_watcher<R: Runtime>(
             };
 
             let emit_event = |kind: &str, path: &Path| {
+                if is_folden_temp_save_path(path) {
+                    return;
+                }
+
                 let path_string = path_to_string(path);
                 let normalized_path = normalize_key(&path_string);
                 let current_time = now_ms();
@@ -463,6 +467,13 @@ fn create_native_watcher<R: Runtime>(
         },
         notify::Config::default(),
     )
+}
+
+fn is_folden_temp_save_path(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .map(|name| name.starts_with(".folden-save-") && name.ends_with(".tmp"))
+        .unwrap_or(false)
 }
 
 fn register_self_write_suppression(state: &NativeAppState, path: &Path) {
@@ -888,6 +899,114 @@ fn open_directory_in_file_manager(path: &Path) -> std::io::Result<()> {
         std::process::Command::new("xdg-open").arg(path).spawn()?;
         Ok(())
     }
+}
+
+fn replace_known_path(value: String, path: &Path, label: &str) -> String {
+    let display_path = path_to_string(path);
+    value
+        .replace(&display_path, label)
+        .replace(&display_path.replace('\\', "/"), label)
+}
+
+fn redact_absolute_paths(value: &str) -> String {
+    let chars = value.chars().collect::<Vec<_>>();
+    let mut redacted = String::new();
+    let mut index = 0;
+
+    while index < chars.len() {
+        let is_drive_path = index + 2 < chars.len()
+            && chars[index].is_ascii_alphabetic()
+            && chars[index + 1] == ':'
+            && (chars[index + 2] == '\\' || chars[index + 2] == '/');
+        let is_unc_path =
+            index + 1 < chars.len() && chars[index] == '\\' && chars[index + 1] == '\\';
+
+        if !is_drive_path && !is_unc_path {
+            redacted.push(chars[index]);
+            index += 1;
+            continue;
+        }
+
+        while index < chars.len()
+            && !matches!(
+                chars[index],
+                '"' | '\'' | '`' | '<' | '>' | '|' | '\n' | '\r' | '\t'
+            )
+        {
+            index += 1;
+        }
+
+        redacted.push_str("[path]");
+    }
+
+    redacted
+}
+
+fn redact_diagnostic_message(value: &str, app_data_dir: &Path, log_dir: &Path) -> String {
+    let without_app_data = replace_known_path(value.to_string(), app_data_dir, "[app-data]");
+    let without_log_dir = replace_known_path(without_app_data, log_dir, "[logs]");
+    redact_absolute_paths(&without_log_dir)
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn read_redacted_logs(log_dir: &Path, app_data_dir: &Path) -> Vec<String> {
+    let mut logs = Vec::new();
+    let Ok(entries) = fs::read_dir(log_dir) else {
+        return logs;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+
+        if !path.is_file() {
+            continue;
+        }
+
+        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+
+        if !name.starts_with("folden") {
+            continue;
+        }
+
+        let Ok(content) = fs::read_to_string(&path) else {
+            continue;
+        };
+
+        logs.push(format!(
+            "## Log: {name}\n{}",
+            redact_diagnostic_message(&content, app_data_dir, log_dir)
+        ));
+    }
+
+    logs.sort();
+    logs
+}
+
+fn build_diagnostic_report(app_data_dir: &Path, log_dir: &Path) -> String {
+    let mut sections = vec![
+        "# Folden Diagnostics".to_string(),
+        format!("version: {}", env!("CARGO_PKG_VERSION")),
+        format!("os: {}", std::env::consts::OS),
+        format!("arch: {}", std::env::consts::ARCH),
+        format!("createdAtMs: {}", now_ms()),
+        "privacy: document content, session state, recovery snapshots, and full user paths are excluded.".to_string(),
+        String::new(),
+        "## Logs".to_string(),
+    ];
+    let logs = read_redacted_logs(log_dir, app_data_dir);
+
+    if logs.is_empty() {
+        sections.push("No Folden log files were available.".to_string());
+    } else {
+        sections.extend(logs);
+    }
+
+    sections.join("\n")
 }
 
 fn save_json_file<T: serde::Serialize>(
@@ -1401,6 +1520,7 @@ fn save_text_file(
             expected_fingerprint.as_ref(),
             "save_text_file",
         )?;
+        register_self_write_suppression(&state, &document.path);
         let fingerprint = write_atomic_text_file(&document.path, &bytes, "save_text_file")?;
         register_self_write_suppression(&state, &document.path);
 
@@ -1455,10 +1575,12 @@ fn save_text_file(
                 expected_fingerprint.as_ref(),
                 "save_text_file",
             )?;
+            register_self_write_suppression(&state, &target_path);
             let fingerprint = write_atomic_text_file(&target_path, &bytes, "save_text_file")?;
             register_self_write_suppression(&state, &target_path);
             fingerprint
         } else {
+            register_self_write_suppression(&state, &target_path);
             let fingerprint = write_atomic_text_file(&target_path, &bytes, "save_text_file")?;
             register_self_write_suppression(&state, &target_path);
             fingerprint
@@ -1606,6 +1728,27 @@ fn open_logs_folder<R: Runtime>(app_handle: tauri::AppHandle<R>) -> NativeResult
     open_directory_in_file_manager(&log_directory)
         .map_err(|error| io_error("open_logs_folder", error))?;
     Ok(())
+}
+
+#[tauri::command]
+fn export_diagnostics<R: Runtime>(app_handle: tauri::AppHandle<R>) -> NativeResult<String> {
+    let app_data_dir = app_data_directory(&app_handle, "export_diagnostics")?;
+    let log_dir = app_handle.path().app_log_dir().map_err(|error| {
+        native_error(
+            FileErrorCode::Unknown,
+            "export_diagnostics",
+            "Could not resolve the logs folder.",
+            Some(error.to_string()),
+            true,
+        )
+    })?;
+    fs::create_dir_all(&log_dir).map_err(|error| io_error("export_diagnostics", error))?;
+
+    let report = build_diagnostic_report(&app_data_dir, &log_dir);
+    let report_path = app_data_dir.join("folden-diagnostics.txt");
+    fs::write(&report_path, report).map_err(|error| io_error("export_diagnostics", error))?;
+
+    Ok(path_to_string(&report_path))
 }
 
 #[tauri::command]
@@ -1861,6 +2004,7 @@ pub fn run() {
             close_native_documents,
             log_frontend_event,
             open_logs_folder,
+            export_diagnostics,
             list_directory,
             open_text_file_by_path,
             create_file,
@@ -2041,6 +2185,43 @@ mod tests {
             fs::read_to_string(&path).expect("failed to read original file"),
             "original"
         );
+    }
+
+    #[test]
+    fn folden_temp_save_paths_are_ignored_by_watcher() {
+        assert!(is_folden_temp_save_path(Path::new(
+            ".folden-save-write-1.tmp"
+        )));
+        assert!(is_folden_temp_save_path(Path::new(
+            "C:\\Docs\\.folden-save-write-1.tmp"
+        )));
+        assert!(!is_folden_temp_save_path(Path::new("draft.md")));
+    }
+
+    #[test]
+    fn diagnostic_report_redacts_paths_and_excludes_app_state_content() {
+        let temp = TempWorkspace::new();
+        let app_data_dir = temp.path.join("app-data");
+        let log_dir = temp.path.join("logs");
+        fs::create_dir_all(&app_data_dir).expect("failed to create app data dir");
+        fs::create_dir_all(&log_dir).expect("failed to create log dir");
+        fs::write(
+            log_dir.join("folden.log"),
+            "opened C:\\Users\\Max\\Documents\\private.md\nsaved secret draft text\n",
+        )
+        .expect("failed to write log");
+        fs::write(
+            app_data_dir.join("recovery-snapshots.json"),
+            r#"[{"content":"must not appear"}]"#,
+        )
+        .expect("failed to write recovery state");
+
+        let report = build_diagnostic_report(&app_data_dir, &log_dir);
+
+        assert!(report.contains("Folden Diagnostics"));
+        assert!(report.contains("[path]"));
+        assert!(!report.contains("C:\\Users\\Max\\Documents\\private.md"));
+        assert!(!report.contains("must not appear"));
     }
 
     #[test]
