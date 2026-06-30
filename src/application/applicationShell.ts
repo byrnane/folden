@@ -151,8 +151,6 @@ export function useApplicationShell() {
   const {
     watcherWarning,
     setWatcherWarning,
-    setFsEventUnlisten,
-    setWatcherWarningUnlisten,
     scheduleWorkspaceRefresh: scheduleWorkspaceRefreshDebounced,
     scheduleDocumentReload: scheduleDocumentReloadDebounced,
     handleExternalFileEvent: routeExternalFileEvent,

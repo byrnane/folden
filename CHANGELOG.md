@@ -6,9 +6,16 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.4.13 - 2026-07-01
+
+* Закрытие окна теперь блокируется, если Folden не смог финализировать session/recovery persistence.
+* Владение Tauri watcher subscriptions закреплено за `applicationLifecycleController`; `externalChangesController` оставлен для debounce и маршрутизации filesystem events.
+* Добавлены unit-тесты для async cleanup race и основных сценариев `workspaceWorkflowController`.
+
 ## 0.4.12 - 2026-06-30
 
-* Черновик release notes.
+* Завершена декомпозиция `applicationShell`: lifecycle, workspace workflow и document workflow оформлены отдельными контроллерами.
+* Закреплены контракты между shell и контроллерами без изменения пользовательского поведения редактора.
 
 ## 0.4.11 - 2026-06-30
 
