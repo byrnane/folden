@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 
 export async function installTauriMock(page: Page) {
-  await page.evaluate(() => {
+  await page.addInitScript(() => {
     type WorkspaceEntry = {
       name: string
       path: string
@@ -35,6 +35,7 @@ export async function installTauriMock(page: Page) {
       ['notes\\daily.md', '# Daily\n\nNested note.\n'],
     ])
     const callbacks = new Map<number, (data: unknown) => unknown>()
+    const eventListeners = new Map<string, Set<number>>()
     let nextCallbackId = 1
     let nextDocumentId = 1
     let modifiedAtMs = 1_800_000_000_000
@@ -150,9 +151,18 @@ export async function installTauriMock(page: Page) {
         case 'log_frontend_event':
         case 'open_logs_folder':
         case 'plugin:event|unlisten':
+          if (typeof args?.event === 'string' && typeof args?.eventId === 'number') {
+            eventListeners.get(args.event)?.delete(args.eventId)
+          }
+          return undefined
         case 'plugin:window|close':
           return undefined
         case 'plugin:event|listen':
+          if (typeof args?.event === 'string' && typeof args?.handler === 'number') {
+            const listeners = eventListeners.get(args.event) ?? new Set<number>()
+            listeners.add(args.handler)
+            eventListeners.set(args.event, listeners)
+          }
           return args?.handler
         default:
           throw new Error(`Unhandled Tauri command in E2E mock: ${cmd}`)
@@ -192,6 +202,22 @@ export async function installTauriMock(page: Page) {
         },
       },
       __FOLDEN_TAURI_MOCK__: {
+        emitFsChange(relativePath: string, content: string) {
+          files.set(relativePath, content)
+          const listeners = eventListeners.get('folden://fs-event')
+          if (!listeners) {
+            return
+          }
+
+          const payload = {
+            kind: 'modify',
+            path: `${workspace.rootPath}\\${relativePath}`,
+          }
+
+          for (const id of listeners) {
+            callbacks.get(id)?.({ event: 'folden://fs-event', payload })
+          }
+        },
         readFile(relativePath: string) {
           return files.get(relativePath) ?? null
         },

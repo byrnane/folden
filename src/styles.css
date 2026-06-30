@@ -762,6 +762,10 @@ h1 {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
 }
 
+.app-dialog.wide {
+  width: min(100%, 1080px);
+}
+
 .app-dialog-header {
   border-bottom: 1px solid var(--border);
   padding: 16px 18px 12px;
@@ -835,6 +839,137 @@ h1 {
   color: var(--muted-text);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.conflict-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.conflict-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 8px;
+}
+
+.conflict-pill.changed,
+.conflict-line.changed {
+  background: rgba(212, 170, 86, 0.12);
+}
+
+.conflict-pill.added,
+.conflict-line.added {
+  background: rgba(90, 169, 167, 0.12);
+}
+
+.conflict-pill.removed,
+.conflict-line.removed {
+  background: rgba(242, 121, 131, 0.1);
+}
+
+.conflict-diff {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.conflict-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.conflict-panel-header {
+  display: grid;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  background: #14181d;
+  padding: 10px 12px;
+}
+
+.conflict-panel-header strong {
+  color: var(--strong-text);
+  font-size: 13px;
+}
+
+.conflict-panel-header span {
+  color: var(--muted-text);
+  font-size: 12px;
+}
+
+.conflict-lines {
+  max-height: 240px;
+  overflow: auto;
+  background: #111419;
+}
+
+.conflict-line {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: start;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.conflict-line-number {
+  display: flex;
+  justify-content: flex-end;
+  color: var(--muted-text);
+  font-family:
+    "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono",
+    monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 8px 8px 8px 0;
+}
+
+.conflict-line pre {
+  margin: 0;
+  min-width: 0;
+  overflow-x: auto;
+  color: var(--soft-text);
+  font-family:
+    "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono",
+    monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.conflict-merge {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.conflict-merge-input {
+  min-height: 180px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #111419;
+  color: var(--strong-text);
+  font-family:
+    "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono",
+    monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 12px;
+  resize: vertical;
+}
+
+.conflict-merge-input:focus {
+  border-color: var(--accent);
+  outline: 1px solid rgba(90, 169, 167, 0.32);
 }
 
 .dialog-inline-actions {
@@ -925,5 +1060,9 @@ button.danger:hover:not(:disabled) {
   .app-dialog-actions,
   .dialog-inline-actions {
     flex-wrap: wrap;
+  }
+
+  .conflict-diff {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -2,6 +2,7 @@ import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createCommandRegistry, type CommandId } from './commands'
+import type { FileFingerprint } from './domain/document'
 import {
   analyzeMarkdownSafety,
   type MarkdownSafetyReport,
@@ -130,6 +131,21 @@ type MarkdownSafetyDialogState = {
   resolve: (confirmed: boolean) => void
 }
 
+type ConflictDialogDecision =
+  | { kind: 'keep-folden' }
+  | { kind: 'reload-disk' }
+  | { kind: 'save-as' }
+  | { kind: 'apply-merged', content: string }
+  | { kind: 'later' }
+
+type ConflictDialogState = {
+  title: string
+  path: string | null
+  foldenContent: string
+  diskContent: string
+  resolve: (decision: ConflictDialogDecision) => void
+}
+
 
 export function useApplicationShell() {
   const initialText = '# Untitled\n\nStart writing in Folden.\n'
@@ -157,6 +173,7 @@ export function useApplicationShell() {
     markDocumentSaveError,
     replaceDocumentFromDisk,
     markDocumentConflict,
+    acknowledgeDocumentConflict,
     markDocumentMissing,
     clearDocumentExternalState,
     updateDocumentPaths,
@@ -198,6 +215,7 @@ export function useApplicationShell() {
   const confirmDialog = ref<ConfirmDialogState | null>(null)
   const unsavedDialog = ref<UnsavedDialogState | null>(null)
   const markdownSafetyDialog = ref<MarkdownSafetyDialogState | null>(null)
+  const conflictDialog = ref<ConflictDialogState | null>(null)
   const recoveryDialog = ref<RecoveryDialogState | null>(null)
   const pendingRecoveryEntries = ref<RecoverySnapshot[]>([])
   let tauriWindowCloseUnlisten: (() => void) | null = null
@@ -912,6 +930,21 @@ export function useApplicationShell() {
   function resolveRecoveryDialog(decision: RecoveryDialogDecision) {
     const currentDialog = recoveryDialog.value
     recoveryDialog.value = null
+    currentDialog?.resolve(decision)
+  }
+
+  function openConflictDialog(options: Omit<ConflictDialogState, 'resolve'>) {
+    return new Promise<ConflictDialogDecision>((resolve) => {
+      conflictDialog.value = {
+        ...options,
+        resolve,
+      }
+    })
+  }
+
+  function resolveConflictDialog(decision: ConflictDialogDecision) {
+    const currentDialog = conflictDialog.value
+    conflictDialog.value = null
     currentDialog?.resolve(decision)
   }
 
@@ -2268,6 +2301,149 @@ export function useApplicationShell() {
     return cleanDisplayPath(path).slice(cleanDisplayPath(workspace.value.rootPath).length + 1)
   }
 
+  async function loadCurrentDiskDocument(document: OpenDocument) {
+    if (!document.path) {
+      return null
+    }
+
+    return (
+      workspace.value &&
+      document.workspaceId === workspace.value.id &&
+      document.relativePath
+    )
+      ? await openTextFileByPath(workspace.value.id, document.relativePath)
+      : await openTextFileAtPath(document.path)
+  }
+
+  function openConflictCopy(document: OpenDocument) {
+    const previousActivePane = activePane.value
+    const previousActiveDocumentId = previousActivePane?.activeDocumentId ?? null
+    const copyDocument = createDocumentDraft(document.content, conflictedCopyName(document.name))
+    copyDocument.fileFormat = document.fileFormat
+    addDocumentToPane(copyDocument, 'left')
+
+    if (previousActivePane && previousActiveDocumentId) {
+      setActiveDocument(previousActivePane, previousActiveDocumentId)
+    }
+
+    return copyDocument
+  }
+
+  function conflictedCopyName(name: string) {
+    const extensionIndex = name.lastIndexOf('.')
+
+    if (extensionIndex <= 0) {
+      return `${name} (conflict copy)`
+    }
+
+    return `${name.slice(0, extensionIndex)} (conflict copy)${name.slice(extensionIndex)}`
+  }
+
+  function resolveConflictWithCurrentContent(documentId: string, fingerprint: FileFingerprint | null) {
+    const document = acknowledgeDocumentConflict(documentId, fingerprint)
+
+    if (document) {
+      enforceDocumentVisualSafety(document)
+      updateDocumentSessions(document.id, document.revision)
+    }
+  }
+
+  async function openConflictResolution(documentId: string) {
+    const document = getDocument(documentId)
+
+    if (!document?.path) {
+      return
+    }
+
+    flushVisibleDocumentViews(documentId)
+
+    const currentDocument = getDocument(documentId)
+
+    if (!currentDocument?.path) {
+      return
+    }
+
+    const diskDocument = await loadCurrentDiskDocument(currentDocument)
+
+    if (!diskDocument) {
+      return
+    }
+
+    const decision = await openConflictDialog({
+      title: `Resolve conflict for ${currentDocument.name}`,
+      path: currentDocument.path,
+      foldenContent: currentDocument.content,
+      diskContent: diskDocument.content,
+    })
+
+    if (decision.kind === 'later') {
+      return
+    }
+
+    if (decision.kind === 'save-as') {
+      await saveDocumentAsCopy(currentDocument)
+      return
+    }
+
+    if (decision.kind === 'reload-disk') {
+      const latestDocument = getDocument(documentId)
+
+      if (!latestDocument) {
+        return
+      }
+
+      if (isDocumentDirty(latestDocument) && latestDocument.content !== diskDocument.content) {
+        openConflictCopy(latestDocument)
+      }
+
+      const reloadedDocument = replaceDocumentFromDisk(documentId, diskDocument)
+
+      if (reloadedDocument) {
+        enforceDocumentVisualSafety(reloadedDocument)
+        updateDocumentSessions(reloadedDocument.id, reloadedDocument.revision)
+      }
+
+      return
+    }
+
+    if (decision.kind === 'keep-folden') {
+      resolveConflictWithCurrentContent(documentId, diskDocument.fingerprint)
+      return
+    }
+
+    if (decision.content === diskDocument.content) {
+      const reloadedDocument = replaceDocumentFromDisk(documentId, diskDocument)
+
+      if (reloadedDocument) {
+        enforceDocumentVisualSafety(reloadedDocument)
+        updateDocumentSessions(reloadedDocument.id, reloadedDocument.revision)
+      }
+
+      return
+    }
+
+    const latestDocument = getDocument(documentId)
+
+    if (!latestDocument) {
+      return
+    }
+
+    const nextDocument = applyDocumentUpdate(latestDocument.id, latestDocument.revision, decision.content)
+
+    if (nextDocument) {
+      nextDocument.diskFingerprint = diskDocument.fingerprint
+      nextDocument.saveState = 'idle'
+      nextDocument.saveError = null
+      nextDocument.externalState = 'idle'
+      nextDocument.externalMessage = null
+      enforceDocumentVisualSafety(nextDocument)
+      updateDocumentSessions(nextDocument.id, nextDocument.revision)
+      return
+    }
+
+    resolveConflictWithCurrentContent(documentId, diskDocument.fingerprint)
+  }
+
   async function reloadDocumentFromDisk(documentId: string) {
     const document = getDocument(documentId)
 
@@ -2275,13 +2451,11 @@ export function useApplicationShell() {
       return
     }
 
-    const loadedDocument = (
-      workspace.value &&
-      document.workspaceId === workspace.value.id &&
-      document.relativePath
-    )
-      ? await openTextFileByPath(workspace.value.id, document.relativePath)
-      : await openTextFileAtPath(document.path)
+    const loadedDocument = await loadCurrentDiskDocument(document)
+
+    if (!loadedDocument) {
+      return
+    }
 
     const reloadedDocument = replaceDocumentFromDisk(documentId, loadedDocument)
 
@@ -2686,6 +2860,7 @@ export function useApplicationShell() {
     clearDocumentExternalState,
     clearSidebarSelection,
     confirmDialog,
+    conflictDialog,
     createScratchDocument,
     createWorkspaceDirectory,
     createWorkspaceFile,
@@ -2706,6 +2881,7 @@ export function useApplicationShell() {
     loadingWorkspacePaths,
     markdownSafetyDialog,
     moveActiveDocumentToRight,
+    openConflictResolution,
     openEntryInRight,
     openLogsFolder,
     openNativeDocument,
@@ -2718,6 +2894,7 @@ export function useApplicationShell() {
     reloadDocumentFromDisk,
     renameWorkspacePath,
     resolveConfirmDialog,
+    resolveConflictDialog,
     resolveMarkdownSafetyDialog,
     resolveRecoveryDialog,
     resolveUnsavedDialog,

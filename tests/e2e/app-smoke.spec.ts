@@ -17,9 +17,9 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.clear()
   })
+  await installTauriMock(page)
   await page.goto('/')
   await expect(page.getByTestId('app-shell')).toBeVisible()
-  await installTauriMock(page)
 
   await page.evaluate(() => new Promise((resolve) => window.requestAnimationFrame(resolve)))
   expect(pageErrors).toEqual([])
@@ -124,4 +124,36 @@ test('closes an unchanged visual document without dirty prompt', async ({ page }
   await expect(page.getByRole('dialog', { name: 'Close README.md?' })).toHaveCount(0)
   await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
   await expect(page.getByTestId('document-title')).toHaveText('Untitled.md')
+})
+
+test('shows a readable conflict diff and preserves the dirty copy when reloading disk content', async ({ page }) => {
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+  await page.getByRole('button', { name: 'Source' }).click()
+
+  const editor = page.getByTestId('source-editor').locator('.cm-content')
+  await editor.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
+  await page.keyboard.type('\nLocal conflict line.\n')
+
+  await page.evaluate(() => (
+    (window as Window & {
+      __FOLDEN_TAURI_MOCK__?: {
+        emitFsChange: (path: string, content: string) => void
+      }
+    }).__FOLDEN_TAURI_MOCK__?.emitFsChange('README.md', '# E2E Note\n\nDisk version wins.\n')
+  ))
+
+  await expect(page.getByTestId('conflict-warning')).toBeVisible()
+  await page.getByTestId('resolve-conflict').click()
+
+  await expect(page.getByRole('dialog', { name: 'Resolve conflict for README.md' })).toBeVisible()
+  await expect(page.getByTestId('conflict-diff')).toContainText('Local conflict line.')
+  await expect(page.getByTestId('conflict-diff')).toContainText('Disk version wins.')
+
+  await page.getByRole('button', { name: 'Reload disk version' }).click()
+
+  await expect(page.getByTestId('document-title')).toHaveText('README.md')
+  await expect(page.getByTestId('source-editor')).toContainText('Disk version wins.')
+  await expect(page.getByRole('button', { name: 'README (conflict copy).md' })).toBeVisible()
 })

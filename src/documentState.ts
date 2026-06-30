@@ -346,6 +346,22 @@ export function createDocumentState(options: DocumentStateOptions) {
     return document
   }
 
+  function acknowledgeDocumentConflict(documentId: DocumentId, fingerprint: FileFingerprint | null) {
+    const document = getDocument(documentId)
+
+    if (!document) {
+      return null
+    }
+
+    document.revision = nextDocumentRevision(document.revision)
+    document.diskFingerprint = fingerprint
+    document.saveState = 'idle'
+    document.saveError = null
+    document.externalState = 'idle'
+    document.externalMessage = null
+    return document
+  }
+
   function markDocumentMissing(documentId: DocumentId, message: string) {
     const document = getDocument(documentId)
 
@@ -443,6 +459,7 @@ export function createDocumentState(options: DocumentStateOptions) {
     markDocumentSaveError,
     replaceDocumentFromDisk,
     markDocumentConflict,
+    acknowledgeDocumentConflict,
     markDocumentMissing,
     clearDocumentExternalState,
     updateDocumentPaths,

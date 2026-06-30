@@ -176,4 +176,29 @@ describe('document state', () => {
     expect(document.externalState).toBe('idle')
     expect(document.externalMessage).toBeNull()
   })
+
+  it('creates an explicit revision when acknowledging a conflict without changing content', () => {
+    const state = createState()
+    const document = state.openLoadedDocument(createLoadedDocument({
+      id: 'document-conflict',
+      path: 'C:\\Docs\\Draft.md',
+      content: 'draft',
+    }))
+
+    state.updateDocumentContent(document.id, 'draft + local')
+    state.markDocumentConflict(document.id, 'changed outside Folden')
+
+    const acknowledged = state.acknowledgeDocumentConflict(document.id, {
+      size: 99,
+      modifiedAtMs: 199,
+    })
+
+    expect(acknowledged?.revision).toBe(2)
+    expect(acknowledged?.persistedRevision).toBe(0)
+    expect(acknowledged?.diskFingerprint).toEqual({
+      size: 99,
+      modifiedAtMs: 199,
+    })
+    expect(acknowledged?.externalState).toBe('idle')
+  })
 })
