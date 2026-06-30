@@ -69,6 +69,7 @@ const {
   runFileTask,
   saveDocumentAsCopy,
   selectedPath,
+  setSelectedPath,
   setActiveDocument,
   setActivePane,
   setPaneDocumentMode,
@@ -155,7 +156,7 @@ const {
           :load-errors="workspaceLoadErrors"
           @clear-selection="clearSidebarSelection"
           @open-file="openWorkspaceFile"
-          @select-path="selectedPath = $event.path"
+          @select-path="setSelectedPath($event.path)"
           @create-file="createWorkspaceFile($event.path)"
           @create-directory="createWorkspaceDirectory($event.path)"
           @rename-path="renameWorkspacePath"

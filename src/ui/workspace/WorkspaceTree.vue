@@ -16,31 +16,35 @@ defineOptions({
 })
 
 const props = defineProps<{
-  entries: WorkspaceEntry[]
+  entries: readonly WorkspaceTreeEntry[]
   activePath: string | null
   selectedPath: string | null
-  expandedPaths: Set<string>
-  loadingPaths: Set<string>
-  loadErrors: Record<string, string>
+  expandedPaths: ReadonlySet<string>
+  loadingPaths: ReadonlySet<string>
+  loadErrors: Readonly<Record<string, string>>
   level?: number
 }>()
 
 const emit = defineEmits<{
   clearSelection: []
-  openFile: [entry: WorkspaceEntry]
-  selectPath: [entry: WorkspaceEntry]
-  createFile: [entry: WorkspaceEntry]
-  createDirectory: [entry: WorkspaceEntry]
-  renamePath: [entry: WorkspaceEntry]
-  trashPath: [entry: WorkspaceEntry]
-  toggleDirectory: [entry: WorkspaceEntry]
+  openFile: [entry: WorkspaceTreeEntry]
+  selectPath: [entry: WorkspaceTreeEntry]
+  createFile: [entry: WorkspaceTreeEntry]
+  createDirectory: [entry: WorkspaceTreeEntry]
+  renamePath: [entry: WorkspaceTreeEntry]
+  trashPath: [entry: WorkspaceTreeEntry]
+  toggleDirectory: [entry: WorkspaceTreeEntry]
 }>()
 
-function isDirectory(entry: WorkspaceEntry) {
+type WorkspaceTreeEntry = Omit<Readonly<WorkspaceEntry>, 'children'> & {
+  readonly children: readonly WorkspaceTreeEntry[]
+}
+
+function isDirectory(entry: WorkspaceTreeEntry) {
   return entry.kind === 'directory'
 }
 
-function isExpanded(entry: WorkspaceEntry) {
+function isExpanded(entry: WorkspaceTreeEntry) {
   return props.expandedPaths.has(entry.path)
 }
 
@@ -52,15 +56,15 @@ function pathMatches(left: string | null, right: string) {
   return left ? normalizePath(left) === normalizePath(right) : false
 }
 
-function isLoading(entry: WorkspaceEntry) {
+function isLoading(entry: WorkspaceTreeEntry) {
   return props.loadingPaths.has(entry.path)
 }
 
-function toggleDirectory(entry: WorkspaceEntry) {
+function toggleDirectory(entry: WorkspaceTreeEntry) {
   emit('toggleDirectory', entry)
 }
 
-function selectEntry(entry: WorkspaceEntry) {
+function selectEntry(entry: WorkspaceTreeEntry) {
   emit('selectPath', entry)
 
   if (isDirectory(entry)) {

@@ -43,8 +43,6 @@ import {
 } from '../domain/documents/documentState'
 import { createTextFileFormat } from '../domain/document'
 import {
-  acceptDocumentUpdate,
-  getSynchronizedSessionIds,
   type DocumentUpdate,
 } from '../domain/documents/editorSync'
 import { createDocumentSaveQueue } from '../domain/documents/saveQueue'
@@ -70,19 +68,18 @@ import {
   buildSessionDocumentKey,
   loadRecoverySnapshots,
   loadSessionState,
-  MAX_RECOVERY_ENTRIES,
   openTextFileAtPath,
-  pruneRecoverySnapshots,
   saveRecoverySnapshots,
   saveSessionState,
   type PersistedSessionState,
   type RecoverySnapshot,
-  type SessionDocumentKind,
-  type SessionPaneId,
 } from './sessionRecovery'
-import type { EditorAdapter, EditorPane, WindowCloseDecision, Workspace } from './types/shell'
+import type { EditorAdapter, EditorPane, WindowCloseDecision } from './types/shell'
 export type { EditorAdapter } from './types/shell'
 
+type WorkspaceEntryRef = Pick<WorkspaceEntry, 'name' | 'path' | 'kind'> & {
+  readonly children?: unknown
+}
 
 export function useApplicationShell() {
   const initialText = '# Untitled\n\nStart writing in Folden.\n'
@@ -123,16 +120,22 @@ export function useApplicationShell() {
     workspaceLoadErrors,
     selectedPath,
     recentWorkspaces,
-    saveRecentWorkspaces,
-    setWorkspacePathLoaded,
     setWorkspacePathLoading,
     setWorkspacePathExpanded,
-    applyWorkspaceEntryFilters,
     clearWorkspaceLoadError,
     setWorkspaceLoadError,
     removeWorkspacePathState,
     remapWorkspacePathState,
     clearSidebarSelection,
+    setSelectedPath,
+    setWatcherVisibleWorkspace,
+    findEntry,
+    selectedDirectoryPath: getSelectedDirectoryPath,
+    applyWorkspaceBranch,
+    loadedDescendantPaths,
+    shouldLoadBranch,
+    nearestLoadedWorkspaceBranch: getNearestLoadedWorkspaceBranch,
+    workspaceRelativePathFromAbsolute: getWorkspaceRelativePathFromAbsolute,
   } = workspaceController
   const paneController = createPaneController(initialDocument)
   const {
@@ -143,6 +146,7 @@ export function useApplicationShell() {
     viewSessions,
     paneEditors,
     visiblePanes,
+    activePane,
     getPane,
     setActivePane,
     paneDocumentModeKey,
@@ -150,16 +154,33 @@ export function useApplicationShell() {
     ensureViewSession,
     getViewSessionId,
     setActiveDocument,
+    setActiveDocumentInPane,
     setPaneEditorAdapter,
+    setDocumentMode,
+    setOpenDocumentMode,
+    addDocumentToPane: addDocumentToPaneState,
+    applyDocumentUpdateToSessions,
+    updateDocumentSessions,
+    setSplitEnabled,
+    moveDocumentToPane,
+    normalizePaneState,
+    removeDocumentFromPane,
+    removeDocumentsFromPanes: removeDocumentsFromPaneState,
+    clearLayout,
+    setFallbackDocument,
+    restoreLayout,
+    getPaneSnapshot,
   } = paneController
   const errorMessage = ref<string | null>(null)
   const externalChangesController = createExternalChangesController()
   const {
     watcherWarning,
+    setWatcherWarning,
     setFsEventUnlisten,
     setWatcherWarningUnlisten,
     scheduleWorkspaceRefresh: scheduleWorkspaceRefreshDebounced,
     scheduleDocumentReload: scheduleDocumentReloadDebounced,
+    handleExternalFileEvent: routeExternalFileEvent,
     dispose: disposeExternalChangesController,
   } = externalChangesController
   const isFileBusy = ref(false)
@@ -190,6 +211,11 @@ export function useApplicationShell() {
   const {
     pendingRecoveryEntries,
     markRestoreComplete,
+    setPendingRecoveryEntries,
+    removePendingRecoveryEntry,
+    discardPendingRecoveryEntries,
+    buildPersistedSessionState: buildSessionStateSnapshot,
+    buildPersistedRecoverySnapshots: buildRecoverySnapshotState,
     persistSessionAndRecoveryState: runSessionPersistence,
     scheduleSessionPersistence: scheduleSessionPersistenceDebounced,
     dispose: disposeSessionController,
@@ -221,7 +247,7 @@ export function useApplicationShell() {
       }
 
       if (nextDocument.workspaceId === workspace.value?.id) {
-        selectedPath.value = nextDocument.relativePath
+        setSelectedPath(nextDocument.relativePath)
       }
 
       const didPathChange = job.pathBeforeSave !== savedDocument.path
@@ -237,7 +263,6 @@ export function useApplicationShell() {
       syncDocumentExternalStateFromSaveError(job.documentId, error)
     },
   })
-  const activePane = computed(() => getPane(activePaneId.value) ?? panes.value[0])
   const activeDocument = computed(() => {
     if (!activePane.value?.activeDocumentId) {
       return null
@@ -260,106 +285,30 @@ export function useApplicationShell() {
     return cleanDisplayPath(activeDocument.value.path)
   })
   const selectedDirectoryPath = computed(() => {
-    if (!workspace.value) {
-      return null
-    }
-
-    if (!selectedPath.value) {
-      return ''
-    }
-
-    const entry = findEntry(workspace.value.entries, selectedPath.value)
-
-    if (!entry) {
-      return ''
-    }
-
-    if (entry.kind === 'directory') {
-      return entry.path
-    }
-
-    return parentPath(entry.path) ?? ''
+    return getSelectedDirectoryPath(parentPath)
   })
 
-  function buildPersistedSessionState(): PersistedSessionState {
-    const documentRecords: PersistedSessionState['documents'] = documents.value.map((document) => ({
-      key: buildSessionDocumentKey(document, normalizePath),
-      kind: sessionDocumentKind(document),
-      path: document.path,
-      workspaceRootPath: documentWorkspaceRootPath(document),
-      relativePath: document.relativePath,
-      name: document.name,
-    }))
-    const paneModeEntries = Object.entries(paneDocumentModes.value)
-      .map(([key, mode]) => {
-        const [paneId, documentId] = key.split(':', 2) as [SessionPaneId, string]
-        const document = getDocument(documentId)
-
-        if (!document) {
-          return null
-        }
-
-        return {
-          paneId,
-          documentKey: buildSessionDocumentKey(document, normalizePath),
-          mode,
-        }
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-
-    return {
-      workspaceRootPath: workspace.value?.rootPath ?? null,
+  function buildPersistedSessionState() {
+    return buildSessionStateSnapshot({
+      documents: documents.value,
+      workspace: workspace.value,
       splitEnabled: splitEnabled.value,
       activePaneId: activePaneId.value,
-      panes: panes.value.map((pane) => ({
-        id: pane.id,
-        documentKeys: pane.documentIds
-          .map((documentId) => getDocument(documentId))
-          .filter((document): document is OpenDocument => document !== null)
-          .map((document) => buildSessionDocumentKey(document, normalizePath)),
-        activeDocumentKey: pane.activeDocumentId
-          ? (() => {
-            const activeDocumentRecord = getDocument(pane.activeDocumentId)
-            return activeDocumentRecord
-              ? buildSessionDocumentKey(activeDocumentRecord, normalizePath)
-              : null
-          })()
-          : null,
-      })),
-      documents: documentRecords,
-      paneModes: paneModeEntries,
-    }
-  }
-
-  function buildCurrentRecoverySnapshots() {
-    return documents.value
-      .filter((document) => isDirty(document))
-      .map((document) => ({
-        key: buildSessionDocumentKey(document, normalizePath),
-        kind: sessionDocumentKind(document),
-        path: document.path,
-        workspaceRootPath: documentWorkspaceRootPath(document),
-        relativePath: document.relativePath,
-        name: document.name,
-        content: document.content,
-        fileFormat: document.fileFormat,
-        fingerprint: document.diskFingerprint,
-        updatedAtMs: Date.now(),
-      } satisfies RecoverySnapshot))
+      panes: getPaneSnapshot(),
+      paneDocumentModes: paneDocumentModes.value,
+      normalizePath,
+      getDocument,
+    })
   }
 
   function buildPersistedRecoverySnapshots(excludedKeys = new Set<string>()) {
-    const currentEntries = buildCurrentRecoverySnapshots()
-      .filter((entry) => !excludedKeys.has(entry.key))
-    const currentKeys = new Set(currentEntries.map((entry) => entry.key))
-    const mergedEntries = [
-      ...pendingRecoveryEntries.value.filter((entry) => (
-        !excludedKeys.has(entry.key) && !currentKeys.has(entry.key)
-      )),
-      ...currentEntries,
-    ]
-
-    return pruneRecoverySnapshots(mergedEntries, MAX_RECOVERY_ENTRIES)
+    return buildRecoverySnapshotState({
+      documents: documents.value,
+      workspace: workspace.value,
+      isDirty,
+      normalizePath,
+      excludedKeys,
+    })
   }
 
   async function writeSessionAndRecoveryState() {
@@ -377,18 +326,6 @@ export function useApplicationShell() {
 
   function scheduleSessionPersistence() {
     scheduleSessionPersistenceDebounced(writeSessionAndRecoveryState)
-  }
-
-  function documentWorkspaceRootPath(document: OpenDocument) {
-    if (document.workspaceId && workspace.value?.id === document.workspaceId) {
-      return workspace.value.rootPath
-    }
-
-    return null
-  }
-
-  function sessionDocumentKind(document: Pick<OpenDocument, 'path'>): SessionDocumentKind {
-    return document.path ? 'saved' : 'scratch'
   }
 
   function markdownSafetyCacheKey(document: Pick<OpenDocument, 'id' | 'revision'>) {
@@ -500,17 +437,7 @@ export function useApplicationShell() {
     }
 
     document.defaultMode = 'source'
-    const nextModes = { ...paneDocumentModes.value }
-
-    for (const pane of panes.value) {
-      if (!pane.documentIds.includes(document.id)) {
-        continue
-      }
-
-      nextModes[paneDocumentModeKey(pane.id, document.id)] = 'source'
-    }
-
-    paneDocumentModes.value = nextModes
+    setOpenDocumentMode(document.id, 'source')
   }
 
   function formatError(error: unknown) {
@@ -548,22 +475,6 @@ export function useApplicationShell() {
     return value.trim()
   }
 
-  function findEntry(entries: WorkspaceEntry[], path: string): WorkspaceEntry | null {
-    for (const entry of entries) {
-      if (entry.path === path) {
-        return entry
-      }
-
-      const child = findEntry(entry.children, path)
-
-      if (child) {
-        return child
-      }
-    }
-
-    return null
-  }
-
   async function confirmVisualMode(document: OpenDocument) {
     if (!isMarkdownDocument(document)) {
       return false
@@ -596,29 +507,13 @@ export function useApplicationShell() {
       return
     }
 
-    ensureViewSession(pane, document)
     flushPaneEditorContent(pane.id)
-    paneDocumentModes.value = {
-      ...paneDocumentModes.value,
-      [paneDocumentModeKey(pane.id, document.id)]: mode,
-    }
+    setDocumentMode(pane.id, document, mode)
   }
 
   function addDocumentToPane(document: OpenDocument, paneId = activePaneId.value) {
-    const pane = getPane(paneId)
-
-    if (!pane) {
-      return
-    }
-
     enforceDocumentVisualSafety(document)
-
-    if (!pane.documentIds.includes(document.id)) {
-      pane.documentIds.push(document.id)
-    }
-
-    ensureViewSession(pane, document)
-    setActiveDocument(pane, document.id)
+    addDocumentToPaneState(document, paneId)
   }
 
   function flushPaneEditorContent(paneId: EditorPane['id']) {
@@ -666,58 +561,13 @@ export function useApplicationShell() {
       return
     }
 
-    const acceptedUpdate = acceptDocumentUpdate(document, update)
-
-    if (!acceptedUpdate) {
-      return
-    }
-
-    const nextDocument = applyDocumentUpdate(document.id, update.baseRevision, acceptedUpdate.nextContent)
+    const nextDocument = applyDocumentUpdateToSessions(update, document, applyDocumentUpdate)
 
     if (!nextDocument) {
       return
     }
 
     enforceDocumentVisualSafety(nextDocument)
-
-    const sessions = Object.values(viewSessions.value)
-    const sessionIds = [
-      update.originViewId,
-      ...getSynchronizedSessionIds(sessions, document.id, update.originViewId),
-    ]
-    const nextSessions = { ...viewSessions.value }
-
-    for (const sessionId of sessionIds) {
-      const session = nextSessions[sessionId]
-
-      if (!session) {
-        continue
-      }
-
-      nextSessions[sessionId] = {
-        ...session,
-        lastAppliedRevision: nextDocument.revision,
-      }
-    }
-
-    viewSessions.value = nextSessions
-  }
-
-  function updateDocumentSessions(documentId: string, revision: number) {
-    const nextSessions = { ...viewSessions.value }
-
-    for (const [sessionId, session] of Object.entries(nextSessions)) {
-      if (session.documentId !== documentId) {
-        continue
-      }
-
-      nextSessions[sessionId] = {
-        ...session,
-        lastAppliedRevision: revision,
-      }
-    }
-
-    viewSessions.value = nextSessions
   }
 
   function runDocumentUndo() {
@@ -783,51 +633,6 @@ export function useApplicationShell() {
     return (activeDocument.value?.history.future.length ?? 0) > 0
   }
 
-  function setSplitEnabled(enabled: boolean) {
-    if (enabled) {
-      splitEnabled.value = true
-      return
-    }
-
-    mergeRightPaneIntoLeft()
-    splitEnabled.value = false
-    activePaneId.value = 'left'
-  }
-
-  function mergeRightPaneIntoLeft() {
-    const leftPane = getPane('left')
-    const rightPane = getPane('right')
-    const nextPaneDocumentModes = { ...paneDocumentModes.value }
-
-    if (!leftPane || !rightPane) {
-      return
-    }
-
-    for (const documentId of rightPane.documentIds) {
-      if (!leftPane.documentIds.includes(documentId)) {
-        leftPane.documentIds.push(documentId)
-      }
-
-      const rightMode = paneDocumentModes.value[paneDocumentModeKey('right', documentId)]
-
-      if (rightMode) {
-        nextPaneDocumentModes[paneDocumentModeKey('left', documentId)] = rightMode
-      }
-
-      delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
-    }
-
-    if (rightPane.activeDocumentId) {
-      leftPane.activeDocumentId = rightPane.activeDocumentId
-    } else if (!leftPane.activeDocumentId) {
-      leftPane.activeDocumentId = leftPane.documentIds.at(-1) ?? null
-    }
-
-    rightPane.documentIds = []
-    rightPane.activeDocumentId = null
-    paneDocumentModes.value = nextPaneDocumentModes
-  }
-
   function openLoadedDocument(document: OpenedDocument, paneId = activePaneId.value) {
     const openDocument = openDocumentState(document)
     enforceDocumentVisualSafety(openDocument)
@@ -867,46 +672,13 @@ export function useApplicationShell() {
   }
 
   async function loadWorkspace(descriptor: WorkspaceDescriptor) {
-    const entries = applyWorkspaceEntryFilters(await listDirectory(descriptor.id, ''))
-    workspace.value = {
-      id: descriptor.id,
-      rootPath: descriptor.rootPath,
-      name: descriptor.name,
-      entries,
-    }
-    expandedWorkspacePaths.value = new Set()
-    loadedWorkspacePaths.value = new Set([''])
-    loadingWorkspacePaths.value = new Set()
-    workspaceLoadErrors.value = {}
-    selectedPath.value = null
-    saveRecentWorkspaces([descriptor.rootPath, ...recentWorkspaces.value])
+    setWatcherVisibleWorkspace(descriptor, await listDirectory(descriptor.id, ''))
   }
 
   function getWorkspaceDocumentIds(workspaceId: string) {
     return documents.value
       .filter((document) => document.workspaceId === workspaceId)
       .map((document) => document.id)
-  }
-
-  function normalizePaneState() {
-    if (splitEnabled.value && panes.value[1].documentIds.length === 0) {
-      setSplitEnabled(false)
-    }
-
-    const currentActivePane = getPane(activePaneId.value)
-
-    if (currentActivePane?.documentIds.length) {
-      return
-    }
-
-    if (panes.value[0].documentIds.length) {
-      activePaneId.value = 'left'
-      return
-    }
-
-    if (splitEnabled.value && panes.value[1].documentIds.length) {
-      activePaneId.value = 'right'
-    }
   }
 
   async function prepareWorkspaceSwitch(nextRootPath: string) {
@@ -953,34 +725,6 @@ export function useApplicationShell() {
     await refreshWorkspaceBranch('')
   }
 
-  function replaceWorkspaceBranch(
-    entries: WorkspaceEntry[],
-    branchPath: string,
-    nextChildren: WorkspaceEntry[],
-  ): WorkspaceEntry[] {
-    if (!branchPath) {
-      return nextChildren
-    }
-
-    return entries.map((entry) => {
-      if (entry.path === branchPath && entry.kind === 'directory') {
-        return {
-          ...entry,
-          children: nextChildren,
-        }
-      }
-
-      if (entry.kind !== 'directory' || entry.children.length === 0) {
-        return entry
-      }
-
-      return {
-        ...entry,
-        children: replaceWorkspaceBranch(entry.children, branchPath, nextChildren),
-      }
-    })
-  }
-
   async function refreshWorkspaceBranch(branchPath: string | null, preserveDescendants = true) {
     if (!workspace.value) {
       return
@@ -988,35 +732,16 @@ export function useApplicationShell() {
 
     const normalizedBranchPath = branchPath ?? ''
     clearWorkspaceLoadError(normalizedBranchPath)
-    const nextChildren = applyWorkspaceEntryFilters(
+    applyWorkspaceBranch(
+      normalizedBranchPath,
       await listDirectory(workspace.value.id, normalizedBranchPath),
     )
-
-    if (normalizedBranchPath === '') {
-      workspace.value.entries = nextChildren
-      setWorkspacePathLoaded('', true)
-      return
-    }
-
-    workspace.value.entries = replaceWorkspaceBranch(
-      workspace.value.entries,
-      normalizedBranchPath,
-      nextChildren,
-    )
-    setWorkspacePathLoaded(normalizedBranchPath, true)
 
     if (!preserveDescendants) {
       return
     }
 
-    const descendantPaths = [...loadedWorkspacePaths.value]
-      .filter((value) => value !== normalizedBranchPath && value !== '')
-      .filter((value) => (
-        normalizedBranchPath === ''
-          ? true
-          : isSameOrChildPath(value, normalizedBranchPath)
-      ))
-      .sort((left, right) => left.split('\\').length - right.split('\\').length)
+    const descendantPaths = loadedDescendantPaths(normalizedBranchPath, isSameOrChildPath)
 
     for (const descendantPath of descendantPaths) {
       await refreshWorkspaceBranch(descendantPath, false)
@@ -1024,11 +749,7 @@ export function useApplicationShell() {
   }
 
   async function ensureWorkspaceBranchLoaded(branchPath: string) {
-    if (!workspace.value) {
-      return
-    }
-
-    if (loadedWorkspacePaths.value.has(branchPath) || loadingWorkspacePaths.value.has(branchPath)) {
+    if (!shouldLoadBranch(branchPath)) {
       return
     }
 
@@ -1044,21 +765,7 @@ export function useApplicationShell() {
     }
   }
 
-  function nearestLoadedWorkspaceBranch(branchPath: string | null) {
-    let currentPath = branchPath ?? ''
-
-    while (currentPath) {
-      if (loadedWorkspacePaths.value.has(currentPath)) {
-        return currentPath
-      }
-
-      currentPath = parentPath(currentPath) ?? ''
-    }
-
-    return ''
-  }
-
-  async function toggleWorkspaceDirectory(entry: WorkspaceEntry) {
+  async function toggleWorkspaceDirectory(entry: WorkspaceEntryRef) {
     if (expandedWorkspacePaths.value.has(entry.path)) {
       setWorkspacePathExpanded(entry.path, false)
       return
@@ -1069,15 +776,15 @@ export function useApplicationShell() {
     try {
       await ensureWorkspaceBranchLoaded(entry.path)
     } catch (error) {
-      watcherWarning.value = `Could not load folder ${entry.name}: ${formatError(error)}`
+      setWatcherWarning(`Could not load folder ${entry.name}: ${formatError(error)}`)
     }
   }
 
   function scheduleWorkspaceRefresh(branchPath: string | null) {
-    const key = nearestLoadedWorkspaceBranch(branchPath)
+    const key = getNearestLoadedWorkspaceBranch(branchPath, parentPath)
     scheduleWorkspaceRefreshDebounced(key, () => {
       void refreshWorkspaceBranch(key).catch((error) => {
-        watcherWarning.value = `Could not refresh workspace after external changes: ${formatError(error)}`
+        setWatcherWarning(`Could not refresh workspace after external changes: ${formatError(error)}`)
       })
     })
   }
@@ -1096,12 +803,12 @@ export function useApplicationShell() {
     })
   }
 
-  async function openWorkspaceFile(entry: WorkspaceEntry, paneId = activePaneId.value) {
+  async function openWorkspaceFile(entry: WorkspaceEntryRef, paneId = activePaneId.value) {
     if (!workspace.value || entry.kind !== 'file') {
       return
     }
 
-    selectedPath.value = entry.path
+    setSelectedPath(entry.path)
 
     await runFileTask(async () => {
       const document = await openTextFileByPath(workspace.value!.id, entry.path)
@@ -1109,7 +816,7 @@ export function useApplicationShell() {
     }, 'Could not open workspace file')
   }
 
-  async function openEntryInRight(entry: WorkspaceEntry) {
+  async function openEntryInRight(entry: WorkspaceEntryRef) {
     setSplitEnabled(true)
     await openWorkspaceFile(entry, 'right')
   }
@@ -1117,17 +824,13 @@ export function useApplicationShell() {
   function moveActiveDocumentToRight() {
     const document = activeDocument.value
     const sourcePane = activePane.value
-    const targetPane = getPane('right')
 
-    if (!document || !sourcePane || !targetPane || sourcePane.id === 'right') {
+    if (!document || !sourcePane || sourcePane.id === 'right') {
       setSplitEnabled(true)
       return
     }
 
-    setSplitEnabled(true)
-    addDocumentToPane(document, 'right')
-    sourcePane.documentIds = sourcePane.documentIds.filter((documentId) => documentId !== document.id)
-    sourcePane.activeDocumentId = sourcePane.documentIds.at(-1) ?? null
+    moveDocumentToPane(document, sourcePane.id, 'right')
   }
 
   async function saveDocument(document = activeDocument.value, reason: 'manual' | 'autosave' = 'manual') {
@@ -1297,30 +1000,15 @@ export function useApplicationShell() {
   }
 
   function removeDocumentView(pane: EditorPane, documentId: string) {
-    pane.documentIds = pane.documentIds.filter((id) => id !== documentId)
-    const document = getDocument(documentId)
-    const nextPaneDocumentModes = { ...paneDocumentModes.value }
-    const nextViewSessions = { ...viewSessions.value }
+    const { removedDocumentIds } = removeDocumentFromPane(pane.id, documentId)
 
-    delete nextPaneDocumentModes[paneDocumentModeKey(pane.id, documentId)]
-    delete nextViewSessions[paneDocumentModeKey(pane.id, documentId)]
-
-    if (pane.activeDocumentId === documentId) {
-      pane.activeDocumentId = pane.documentIds.at(-1) ?? null
+    if (!removedDocumentIds.length) {
+      return
     }
 
-    if (!panes.value.some((openPane) => openPane.documentIds.includes(documentId))) {
-      clearRemoteImagePermissions([documentId])
-      releaseClosedNativeDocuments([documentId])
-      removeDocuments([documentId])
-      delete nextPaneDocumentModes[paneDocumentModeKey('left', documentId)]
-      delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
-      delete nextViewSessions[paneDocumentModeKey('left', documentId)]
-      delete nextViewSessions[paneDocumentModeKey('right', documentId)]
-    }
-
-    paneDocumentModes.value = nextPaneDocumentModes
-    viewSessions.value = nextViewSessions
+    clearRemoteImagePermissions(removedDocumentIds)
+    releaseClosedNativeDocuments(removedDocumentIds)
+    removeDocuments(removedDocumentIds)
   }
 
   async function closeDocument(pane: EditorPane, documentId: string) {
@@ -1333,7 +1021,7 @@ export function useApplicationShell() {
       return
     }
 
-    if (!shouldPromptToDiscardDocument(panes.value, documentId, isDirty(document))) {
+    if (!shouldPromptToDiscardDocument(getPaneSnapshot(), documentId, isDirty(document))) {
       removeDocumentView(pane, documentId)
       return
     }
@@ -1418,7 +1106,7 @@ export function useApplicationShell() {
     }, 'Could not create folder')
   }
 
-  async function renameWorkspacePath(entry: WorkspaceEntry) {
+  async function renameWorkspacePath(entry: WorkspaceEntryRef) {
     if (!workspace.value) {
       return
     }
@@ -1442,12 +1130,12 @@ export function useApplicationShell() {
       const nextPath = await renamePath(workspace.value!.id, entry.path, newName)
       remapWorkspacePathState(entry.path, nextPath)
       updateDocumentPaths(entry.path, nextPath, workspace.value!.rootPath)
-      selectedPath.value = nextPath
+      setSelectedPath(nextPath)
       await refreshWorkspaceBranch(parentPath(nextPath) ?? '')
     }, 'Could not rename path')
   }
 
-  async function trashWorkspacePath(entry: WorkspaceEntry) {
+  async function trashWorkspacePath(entry: WorkspaceEntryRef) {
     if (!workspace.value) {
       return
     }
@@ -1497,41 +1185,16 @@ export function useApplicationShell() {
       await trashPath(workspace.value!.id, entry.path)
       removeWorkspacePathState(entry.path)
       removeDocumentsFromPanes(affectedDocuments.map((document) => document.id))
-      selectedPath.value = null
+      setSelectedPath(null)
       await refreshWorkspaceBranch(parentPath(entry.path) ?? '')
     }, 'Could not move path to trash')
   }
 
   function removeDocumentsFromPanes(documentIds: string[]) {
-    if (!documentIds.length) {
-      return
-    }
-
-    const documentIdSet = new Set(documentIds)
-
-    for (const pane of panes.value) {
-      pane.documentIds = pane.documentIds.filter((documentId) => !documentIdSet.has(documentId))
-
-      if (pane.activeDocumentId && documentIdSet.has(pane.activeDocumentId)) {
-        pane.activeDocumentId = pane.documentIds.at(-1) ?? null
-      }
-    }
-
-    const nextPaneDocumentModes = { ...paneDocumentModes.value }
-    const nextViewSessions = { ...viewSessions.value }
-
-    for (const documentId of documentIds) {
-      delete nextPaneDocumentModes[paneDocumentModeKey('left', documentId)]
-      delete nextPaneDocumentModes[paneDocumentModeKey('right', documentId)]
-      delete nextViewSessions[paneDocumentModeKey('left', documentId)]
-      delete nextViewSessions[paneDocumentModeKey('right', documentId)]
-    }
-
-    paneDocumentModes.value = nextPaneDocumentModes
-    viewSessions.value = nextViewSessions
-    clearRemoteImagePermissions(documentIds)
-    releaseClosedNativeDocuments(documentIds)
-    removeDocuments(documentIds)
+    const { removedDocumentIds } = removeDocumentsFromPaneState(documentIds)
+    clearRemoteImagePermissions(removedDocumentIds)
+    releaseClosedNativeDocuments(removedDocumentIds)
+    removeDocuments(removedDocumentIds)
   }
 
   function clearRestoredLayout() {
@@ -1539,25 +1202,8 @@ export function useApplicationShell() {
     clearRemoteImagePermissions(currentDocumentIds)
     releaseClosedNativeDocuments(currentDocumentIds)
     removeDocuments(currentDocumentIds)
-    panes.value = [
-      {
-        id: 'left',
-        title: 'Main',
-        documentIds: [],
-        activeDocumentId: null,
-      },
-      {
-        id: 'right',
-        title: 'Split',
-        documentIds: [],
-        activeDocumentId: null,
-      },
-    ]
-    activePaneId.value = 'left'
-    splitEnabled.value = false
-    selectedPath.value = null
-    paneDocumentModes.value = {}
-    viewSessions.value = {}
+    clearLayout()
+    setSelectedPath(null)
   }
 
   async function restoreDocumentFromSession(
@@ -1589,12 +1235,7 @@ export function useApplicationShell() {
     }
 
     const fallbackDocument = createDocumentDraft(initialText, 'Untitled.md')
-    panes.value[0].documentIds = [fallbackDocument.id]
-    panes.value[0].activeDocumentId = fallbackDocument.id
-    paneDocumentModes.value = {
-      [paneDocumentModeKey('left', fallbackDocument.id)]: fallbackDocument.defaultMode,
-    }
-    ensureViewSession(panes.value[0], fallbackDocument)
+    setFallbackDocument(fallbackDocument)
   }
 
   async function restoreSessionSnapshot() {
@@ -1603,7 +1244,7 @@ export function useApplicationShell() {
       loadSessionState(),
       loadRecoverySnapshots(),
     ])
-    pendingRecoveryEntries.value = recoveryLoadResult.entries
+    setPendingRecoveryEntries(recoveryLoadResult.entries)
 
     if (recoveryLoadResult.diagnostics.length > 0) {
       diagnostics.push(...recoveryLoadResult.diagnostics)
@@ -1645,32 +1286,6 @@ export function useApplicationShell() {
       }
     }
 
-    for (const pane of panes.value) {
-      pane.documentIds = []
-      pane.activeDocumentId = null
-    }
-
-    for (const paneRecord of session.panes) {
-      const pane = getPane(paneRecord.id)
-
-      if (!pane) {
-        continue
-      }
-
-      pane.documentIds = paneRecord.documentKeys
-        .map((key) => documentIdByKey.get(key) ?? null)
-        .filter((documentId): documentId is string => documentId !== null)
-      pane.activeDocumentId = paneRecord.activeDocumentKey
-        ? documentIdByKey.get(paneRecord.activeDocumentKey) ?? pane.documentIds.at(-1) ?? null
-        : pane.documentIds.at(-1) ?? null
-    }
-
-    for (const documentId of documentIdByKey.values()) {
-      if (!panes.value.some((pane) => pane.documentIds.includes(documentId))) {
-        panes.value[0].documentIds.push(documentId)
-      }
-    }
-
     const nextPaneModes: Record<string, EditorMode> = {}
 
     for (const modeRecord of session.paneModes) {
@@ -1683,20 +1298,37 @@ export function useApplicationShell() {
       nextPaneModes[paneDocumentModeKey(modeRecord.paneId, documentId)] = modeRecord.mode
     }
 
-    paneDocumentModes.value = nextPaneModes
-    splitEnabled.value = session.splitEnabled && panes.value[1].documentIds.length > 0
-    activePaneId.value = getPane(session.activePaneId)?.documentIds.length ? session.activePaneId : 'left'
-    ensureSessionFallbackDocument()
+    const restoredDocumentIds = restoreLayout(
+      session.panes.map((paneRecord) => {
+        const documentIds = paneRecord.documentKeys
+          .map((key) => documentIdByKey.get(key) ?? null)
+          .filter((documentId): documentId is string => documentId !== null)
 
-    for (const pane of panes.value) {
-      for (const documentId of pane.documentIds) {
+        return {
+          id: paneRecord.id,
+          documentIds,
+          activeDocumentId: paneRecord.activeDocumentKey
+            ? documentIdByKey.get(paneRecord.activeDocumentKey) ?? documentIds.at(-1) ?? null
+            : documentIds.at(-1) ?? null,
+        }
+      }),
+      nextPaneModes,
+      session.splitEnabled,
+      session.activePaneId,
+      getDocument,
+    )
+
+    for (const documentId of documentIdByKey.values()) {
+      if (!restoredDocumentIds.has(documentId)) {
         const document = getDocument(documentId)
 
         if (document) {
-          ensureViewSession(pane, document)
+          addDocumentToPane(document, 'left')
         }
       }
     }
+
+    ensureSessionFallbackDocument()
 
     if (diagnostics.length > 0) {
       errorMessage.value = diagnostics.join(' ')
@@ -1766,7 +1398,7 @@ export function useApplicationShell() {
       }
 
       if (entry.kind === 'saved' && currentDocument && currentDocument.content === entry.content) {
-        pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter((item) => item.key !== entry.key)
+        removePendingRecoveryEntry(entry.key)
         continue
       }
 
@@ -1782,7 +1414,7 @@ export function useApplicationShell() {
         continue
       }
 
-      pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter((item) => item.key !== entry.key)
+      removePendingRecoveryEntry(entry.key)
 
       if (decision === 'discard') {
         continue
@@ -1809,22 +1441,7 @@ export function useApplicationShell() {
   }
 
   function workspaceRelativePathFromAbsolute(path: string) {
-    if (!workspace.value) {
-      return null
-    }
-
-    const normalizedRoot = normalizePath(workspace.value.rootPath)
-    const normalizedPath = normalizePath(path)
-
-    if (normalizedPath === normalizedRoot) {
-      return ''
-    }
-
-    if (!normalizedPath.startsWith(`${normalizedRoot}\\`)) {
-      return null
-    }
-
-    return cleanDisplayPath(path).slice(cleanDisplayPath(workspace.value.rootPath).length + 1)
+    return getWorkspaceRelativePathFromAbsolute(path, cleanDisplayPath)
   }
 
   async function loadCurrentDiskDocument(document: OpenDocument) {
@@ -2004,29 +1621,15 @@ export function useApplicationShell() {
   }
 
   function handleExternalFileEvent(event: NativeFsEvent) {
-    const document = findDocumentByPath(event.path)
-    const relativePath = workspaceRelativePathFromAbsolute(event.path)
-
-    if (relativePath !== null) {
-      scheduleWorkspaceRefresh(relativePath)
-    }
-
-    if (!document) {
-      return
-    }
-
-    if (event.kind === 'remove') {
-      markDocumentMissing(document.id, `${document.name} was moved or deleted outside Folden.`)
-      return
-    }
-
-    if (isDirty(document)) {
-      markDocumentConflict(document.id, `${document.name} changed on disk while you have unsaved edits.`)
-      return
-    }
-
-    clearDocumentExternalState(document.id)
-    scheduleDocumentReload(document.id)
+    routeExternalFileEvent(event, {
+      findDocumentByPath,
+      workspaceRelativePathFromAbsolute,
+      scheduleWorkspaceRefresh,
+      scheduleDocumentReload,
+      markDocumentMissing,
+      markDocumentConflict,
+      clearDocumentExternalState,
+    })
   }
 
   function isSameOrChildPath(path: string, parent: string) {
@@ -2116,7 +1719,7 @@ export function useApplicationShell() {
   async function exportDiagnosticReport() {
     await runFileTask(async () => {
       const exportedPath = await exportDiagnostics()
-      watcherWarning.value = `Diagnostics exported to ${cleanDisplayPath(exportedPath)}`
+      setWatcherWarning(`Diagnostics exported to ${cleanDisplayPath(exportedPath)}`)
     }, 'Could not export diagnostics')
   }
 
@@ -2217,7 +1820,7 @@ export function useApplicationShell() {
 
       if (workspace.value) {
         void refreshWorkspace().catch((error) => {
-          watcherWarning.value = `Could not refresh workspace after settings change: ${formatError(error)}`
+          setWatcherWarning(`Could not refresh workspace after settings change: ${formatError(error)}`)
         })
       }
     },
@@ -2294,7 +1897,7 @@ export function useApplicationShell() {
     })
 
     void listen<string | null>('folden://watcher-warning', (event) => {
-      watcherWarning.value = event.payload
+      setWatcherWarning(event.payload)
     }).then((unlisten) => {
       setWatcherWarningUnlisten(unlisten)
     })
@@ -2319,7 +1922,7 @@ export function useApplicationShell() {
           const discardedKeys = new Set(
             dirtyDocuments.value.map((document) => buildSessionDocumentKey(document, normalizePath)),
           )
-          pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter((entry) => !discardedKeys.has(entry.key))
+          discardPendingRecoveryEntries(discardedKeys)
           await saveSessionState(buildPersistedSessionState())
           await saveRecoverySnapshots(buildPersistedRecoverySnapshots(discardedKeys))
         } else {
@@ -2413,6 +2016,7 @@ export function useApplicationShell() {
     saveDocument,
     saveDocumentAsCopy,
     selectedPath,
+    setSelectedPath,
     setActiveDocument,
     setActivePane,
     setPaneDocumentMode,
