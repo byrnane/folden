@@ -23,6 +23,7 @@ import {
   restoreWorkspaceByPath,
   saveTextFile,
   trashPath,
+  type NativeError,
   type OpenedDocument,
   type WorkspaceDescriptor,
   type WorkspaceEntry,
@@ -45,6 +46,7 @@ import {
   loadApplicationSettings,
   saveApplicationSettings,
 } from './settings'
+import { filterWorkspaceEntriesByIgnoredNames } from './workspaceFilters'
 import {
   buildSessionDocumentKey,
   loadRecoverySnapshots,
@@ -245,6 +247,7 @@ export function useApplicationShell() {
     },
     onError: (job, error) => {
       markDocumentSaveError(job.documentId, error)
+      syncDocumentExternalStateFromSaveError(job.documentId, error)
     },
   })
   viewSessions.value = {
@@ -690,6 +693,13 @@ export function useApplicationShell() {
     }
 
     expandedWorkspacePaths.value = nextExpandedPaths
+  }
+
+  function applyWorkspaceEntryFilters(entries: WorkspaceEntry[]) {
+    return filterWorkspaceEntriesByIgnoredNames(
+      entries,
+      appSettings.value.workspace.ignoredNames,
+    )
   }
 
   function clearWorkspaceLoadError(path: string) {
@@ -1261,7 +1271,7 @@ export function useApplicationShell() {
   }
 
   async function loadWorkspace(descriptor: WorkspaceDescriptor) {
-    const entries = await listDirectory(descriptor.id, '')
+    const entries = applyWorkspaceEntryFilters(await listDirectory(descriptor.id, ''))
     workspace.value = {
       id: descriptor.id,
       rootPath: descriptor.rootPath,
@@ -1382,7 +1392,9 @@ export function useApplicationShell() {
 
     const normalizedBranchPath = branchPath ?? ''
     clearWorkspaceLoadError(normalizedBranchPath)
-    const nextChildren = await listDirectory(workspace.value.id, normalizedBranchPath)
+    const nextChildren = applyWorkspaceEntryFilters(
+      await listDirectory(workspace.value.id, normalizedBranchPath),
+    )
 
     if (normalizedBranchPath === '') {
       workspace.value.entries = nextChildren
@@ -1614,6 +1626,17 @@ export function useApplicationShell() {
     }, appSettings.value.autosave.debounceMs)
 
     pendingAutosaves.set(document.id, timeoutId)
+  }
+
+  function syncDocumentExternalStateFromSaveError(documentId: string, error: NativeError) {
+    if (error.code === 'file_changed_externally') {
+      markDocumentConflict(documentId, 'The file changed on disk before Folden could save it.')
+      return
+    }
+
+    if (error.code === 'not_found') {
+      markDocumentMissing(documentId, 'The original file is no longer available on disk.')
+    }
   }
 
   function syncAutosaveTimers() {
@@ -2498,6 +2521,12 @@ export function useApplicationShell() {
     (settings) => {
       saveApplicationSettings(settings)
       syncAutosaveTimers()
+
+      if (workspace.value) {
+        void refreshWorkspace().catch((error) => {
+          watcherWarning.value = `Could not refresh workspace after settings change: ${formatError(error)}`
+        })
+      }
     },
     { deep: true },
   )

@@ -32,6 +32,17 @@ export const defaultApplicationSettings: ApplicationSettings = {
   },
 }
 
+export function normalizeWorkspaceIgnoredNames(value: unknown) {
+  const extras = Array.isArray(value)
+    ? value.filter((name) => typeof name === 'string' && name.trim().length > 0)
+    : []
+
+  return [...new Set([
+    ...defaultApplicationSettings.workspace.ignoredNames,
+    ...extras,
+  ])]
+}
+
 export function normalizeApplicationSettings(value: unknown): ApplicationSettings {
   if (typeof value !== 'object' || value === null) {
     return structuredClone(defaultApplicationSettings)
@@ -63,9 +74,7 @@ export function normalizeApplicationSettings(value: unknown): ApplicationSetting
         : defaultApplicationSettings.remoteImages.policy,
     },
     workspace: {
-      ignoredNames: Array.isArray(workspace.ignoredNames)
-        ? workspace.ignoredNames.filter((name) => typeof name === 'string' && name.trim().length > 0)
-        : [...defaultApplicationSettings.workspace.ignoredNames],
+      ignoredNames: normalizeWorkspaceIgnoredNames(workspace.ignoredNames),
     },
   }
 }
