@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Folden",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "identifier": "com.folden.editor",
   "build": {
     "frontendDist": "../dist",
@@ -30,6 +30,10 @@
         "frame-src": "'none'",
         "base-uri": "'none'",
         "form-action": "'none'"
+      },
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
       }
     }
   },

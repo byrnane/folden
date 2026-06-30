@@ -227,6 +227,7 @@ export function useApplicationShell() {
   let sessionPersistRequested = false
   const markdownSafetyCache = ref<Record<string, MarkdownSafetyReport>>({})
   const visualSafetyAcknowledgments = ref<Record<string, number>>({})
+  const remoteImagePermissions = ref<Record<string, boolean>>({})
   const pendingWorkspaceRefreshes = new Map<string, number>()
   const pendingDocumentReloads = new Map<string, number>()
   const pendingAutosaves = new Map<string, number>()
@@ -553,6 +554,7 @@ export function useApplicationShell() {
       return {
         safeForVisualEditing: true,
         unsupportedFeatures: [],
+        remoteImages: [],
       } satisfies MarkdownSafetyReport
     }
 
@@ -589,6 +591,35 @@ export function useApplicationShell() {
 
     const safetyReport = getMarkdownSafetyReport(document)
     return !safetyReport.safeForVisualEditing && !isVisualSafetyAcknowledged(document)
+  }
+
+  function documentHasRemoteImages(document: OpenDocument) {
+    return getMarkdownSafetyReport(document).remoteImages.length > 0
+  }
+
+  function shouldLoadRemoteImages(document: OpenDocument) {
+    return remoteImagePermissions.value[document.id] === true
+  }
+
+  function allowRemoteImagesForDocument(document: OpenDocument) {
+    remoteImagePermissions.value = {
+      ...remoteImagePermissions.value,
+      [document.id]: true,
+    }
+  }
+
+  function clearRemoteImagePermissions(documentIds: string[]) {
+    if (!documentIds.some((documentId) => documentId in remoteImagePermissions.value)) {
+      return
+    }
+
+    const nextPermissions = { ...remoteImagePermissions.value }
+
+    for (const documentId of documentIds) {
+      delete nextPermissions[documentId]
+    }
+
+    remoteImagePermissions.value = nextPermissions
   }
 
   function resetVisualSafetyAcknowledgment(documentId: string, revision: number) {
@@ -986,11 +1017,6 @@ export function useApplicationShell() {
     }
 
     const safetyReport = getMarkdownSafetyReport(document)
-
-    if (safetyReport.unsupportedFeatures.some((feature) => feature.kind === 'remote-image')) {
-      errorMessage.value = 'Documents with remote images must stay in Source mode in this release.'
-      return false
-    }
 
     if (safetyReport.safeForVisualEditing || isVisualSafetyAcknowledged(document)) {
       return true
@@ -1784,6 +1810,7 @@ export function useApplicationShell() {
     }
 
     if (!panes.value.some((openPane) => openPane.documentIds.includes(documentId))) {
+      clearRemoteImagePermissions([documentId])
       releaseClosedNativeDocuments([documentId])
       removeDocuments([documentId])
       delete nextPaneDocumentModes[paneDocumentModeKey('left', documentId)]
@@ -2002,12 +2029,14 @@ export function useApplicationShell() {
 
     paneDocumentModes.value = nextPaneDocumentModes
     viewSessions.value = nextViewSessions
+    clearRemoteImagePermissions(documentIds)
     releaseClosedNativeDocuments(documentIds)
     removeDocuments(documentIds)
   }
 
   function clearRestoredLayout() {
     const currentDocumentIds = documents.value.map((document) => document.id)
+    clearRemoteImagePermissions(currentDocumentIds)
     releaseClosedNativeDocuments(currentDocumentIds)
     removeDocuments(currentDocumentIds)
     panes.value = [
@@ -2877,6 +2906,8 @@ export function useApplicationShell() {
     isDirty,
     isFileBusy,
     isMarkdownPath,
+    allowRemoteImagesForDocument,
+    documentHasRemoteImages,
     loadWorkspace,
     loadingWorkspacePaths,
     markdownSafetyDialog,
@@ -2909,6 +2940,7 @@ export function useApplicationShell() {
     setPaneEditorAdapter,
     setSplitEnabled,
     splitEnabled,
+    shouldLoadRemoteImages,
     submitPromptDialog,
     cancelPromptDialog,
     toggleWorkspaceDirectory,

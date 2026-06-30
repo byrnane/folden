@@ -46,6 +46,8 @@ const {
   isDirty,
   isFileBusy,
   isMarkdownPath,
+  allowRemoteImagesForDocument,
+  documentHasRemoteImages,
   loadWorkspace,
   loadingWorkspacePaths,
   markdownSafetyDialog,
@@ -72,6 +74,7 @@ const {
   setPaneDocumentMode,
   setPaneEditorAdapter,
   splitEnabled,
+  shouldLoadRemoteImages,
   submitPromptDialog,
   cancelPromptDialog,
   toggleWorkspaceDirectory,
@@ -339,6 +342,21 @@ const {
 
           <template v-if="pane.activeDocumentId && getDocument(pane.activeDocumentId)">
             <div class="mode-switch">
+              <template v-if="getDocument(pane.activeDocumentId)">
+                <button
+                  v-if="
+                    getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'visual'
+                    && documentHasRemoteImages(getDocument(pane.activeDocumentId)!)
+                    && !shouldLoadRemoteImages(getDocument(pane.activeDocumentId)!)
+                  "
+                  type="button"
+                  class="load-remote-images-button"
+                  data-testid="load-remote-images"
+                  @click="allowRemoteImagesForDocument(getDocument(pane.activeDocumentId)!)"
+                >
+                  Load remote images
+                </button>
+              </template>
               <button
                 type="button"
                 :class="{ active: getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'visual' }"
@@ -373,12 +391,15 @@ const {
 
             <VisualMarkdownEditor
               v-if="getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'visual'"
-              :key="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
+              :key="`${getViewSessionId(pane, getDocument(pane.activeDocumentId)!)}:${shouldLoadRemoteImages(getDocument(pane.activeDocumentId)! ) ? 'remote-on' : 'remote-off'}`"
               :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
               :document-id="getDocument(pane.activeDocumentId)!.id"
               :view-id="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
               :model-value="getDocument(pane.activeDocumentId)!.content"
               :revision="getDocument(pane.activeDocumentId)!.revision"
+              :document-path="getDocument(pane.activeDocumentId)!.path"
+              :workspace-root-path="workspace?.rootPath ?? null"
+              :allow-remote-images="shouldLoadRemoteImages(getDocument(pane.activeDocumentId)!)"
               @document-update="handleDocumentUpdate"
             />
             <section v-else class="source-editor-frame">

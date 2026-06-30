@@ -21,6 +21,7 @@ import {
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import PromptDialog from './components/PromptDialog.vue'
 import type { DocumentUpdate } from './editorSync'
+import { resolveVisualImageSource } from './imageRendering'
 import { validateImageTarget, validateLinkTarget } from './markdownSafety'
 
 const props = defineProps<{
@@ -28,6 +29,9 @@ const props = defineProps<{
   viewId: string
   modelValue: string
   revision: number
+  documentPath: string | null
+  workspaceRootPath: string | null
+  allowRemoteImages: boolean
 }>()
 
 const emit = defineEmits<{
@@ -96,7 +100,108 @@ function applyExternalContent(value: string, revision: number, preserveViewState
   }
 }
 
+function createImageNodeView(
+  source: string | null,
+  allowRemoteImages: boolean,
+  documentPath: string | null,
+  workspaceRootPath: string | null,
+) {
+  return () => {
+    const dom = document.createElement('div')
+    dom.className = 'visual-image-node'
+    dom.contentEditable = 'false'
+
+    function renderImage() {
+      const resolvedImage = resolveVisualImageSource({
+        source,
+        documentPath,
+        workspaceRootPath,
+        allowRemoteImages,
+      })
+
+      dom.replaceChildren()
+
+      if (resolvedImage.kind === 'placeholder') {
+        dom.dataset.imageState = 'placeholder'
+
+        const placeholder = document.createElement('div')
+        placeholder.className = 'visual-image-placeholder'
+
+        const title = document.createElement('strong')
+        title.textContent = 'Image preview unavailable'
+        placeholder.append(title)
+
+        const message = document.createElement('span')
+        message.textContent = resolvedImage.reason
+        placeholder.append(message)
+
+        if (source?.trim()) {
+          const details = document.createElement('code')
+          details.textContent = source.trim()
+          placeholder.append(details)
+        }
+
+        dom.append(placeholder)
+        return
+      }
+
+      dom.dataset.imageState = 'loaded'
+
+      const image = document.createElement('img')
+      image.src = resolvedImage.renderedSrc
+      image.alt = ''
+      image.loading = 'lazy'
+
+      image.addEventListener('error', () => {
+        dom.dataset.imageState = 'error'
+        dom.replaceChildren()
+
+        const placeholder = document.createElement('div')
+        placeholder.className = 'visual-image-placeholder visual-image-placeholder-error'
+
+        const title = document.createElement('strong')
+        title.textContent = 'Image could not be loaded'
+        placeholder.append(title)
+
+        const message = document.createElement('span')
+        message.textContent = source?.trim()
+          ? `Folden kept the Markdown unchanged, but the preview failed for ${source.trim()}.`
+          : 'Folden kept the Markdown unchanged, but the preview failed.'
+        placeholder.append(message)
+
+        dom.append(placeholder)
+      }, { once: true })
+
+      dom.append(image)
+    }
+
+    renderImage()
+
+    return {
+      dom,
+      update: (updatedNode: { attrs?: { src?: string | null } }) => {
+        if (updatedNode.attrs?.src !== source) {
+          return false
+        }
+
+        return true
+      },
+    }
+  }
+}
+
 function createEditor(element: HTMLDivElement) {
+  const VisualImage = Image.extend({
+    addNodeView() {
+      return ({ node }) => createImageNodeView(
+        node.attrs.src as string | null,
+        props.allowRemoteImages,
+        props.documentPath,
+        props.workspaceRootPath,
+      )()
+    },
+  })
+
   return new Editor({
     element,
     content: props.modelValue,
@@ -109,7 +214,7 @@ function createEditor(element: HTMLDivElement) {
         openOnClick: false,
         autolink: true,
       }),
-      Image.configure({
+      VisualImage.configure({
         inline: false,
         allowBase64: false,
       }),
@@ -272,7 +377,7 @@ async function setImage() {
 
   const url = await openInputDialog({
     title: 'Insert image',
-    message: 'Enter a relative, asset:, or data: image URL to insert into the document.',
+    message: 'Enter a relative, asset:, data:, http:, or https: image URL to insert into the document.',
     initialValue: '',
     placeholder: './image.png',
     confirmLabel: 'Insert',

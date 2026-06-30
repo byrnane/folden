@@ -32,6 +32,7 @@ describe('markdown safety', () => {
 
     expect(report.safeForVisualEditing).toBe(true)
     expect(report.unsupportedFeatures).toEqual([])
+    expect(report.remoteImages).toEqual([])
   })
 
   it('flags unsupported constructs conservatively', () => {
@@ -46,7 +47,6 @@ describe('markdown safety', () => {
       '[^1]: footnote',
       '<div>html</div>',
       ':::note',
-      '![remote](https://example.com/a.png)',
     ].join('\n'))
 
     expect(report.safeForVisualEditing).toBe(false)
@@ -57,17 +57,25 @@ describe('markdown safety', () => {
       'footnote',
       'html',
       'directive',
-      'remote-image',
     ])
   })
 
-  it('rejects dangerous link schemes and remote image targets', () => {
+  it('tracks remote images without blocking visual editing by itself', () => {
+    const report = analyzeMarkdownSafety('![remote](https://example.com/a.png)')
+
+    expect(report.safeForVisualEditing).toBe(true)
+    expect(report.unsupportedFeatures).toEqual([])
+    expect(report.remoteImages).toEqual([{
+      line: 1,
+      source: 'https://example.com/a.png',
+    }])
+  })
+
+  it('rejects dangerous link schemes while allowing remote image placeholders', () => {
     expect(validateLinkTarget('javascript:alert(1)')).toBe('javascript: links are not allowed.')
     expect(validateLinkTarget('vscode://settings')).toBe('This link scheme is not allowed.')
     expect(validateLinkTarget('./notes.md')).toBeNull()
-    expect(validateImageTarget('https://example.com/a.png')).toBe(
-      'Remote images are disabled in Visual mode for this release.',
-    )
+    expect(validateImageTarget('https://example.com/a.png')).toBeNull()
     expect(validateImageTarget('./image.png')).toBeNull()
     expect(isRemoteImageUrl('https://example.com/a.png')).toBe(true)
   })
