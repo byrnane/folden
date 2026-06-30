@@ -4,6 +4,7 @@ import {
   defaultApplicationSettings,
   loadApplicationSettings,
   normalizeApplicationSettings,
+  normalizeWorkspaceIgnoredNames,
   saveApplicationSettings,
 } from './settings'
 
@@ -30,9 +31,21 @@ describe('application settings', () => {
         policy: 'blocked',
       },
       workspace: {
-        ignoredNames: ['.git'],
+        ignoredNames: defaultApplicationSettings.workspace.ignoredNames,
       },
     })
+  })
+
+  it('retains built-in ignored workspace names while allowing extra entries', () => {
+    expect(normalizeWorkspaceIgnoredNames(['custom', '.git', 'build'])).toEqual([
+      '.git',
+      'node_modules',
+      'dist',
+      'build',
+      'target',
+      '.cache',
+      'custom',
+    ])
   })
 
   it('loads defaults when persisted JSON is invalid', () => {

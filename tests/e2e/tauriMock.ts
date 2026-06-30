@@ -77,6 +77,19 @@ export async function installTauriMock(page: Page) {
     function listRoot(): WorkspaceEntry[] {
       return [
         {
+          name: '.cache',
+          path: '.cache',
+          kind: 'directory',
+          children: [
+            {
+              name: 'hidden.md',
+              path: '.cache\\hidden.md',
+              kind: 'file',
+              children: [],
+            },
+          ],
+        },
+        {
           name: 'README.md',
           path: 'README.md',
           kind: 'file',
@@ -176,6 +189,11 @@ export async function installTauriMock(page: Page) {
       __TAURI_EVENT_PLUGIN_INTERNALS__: {
         unregisterListener: (_event: string, id: number) => {
           callbacks.delete(id)
+        },
+      },
+      __FOLDEN_TAURI_MOCK__: {
+        readFile(relativePath: string) {
+          return files.get(relativePath) ?? null
         },
       },
     })

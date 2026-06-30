@@ -32,6 +32,7 @@ test('opens a mocked workspace and saves an edited Markdown document', async ({ 
   await expect(page.getByRole('heading', { name: 'FoldenE2E' })).toBeVisible()
   await expect(page.getByTestId('workspace-root')).toContainText('C:\\FoldenE2E')
   await expect(page.getByTestId('workspace-tree')).toContainText('README.md')
+  await expect(page.getByTestId('workspace-tree')).not.toContainText('.cache')
 
   await page.getByTestId('workspace-entry-README.md').click()
 
@@ -56,6 +57,38 @@ test('opens a mocked workspace and saves an edited Markdown document', async ({ 
 
   await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
   await expect(page.getByTestId('status-path')).toContainText('C:\\FoldenE2E\\README.md')
+})
+
+test('autosaves existing files but does not autosave scratch documents', async ({ page }) => {
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+  await page.getByRole('checkbox').check()
+  await page.getByRole('button', { name: 'Source' }).click()
+
+  const editor = page.getByTestId('source-editor').locator('.cm-content')
+  await editor.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
+  await page.keyboard.type('\nAutosaved change.\n')
+
+  await expect(page.getByTestId('dirty-marker')).toContainText('1 unsaved')
+  await expect(page.getByTestId('dirty-marker')).toHaveCount(0, { timeout: 5000 })
+
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & {
+      __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
+    }).__FOLDEN_TAURI_MOCK__?.readFile('README.md')
+  ))).toContain('Autosaved change.')
+
+  await page.getByRole('button', { name: 'New scratch document' }).click()
+  await page.getByRole('button', { name: 'Source' }).click()
+
+  const scratchEditor = page.getByTestId('source-editor').locator('.cm-content')
+  await scratchEditor.click()
+  await page.keyboard.type('Scratch should stay dirty')
+
+  await page.waitForTimeout(1600)
+  await expect(page.getByTestId('dirty-marker')).toContainText('1 unsaved')
+  await expect(page.getByTestId('status-path')).toContainText('Scratch')
 })
 
 test('asks before closing a dirty document tab', async ({ page }) => {
