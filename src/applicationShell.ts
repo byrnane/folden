@@ -2520,11 +2520,7 @@ export function useApplicationShell() {
     const relativePath = workspaceRelativePathFromAbsolute(event.path)
 
     if (relativePath !== null) {
-      const branchPath = event.kind === 'remove'
-        ? parentPath(relativePath) ?? ''
-        : parentPath(relativePath) ?? ''
-
-      scheduleWorkspaceRefresh(branchPath)
+      scheduleWorkspaceRefresh(relativePath)
     }
 
     if (!document) {

@@ -1,7 +1,30 @@
 import type { Page } from '@playwright/test'
 
-export async function installTauriMock(page: Page) {
-  await page.addInitScript(() => {
+type RecoverySnapshotMock = {
+  key: string
+  kind: 'saved' | 'scratch'
+  path: string | null
+  workspaceRootPath: string | null
+  relativePath: string | null
+  name: string
+  content: string
+  fileFormat: {
+    lineEnding: string
+    hasUtf8Bom: boolean
+  }
+  fingerprint: {
+    size: number
+    modifiedAtMs: number
+  } | null
+  updatedAtMs: number
+}
+
+type TauriMockOptions = {
+  recoveryEntries?: RecoverySnapshotMock[]
+}
+
+export async function installTauriMock(page: Page, options: TauriMockOptions = {}) {
+  await page.addInitScript((mockOptions: TauriMockOptions) => {
     type WorkspaceEntry = {
       name: string
       path: string
@@ -34,6 +57,7 @@ export async function installTauriMock(page: Page) {
       ['README.md', '# E2E Note\r\n\r\nOriginal content.\r\n'],
       ['notes\\daily.md', '# Daily\n\nNested note.\n'],
     ])
+    let recoveryEntries = [...(mockOptions.recoveryEntries ?? [])]
     const callbacks = new Map<number, (data: unknown) => unknown>()
     const eventListeners = new Map<string, Set<number>>()
     let nextCallbackId = 1
@@ -112,21 +136,85 @@ export async function installTauriMock(page: Page) {
       ]
     }
 
+    function normalizeRelativePath(path: string) {
+      const normalizedPath = path.replaceAll('/', '\\')
+
+      if (normalizedPath === workspace.rootPath) {
+        return ''
+      }
+
+      const rootPrefix = `${workspace.rootPath}\\`
+      return normalizedPath.startsWith(rootPrefix)
+        ? normalizedPath.slice(rootPrefix.length)
+        : normalizedPath
+    }
+
+    function findDirectoryEntries(path: string) {
+      const targetPath = normalizeRelativePath(path)
+
+      if (!targetPath) {
+        return listRoot()
+      }
+
+      const stack = [...listRoot()]
+
+      while (stack.length > 0) {
+        const current = stack.shift()
+
+        if (!current || current.kind !== 'directory') {
+          continue
+        }
+
+        if (current.path === targetPath) {
+          return current.children
+        }
+
+        stack.unshift(...current.children)
+      }
+
+      return []
+    }
+
+    function emitFsEvent(kind: 'create' | 'modify' | 'remove', absolutePath: string) {
+      const listeners = eventListeners.get('folden://fs-event')
+      if (!listeners) {
+        return
+      }
+
+      const payload = {
+        kind,
+        path: absolutePath,
+      }
+
+      for (const id of listeners) {
+        callbacks.get(id)?.({ event: 'folden://fs-event', payload })
+      }
+    }
+
     async function invoke(cmd: string, args?: Record<string, unknown>) {
       switch (cmd) {
         case 'open_workspace_directory':
         case 'restore_workspace_by_path':
           return workspace
         case 'list_directory':
-          return args?.path === 'notes' ? listRoot()[1].children : listRoot()
+          return findDirectoryEntries(String(args?.path ?? ''))
         case 'open_text_file_by_path':
-          return openedDocument(String(args?.path ?? 'README.md'))
+        case 'open_text_file_at_path':
+          return openedDocument(normalizeRelativePath(String(args?.path ?? 'README.md')))
         case 'save_text_file': {
           const content = String(args?.content ?? '')
           const documentId = typeof args?.documentId === 'string' ? args.documentId : null
           const relativePath = documentId ? 'README.md' : String(args?.suggestedFileName ?? 'Untitled.md')
 
           files.set(relativePath, content)
+          if (documentId) {
+            emitFsEvent('modify', `${workspace.rootPath}\\${relativePath}`)
+            const parentDirectory = normalizeRelativePath(relativePath).split('\\').slice(0, -1).join('\\')
+
+            if (parentDirectory) {
+              emitFsEvent('modify', `${workspace.rootPath}\\${parentDirectory}`)
+            }
+          }
 
           return {
             id: documentId ?? `native-doc-${nextDocumentId++}`,
@@ -144,7 +232,10 @@ export async function installTauriMock(page: Page) {
         case 'load_session_state':
           return null
         case 'load_recovery_snapshots':
-          return { entries: [], diagnostics: [] }
+          return {
+            entries: recoveryEntries.map((entry) => structuredClone(entry)),
+            diagnostics: [],
+          }
         case 'save_session_state':
         case 'save_recovery_snapshots':
         case 'close_native_documents':
@@ -204,24 +295,15 @@ export async function installTauriMock(page: Page) {
       __FOLDEN_TAURI_MOCK__: {
         emitFsChange(relativePath: string, content: string) {
           files.set(relativePath, content)
-          const listeners = eventListeners.get('folden://fs-event')
-          if (!listeners) {
-            return
-          }
-
-          const payload = {
-            kind: 'modify',
-            path: `${workspace.rootPath}\\${relativePath}`,
-          }
-
-          for (const id of listeners) {
-            callbacks.get(id)?.({ event: 'folden://fs-event', payload })
-          }
+          emitFsEvent('modify', `${workspace.rootPath}\\${relativePath}`)
         },
         readFile(relativePath: string) {
           return files.get(relativePath) ?? null
         },
+        setRecoveryEntries(entries: RecoverySnapshotMock[]) {
+          recoveryEntries = [...entries]
+        },
       },
     })
-  })
+  }, options)
 }

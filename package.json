@@ -1,7 +1,7 @@
 {
   "name": "folden",
   "private": true,
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "Local-first desktop Markdown and text editor.",
   "author": "byrnane",
   "license": "UNLICENSED",
@@ -23,9 +23,9 @@
     "version:check": "node scripts/check-version.mjs",
     "test:unit": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "test:e2e:headed": "node scripts/run-e2e.mjs --headed",
+    "test:e2e:ui": "node scripts/run-e2e.mjs --ui"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
