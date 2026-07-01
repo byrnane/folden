@@ -65,12 +65,15 @@ Do not ask when the answer is available in the repository or a conservative, loc
 Use this format and keep it compact:
 
 ### Changed
+
 - `<path or area>` — what changed and why.
 
 ### Checks
+
 - `<command or check>` — passed, failed, or not run.
 
 ### Notes
+
 - Include only unresolved risks, limitations, migrations, or intentional omissions. Omit this section when there are none.
 
 Final-response rules:
@@ -80,3 +83,4 @@ Final-response rules:
 - Answer what changed, where it changed, and why it changed.
 - Do not include a chronological work log, lengthy recap, tutorial, or generic praise.
 - For planning, investigation, or review tasks with no implementation, use a concise structure appropriate to the request instead of forcing this template.
+

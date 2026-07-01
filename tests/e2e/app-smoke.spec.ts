@@ -148,6 +148,7 @@ test('exports a local diagnostics report from settings', async ({ page }) => {
   await openApp(page)
 
   await page.locator('button[title="Settings"]').click()
+  await page.getByRole('button', { name: 'Appearance' }).click()
   await page.getByTestId('export-diagnostics').click()
 
   await expect(page.locator('.warning-message')).toContainText('Diagnostics exported to C:\\FoldenAppData\\folden-diagnostics.txt')
@@ -198,6 +199,7 @@ test('keeps split source and visual panes in sync for the same document', async 
 
   await page.locator('button[title="Toggle split view"]').click()
   await page.locator('button[title="Move active tab right"]').click()
+  await expect(page.locator('button[title="Move active tab left"]')).toBeVisible()
 
   const panes = page.locator('.editor-pane')
   const leftPane = panes.nth(0)
@@ -242,14 +244,19 @@ test('loads persisted settings before opening a workspace', async ({ page }) => 
     },
   })
 
-  await expect(page.getByRole('checkbox')).toBeChecked()
+  await page.locator('button[title="Settings"]').click()
+  await page.getByRole('button', { name: 'Files' }).click()
+  await expect(page.getByRole('checkbox', { name: /Autosave/ })).toBeChecked()
+  await page.locator('button[title="Workspace"]').click()
   await page.getByTestId('open-folder-empty').click()
 
   await expect(page.getByTestId('workspace-tree')).toContainText('README.md')
   await expect(page.getByTestId('workspace-tree')).not.toContainText('.cache')
   await expect(page.getByTestId('workspace-tree')).not.toContainText('notes')
 
-  await page.getByRole('checkbox').uncheck()
+  await page.locator('button[title="Settings"]').click()
+  await page.getByRole('button', { name: 'Files' }).click()
+  await page.getByRole('checkbox', { name: /Autosave/ }).uncheck()
   await expect.poll(async () => page.evaluate((storageKey) => (
     window.localStorage.getItem(storageKey)
   ), applicationSettingsStorageKey)).toContain('"enabled":false')
@@ -259,7 +266,10 @@ test('autosaves existing files but does not autosave scratch documents', async (
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
-  await page.getByRole('checkbox').check()
+  await page.locator('button[title="Settings"]').click()
+  await page.getByRole('button', { name: 'Files' }).click()
+  await page.getByRole('checkbox', { name: /Autosave/ }).check()
+  await page.locator('button[title="Workspace"]').click()
   await page.getByRole('button', { name: 'Source' }).click()
 
   const editor = sourceEditor(page)

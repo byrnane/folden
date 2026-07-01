@@ -53,13 +53,14 @@ function createDocument(overrides: Partial<OpenDocument> = {}): OpenDocument {
 function createHarness(options: {
   workspace?: { id: string, rootPath: string } | null
   documents?: OpenDocument[]
+  activePaneId?: EditorPane['id']
 } = {}) {
   const workspace = ref(options.workspace ?? { id: 'workspace-1', rootPath: 'C:\\Docs' })
   const documents = ref<OpenDocument[]>(options.documents ?? [])
   const expandedWorkspacePaths = ref(new Set<string>())
   const activeDocument = computed(() => documents.value[0] ?? null)
   const activePane = computed<EditorPane | undefined>(() => ({
-    id: 'left',
+    id: options.activePaneId ?? 'left',
     title: 'Primary',
     documentIds: documents.value.map((document) => document.id),
     activeDocumentId: documents.value[0]?.id ?? null,
@@ -246,5 +247,34 @@ describe('workspace workflow controller', () => {
     expect(deps.setWorkspaceLoadError).toHaveBeenCalledWith('src', 'permission denied')
     expect(deps.setWorkspacePathLoading).toHaveBeenCalledWith('src', false)
     expect(deps.setWatcherWarning).toHaveBeenCalledWith('Could not load folder src: permission denied')
+  })
+
+  it('moves the active document from the left pane to the right pane', () => {
+    const document = createDocument()
+    const { controller, deps } = createHarness({ documents: [document], activePaneId: 'left' })
+
+    controller.moveActiveDocumentToRight()
+
+    expect(deps.moveDocumentToPane).toHaveBeenCalledWith(document, 'left', 'right')
+    expect(deps.setSplitEnabled).not.toHaveBeenCalled()
+  })
+
+  it('moves the active document from the right pane to the left pane', () => {
+    const document = createDocument()
+    const { controller, deps } = createHarness({ documents: [document], activePaneId: 'right' })
+
+    controller.moveActiveDocumentToRight()
+
+    expect(deps.moveDocumentToPane).toHaveBeenCalledWith(document, 'right', 'left')
+    expect(deps.setSplitEnabled).not.toHaveBeenCalled()
+  })
+
+  it('does not move a tab when there is no active document', () => {
+    const { controller, deps } = createHarness({ documents: [], activePaneId: 'left' })
+
+    controller.moveActiveDocumentToRight()
+
+    expect(deps.moveDocumentToPane).not.toHaveBeenCalled()
+    expect(deps.setSplitEnabled).not.toHaveBeenCalled()
   })
 })
