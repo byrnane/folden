@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import { createWorkspaceController } from '../../../../src/application/controllers/workspaceController'
-import type { ApplicationSettings } from '../../../../src/infrastructure/settings/settings'
+import { defaultApplicationSettings, type ApplicationSettings } from '../../../../src/infrastructure/settings/settings'
 import type { WorkspaceEntry } from '../../../../src/domain/native'
 
 const appSettings = ref<ApplicationSettings>({
+  ...defaultApplicationSettings,
   autosave: {
     enabled: false,
     debounceMs: 500,

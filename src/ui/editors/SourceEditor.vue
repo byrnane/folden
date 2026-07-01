@@ -10,6 +10,7 @@ const props = defineProps<{
   viewId: string
   modelValue: string
   revision: number
+  wordWrap: boolean
 }>()
 
 const emit = defineEmits<{
@@ -32,7 +33,7 @@ onMounted(() => {
     extensions: [
       basicSetup,
       markdown(),
-      EditorView.lineWrapping,
+      ...(props.wordWrap ? [EditorView.lineWrapping] : []),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !isApplyingExternalContent) {
           emit('document-update', {

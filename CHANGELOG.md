@@ -6,6 +6,16 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.6.0 - 2026-07-01
+
+* Перестроен application shell: добавлены activity bar, Open Editors, общий document toolbar, компактный status bar и toast для diagnostics.
+* Вкладки стали рабочим инструментом: поддержаны drag-and-drop reorder, перенос между панелями, закрытие средней кнопкой и автоматическое создание/закрытие split.
+* Добавлены persisted layout settings: ширина sidebar, split ratio, focus mode и reset layout отдельно от состояния документов.
+* Добавлен раздел Settings с базовыми editor/files/appearance настройками, применяемыми без перезапуска.
+* Обновлена визуальная система: единые UI tokens, focus-ring, компактные controls, unified scrollbars, активные pane/tab states и скрытая close-кнопка вкладки.
+* Diagnostics и logs убраны из основного toolbar; diagnostics export доступен из Settings и показывает toast-сообщение.
+* Расширены unit и E2E проверки для новых settings/layout, tab DnD/reorder, shared toolbar и обновлённого workspace UX.
+
 ## 0.4.15 - 2026-07-01
 
 * Native DTO и ошибки закреплены в доменном TS-контракте, а Tauri-вызовы собраны в application ports для документов, workspace, session, diagnostics и native events.

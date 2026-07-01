@@ -4,25 +4,12 @@ import Link from '@tiptap/extension-link'
 import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
 import { Editor } from '@tiptap/vue-3'
-import {
-  Bold,
-  Code,
-  Heading1,
-  Heading2,
-  Image as ImageIcon,
-  Italic,
-  Link as LinkIcon,
-  List,
-  ListOrdered,
-  Quote,
-  RemoveFormatting,
-  Strikethrough,
-} from 'lucide-vue-next'
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import PromptDialog from '../dialogs/PromptDialog.vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import { resolveVisualImageSource } from '../../domain/markdown/imageRendering'
 import { validateImageTarget, validateLinkTarget } from '../../domain/markdown/markdownSafety'
+import type { VisualEditorCommand } from '../../application/types/shell'
 
 const props = defineProps<{
   documentId: string
@@ -285,6 +272,7 @@ function flushContent() {
 
 defineExpose({
   flushContent,
+  runVisualCommand,
 })
 
 function runCommand(command: () => void) {
@@ -393,6 +381,27 @@ async function setImage() {
   runCommand(() => editor.value?.chain().focus().setImage({ src: url }).run())
 }
 
+function runVisualCommand(command: VisualEditorCommand) {
+  const commands: Record<VisualEditorCommand, () => void | Promise<void>> = {
+    'heading-1': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 1 }).run()),
+    'heading-2': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 2 }).run()),
+    bold: () => runCommand(() => editor.value?.chain().focus().toggleBold().run()),
+    italic: () => runCommand(() => editor.value?.chain().focus().toggleItalic().run()),
+    strike: () => runCommand(() => editor.value?.chain().focus().toggleStrike().run()),
+    'inline-code': () => runCommand(() => editor.value?.chain().focus().toggleCode().run()),
+    'clear-formatting': () => runCommand(() => editor.value?.chain().focus().unsetAllMarks().clearNodes().run()),
+    'bullet-list': () => runCommand(() => editor.value?.chain().focus().toggleBulletList().run()),
+    'ordered-list': () => runCommand(() => editor.value?.chain().focus().toggleOrderedList().run()),
+    quote: () => runCommand(() => editor.value?.chain().focus().toggleBlockquote().run()),
+    'code-block': () => runCommand(() => editor.value?.chain().focus().toggleCodeBlock().run()),
+    link: () => setLink(),
+    image: () => setImage(),
+    'horizontal-rule': () => runCommand(() => editor.value?.chain().focus().setHorizontalRule().run()),
+  }
+
+  void commands[command]()
+}
+
 onBeforeUnmount(() => {
   editor.value?.destroy()
   editor.value = null
@@ -403,124 +412,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="visual-editor" data-testid="visual-editor">
-    <div v-if="editor" class="format-toolbar" aria-label="Markdown formatting">
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('heading', { level: 1 }) }"
-        title="Heading 1"
-        @click="runCommand(() => editor?.chain().focus().toggleHeading({ level: 1 }).run())"
-      >
-        <Heading1 :size="16" />
-      </button>
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('heading', { level: 2 }) }"
-        title="Heading 2"
-        @click="runCommand(() => editor?.chain().focus().toggleHeading({ level: 2 }).run())"
-      >
-        <Heading2 :size="16" />
-      </button>
-      <span class="toolbar-divider" />
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('bold') }"
-        title="Bold"
-        @click="runCommand(() => editor?.chain().focus().toggleBold().run())"
-      >
-        <Bold :size="16" />
-      </button>
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('italic') }"
-        title="Italic"
-        @click="runCommand(() => editor?.chain().focus().toggleItalic().run())"
-      >
-        <Italic :size="16" />
-      </button>
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('strike') }"
-        title="Strike"
-        @click="runCommand(() => editor?.chain().focus().toggleStrike().run())"
-      >
-        <Strikethrough :size="16" />
-      </button>
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('code') }"
-        title="Inline code"
-        @click="runCommand(() => editor?.chain().focus().toggleCode().run())"
-      >
-        <Code :size="16" />
-      </button>
-      <button
-        type="button"
-        class="icon-button"
-        title="Clear formatting"
-        @click="runCommand(() => editor?.chain().focus().unsetAllMarks().clearNodes().run())"
-      >
-        <RemoveFormatting :size="16" />
-      </button>
-      <span class="toolbar-divider" />
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('bulletList') }"
-        title="Bullet list"
-        @click="runCommand(() => editor?.chain().focus().toggleBulletList().run())"
-      >
-        <List :size="16" />
-      </button>
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('orderedList') }"
-        title="Ordered list"
-        @click="runCommand(() => editor?.chain().focus().toggleOrderedList().run())"
-      >
-        <ListOrdered :size="16" />
-      </button>
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('blockquote') }"
-        title="Quote"
-        @click="runCommand(() => editor?.chain().focus().toggleBlockquote().run())"
-      >
-        <Quote :size="16" />
-      </button>
-      <button
-        type="button"
-        class="icon-button"
-        :class="{ active: editor.isActive('codeBlock') }"
-        title="Code block"
-        @click="runCommand(() => editor?.chain().focus().toggleCodeBlock().run())"
-      >
-        <Code :size="16" />
-      </button>
-      <span class="toolbar-divider" />
-      <button type="button" class="icon-button" title="Link" @click="setLink">
-        <LinkIcon :size="16" />
-      </button>
-      <button type="button" class="icon-button" title="Image" @click="setImage">
-        <ImageIcon :size="16" />
-      </button>
-      <button
-        type="button"
-        class="toolbar-button"
-        title="Horizontal rule"
-        @click="runCommand(() => editor?.chain().focus().setHorizontalRule().run())"
-      >
-        HR
-      </button>
-    </div>
-
     <div ref="scrollHost" class="visual-editor-scroll">
       <div ref="editorHost" class="visual-editor-content" />
     </div>

@@ -280,6 +280,58 @@ export function createPaneController(initialDocument: OpenDocument) {
     removeDocumentFromPane(sourcePaneId, document.id, false)
   }
 
+  function moveDocumentIdToPane(
+    documentId: string,
+    sourcePaneId: EditorPane['id'],
+    targetPaneId: EditorPane['id'],
+    targetIndex?: number,
+  ) {
+    const sourcePane = getPane(sourcePaneId)
+    const targetPane = getPane(targetPaneId)
+
+    if (!sourcePane || !targetPane || !sourcePane.documentIds.includes(documentId)) {
+      return
+    }
+
+    if (targetPaneId === 'right') {
+      setSplitEnabled(true)
+    }
+
+    sourcePane.documentIds = sourcePane.documentIds.filter((id) => id !== documentId)
+
+    const currentTargetIds = targetPane.documentIds.filter((id) => id !== documentId)
+    const insertIndex = typeof targetIndex === 'number'
+      ? Math.min(Math.max(targetIndex, 0), currentTargetIds.length)
+      : currentTargetIds.length
+
+    currentTargetIds.splice(insertIndex, 0, documentId)
+    targetPane.documentIds = currentTargetIds
+    targetPane.activeDocumentId = documentId
+
+    if (sourcePane.activeDocumentId === documentId) {
+      sourcePane.activeDocumentId = sourcePane.documentIds.at(-1) ?? null
+    }
+
+    activePaneId.value = targetPaneId
+    normalizePaneState()
+  }
+
+  function reorderDocumentInPane(paneId: EditorPane['id'], documentId: string, targetIndex: number) {
+    const pane = getPane(paneId)
+
+    if (!pane || !pane.documentIds.includes(documentId)) {
+      return
+    }
+
+    const currentIds = pane.documentIds.filter((id) => id !== documentId)
+    const insertIndex = Math.min(Math.max(targetIndex, 0), currentIds.length)
+
+    currentIds.splice(insertIndex, 0, documentId)
+    pane.documentIds = currentIds
+    pane.activeDocumentId = documentId
+    activePaneId.value = paneId
+  }
+
   function normalizePaneState() {
     if (splitEnabled.value && panes.value[1].documentIds.length === 0) {
       setSplitEnabled(false)
@@ -480,6 +532,8 @@ export function createPaneController(initialDocument: OpenDocument) {
     setSplitEnabled,
     mergeRightPaneIntoLeft,
     moveDocumentToPane,
+    moveDocumentIdToPane,
+    reorderDocumentInPane,
     normalizePaneState,
     removeDocumentFromPane,
     removeDocumentsFromPanes,

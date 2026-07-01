@@ -1,7 +1,7 @@
 {
   "name": "folden",
   "private": true,
-  "version": "0.4.15",
+  "version": "0.6.0",
   "description": "Local-first desktop Markdown and text editor.",
   "author": "byrnane",
   "license": "UNLICENSED",
@@ -11,6 +11,7 @@
   },
   "type": "module",
   "scripts": {
+    "quality": "npm run version:check && npm run vue:typecheck && npm run vue:unused && npm run deps:cycles && npm run lint && npm run test:unit",
     "app:dev": "node scripts/tauri.mjs dev",
     "app:build": "node scripts/tauri.mjs build --no-bundle",
     "app:run": "node scripts/run-app.mjs",
@@ -24,7 +25,6 @@
     "version:check": "node scripts/check-version.mjs",
     "deps:cycles": "node scripts/check-dependency-cycles.mjs",
     "lint": "eslint .",
-    "quality": "npm run version:check && npm run vue:typecheck && npm run vue:unused && npm run deps:cycles && npm run lint && npm run test:unit",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",

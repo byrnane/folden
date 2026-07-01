@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   applicationSettingsStorageKey,
   defaultApplicationSettings,
+  defaultLayoutSettings,
   loadApplicationSettings,
+  normalizeLayoutSettings,
   normalizeApplicationSettings,
   normalizeWorkspaceIgnoredNames,
   saveApplicationSettings,
@@ -23,6 +25,7 @@ describe('application settings', () => {
         ignoredNames: ['.git', 42, ''],
       },
     })).toEqual({
+      ...defaultApplicationSettings,
       autosave: {
         enabled: true,
         debounceMs: defaultApplicationSettings.autosave.debounceMs,
@@ -33,6 +36,22 @@ describe('application settings', () => {
       workspace: {
         ignoredNames: defaultApplicationSettings.workspace.ignoredNames,
       },
+    })
+  })
+
+  it('normalizes persisted layout state without document ownership', () => {
+    expect(normalizeLayoutSettings({
+      activeActivitySection: 'settings',
+      sidebarWidth: 900,
+      splitRatio: 0.1,
+      focusMode: true,
+      documents: ['not-layout'],
+    })).toEqual({
+      ...defaultLayoutSettings,
+      activeActivitySection: 'settings',
+      sidebarWidth: 520,
+      splitRatio: 0.25,
+      focusMode: true,
     })
   })
 
