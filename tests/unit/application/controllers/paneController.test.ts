@@ -64,6 +64,28 @@ describe('pane controller', () => {
     expect(controller.viewSessions.value).toEqual({})
   })
 
+  it('reorders tabs inside a pane and moves tab ids across panes', () => {
+    const first = createDocument('first')
+    const second = createDocument('second')
+    const third = createDocument('third')
+    const controller = createPaneController(first)
+
+    controller.addDocumentToPane(second, 'left')
+    controller.addDocumentToPane(third, 'left')
+    controller.reorderDocumentInPane('left', first.id, 2)
+
+    expect(controller.getPane('left')?.documentIds).toEqual(['second', 'third', 'first'])
+    expect(controller.activePaneId.value).toBe('left')
+    expect(controller.getPane('left')?.activeDocumentId).toBe(first.id)
+
+    controller.moveDocumentIdToPane(first.id, 'left', 'right', 0)
+
+    expect(controller.splitEnabled.value).toBe(true)
+    expect(controller.getPane('left')?.documentIds).toEqual(['second', 'third'])
+    expect(controller.getPane('right')?.documentIds).toEqual(['first'])
+    expect(controller.activePaneId.value).toBe('right')
+  })
+
   it('restores layout, modes, split state, and editor sessions from a snapshot', () => {
     const first = createDocument('first')
     const second = createDocument('second')

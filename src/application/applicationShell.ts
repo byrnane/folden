@@ -7,8 +7,11 @@ import {
   type OpenDocument,
 } from '../domain/documents/documentState'
 import {
+  defaultLayoutSettings,
   loadApplicationSettings,
+  loadLayoutSettings,
   saveApplicationSettings,
+  saveLayoutSettings,
 } from '../infrastructure/settings/settings'
 import {
   cleanDisplayPath,
@@ -29,13 +32,15 @@ import { createVisualSafetyController } from './controllers/visualSafetyControll
 import { createApplicationCommandController } from './controllers/applicationCommandController'
 import { createTauriNativePorts } from '../infrastructure/tauri/nativePorts'
 import type { EditorPane } from './types/shell'
-export type { EditorAdapter } from './types/shell'
+import type { VisualEditorCommand } from './types/shell'
+export type { EditorAdapter, VisualEditorCommand } from './types/shell'
 
 export function useApplicationShell() {
   const initialText = '# Untitled\n\nStart writing in Folden.\n'
   const hasNativeRuntimeOnStartup = isTauriRuntime()
   const nativePorts = createTauriNativePorts()
   const appSettings = ref(loadApplicationSettings())
+  const layoutSettings = ref(loadLayoutSettings())
   const documentController = createDocumentController(initialText)
   const {
     initialDocument,
@@ -110,14 +115,19 @@ export function useApplicationShell() {
     updateDocumentSessions,
     setSplitEnabled,
     moveDocumentToPane,
+    moveDocumentIdToPane,
     normalizePaneState,
     removeDocumentFromPane,
     removeDocumentsFromPanes: removeDocumentsFromPaneState,
+    reorderDocumentInPane,
     clearLayout,
     setFallbackDocument,
     restoreLayout,
     getPaneSnapshot,
   } = paneController
+  if (appSettings.value.editor.defaultMarkdownMode === 'source') {
+    setOpenDocumentMode(initialDocument.id, 'source')
+  }
   const errorMessage = ref<string | null>(null)
   const externalChangesController = createExternalChangesController()
   const {
@@ -185,6 +195,22 @@ export function useApplicationShell() {
 
     return getDocument(activePane.value.activeDocumentId)
   })
+  const activeEditorAdapter = computed(() => paneEditors.value[activePaneId.value] ?? null)
+  const activeDocumentMode = computed(() => {
+    if (!activePane.value?.activeDocumentId || !activeDocument.value) {
+      return null
+    }
+
+    return getDocumentMode(activePane.value, activeDocument.value)
+  })
+  const activeDocumentWordCount = computed(() => {
+    if (!activeDocument.value) {
+      return 0
+    }
+
+    const words = activeDocument.value.content.trim().match(/\S+/g)
+    return words?.length ?? 0
+  })
   const activePath = computed(() => {
     if (!workspace.value || activeDocument.value?.workspaceId !== workspace.value.id) {
       return null
@@ -204,6 +230,22 @@ export function useApplicationShell() {
   })
 
   let workspaceWorkflowController: ReturnType<typeof createWorkspaceWorkflowController>
+
+  function applyDefaultMarkdownMode(document: OpenDocument) {
+    if (isMarkdownPath(document.path ?? document.name)) {
+      setOpenDocumentMode(document.id, appSettings.value.editor.defaultMarkdownMode)
+    }
+
+    return document
+  }
+
+  function createDocumentDraftWithDefaultMode(content: string, fallbackName?: string) {
+    return applyDefaultMarkdownMode(createDocumentDraft(content, fallbackName))
+  }
+
+  function openDocumentStateWithDefaultMode(document: Parameters<typeof openDocumentState>[0]) {
+    return applyDefaultMarkdownMode(openDocumentState(document))
+  }
 
   function refreshWorkspaceBranchForDocuments(branchPath: string | null, preserveDescendants = true) {
     return workspaceWorkflowController.refreshWorkspaceBranch(branchPath, preserveDescendants)
@@ -240,8 +282,8 @@ export function useApplicationShell() {
     getDocumentMode,
     applyDocumentUpdateToSessions,
     updateDocumentSessions,
-    createDocumentDraft,
-    openDocumentState,
+    createDocumentDraft: createDocumentDraftWithDefaultMode,
+    openDocumentState: openDocumentStateWithDefaultMode,
     getDocument,
     applyDocumentUpdate,
     undoDocument,
@@ -402,6 +444,61 @@ export function useApplicationShell() {
     return getWorkspaceRelativePathFromAbsolute(path, cleanDisplayPath)
   }
 
+  function setActivitySection(section: 'workspace' | 'settings') {
+    layoutSettings.value.activeActivitySection = section
+    if (section === 'workspace') {
+      appSettings.value.appearance.showSidebar = true
+    }
+  }
+
+  function resetLayoutSettings() {
+    layoutSettings.value = structuredClone(defaultLayoutSettings)
+    appSettings.value.appearance.showActivityBar = true
+    appSettings.value.appearance.showSidebar = true
+    appSettings.value.appearance.showStatusBar = true
+  }
+
+  function setSidebarWidth(width: number) {
+    layoutSettings.value.sidebarWidth = Math.min(Math.max(width, 220), 520)
+  }
+
+  function setSplitRatio(ratio: number) {
+    layoutSettings.value.splitRatio = Math.min(Math.max(ratio, 0.25), 0.75)
+  }
+
+  function toggleFocusMode() {
+    layoutSettings.value.focusMode = !layoutSettings.value.focusMode
+  }
+
+  function runActiveVisualCommand(command: VisualEditorCommand) {
+    activeEditorAdapter.value?.runVisualCommand?.(command)
+  }
+
+  function moveDocumentIdBetweenPanes(
+    documentId: string,
+    sourcePaneId: EditorPane['id'],
+    targetPaneId: EditorPane['id'],
+    targetIndex?: number,
+  ) {
+    moveDocumentIdToPane(documentId, sourcePaneId, targetPaneId, targetIndex)
+  }
+
+  async function openDroppedPath(path: string, paneId: EditorPane['id']) {
+    await runFileTask(async () => {
+      try {
+        const loadedDocument = await nativePorts.documents.openTextFileAtPath(path)
+        const document = openDocumentStateWithDefaultMode(loadedDocument)
+        addDocumentToPane(document, paneId)
+      } catch (documentError) {
+        try {
+          await loadWorkspace(await restoreWorkspaceByPath(path))
+        } catch {
+          throw documentError
+        }
+      }
+    }, 'Could not open dropped item')
+  }
+
   function scheduleDocumentReload(documentId: string) {
     scheduleDocumentReloadDebounced(documentId, () => {
       void reloadDocumentFromDisk(documentId).catch((error) => {
@@ -526,8 +623,8 @@ export function useApplicationShell() {
     loadWorkspace,
     clearRestoredLayout,
     addDocumentToPane,
-    createDocumentDraft,
-    openDocumentState,
+    createDocumentDraft: createDocumentDraftWithDefaultMode,
+    openDocumentState: openDocumentStateWithDefaultMode,
     getDocument,
     applyDocumentUpdate,
     enforceDocumentVisualSafety,
@@ -567,6 +664,14 @@ export function useApplicationShell() {
           setWatcherWarning(`Could not refresh workspace after settings change: ${formatError(error)}`)
         })
       }
+    },
+    { deep: true },
+  )
+
+  watch(
+    layoutSettings,
+    (settings) => {
+      saveLayoutSettings(settings)
     },
     { deep: true },
   )
@@ -630,10 +735,13 @@ export function useApplicationShell() {
 
   return {
     activeDocument,
+    activeDocumentMode,
+    activeDocumentWordCount,
     activeLocation,
     activePaneId,
     activePath,
     appSettings,
+    layoutSettings,
     cleanDisplayPath,
     closeDocument,
     canExecuteCommand,
@@ -663,6 +771,8 @@ export function useApplicationShell() {
     loadingWorkspacePaths,
     markdownSafetyDialog,
     moveActiveDocumentToRight,
+    moveDocumentIdBetweenPanes,
+    openDroppedPath,
     openConflictResolution,
     openEntryInRight,
     exportDiagnosticReport,
@@ -692,10 +802,17 @@ export function useApplicationShell() {
     setPaneDocumentMode,
     setPaneEditorAdapter,
     setSplitEnabled,
+    reorderDocumentInPane,
+    resetLayoutSettings,
+    runActiveVisualCommand,
+    setActivitySection,
+    setSidebarWidth,
+    setSplitRatio,
     splitEnabled,
     shouldLoadRemoteImages,
     submitPromptDialog,
     cancelPromptDialog,
+    toggleFocusMode,
     toggleWorkspaceDirectory,
     trashWorkspacePath,
     unsavedDialog,

@@ -144,9 +144,10 @@ test('keeps the visual editor mounted after saving an open visual document', asy
   ), visualNode)).toBe(true)
 })
 
-test('exports a local diagnostics report from the toolbar', async ({ page }) => {
+test('exports a local diagnostics report from settings', async ({ page }) => {
   await openApp(page)
 
+  await page.locator('button[title="Settings"]').click()
   await page.getByTestId('export-diagnostics').click()
 
   await expect(page.locator('.warning-message')).toContainText('Diagnostics exported to C:\\FoldenAppData\\folden-diagnostics.txt')
@@ -196,19 +197,23 @@ test('keeps split source and visual panes in sync for the same document', async 
   await page.getByTestId('workspace-entry-README.md').click()
 
   await page.locator('button[title="Toggle split view"]').click()
-  await page.getByRole('button', { name: 'Open Right' }).click()
+  await page.locator('button[title="Move active tab right"]').click()
 
   const panes = page.locator('.editor-pane')
   const leftPane = panes.nth(0)
   const rightPane = panes.nth(1)
 
-  await leftPane.getByRole('button', { name: 'Source' }).click()
+  await leftPane.click()
+  await page.getByTestId('workspace-entry-README.md').click()
+
+  await page.getByRole('button', { name: 'Source' }).click()
   const leftEditor = sourceEditor(leftPane)
   await leftEditor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\nShared from source.\n')
 
-  await rightPane.getByRole('button', { name: 'Visual' }).click()
+  await rightPane.click()
+  await page.getByRole('button', { name: 'Visual' }).click()
   await expect(rightPane.getByTestId('visual-editor')).toContainText('Shared from source.')
 
   const visualSurface = rightPane.locator('.visual-editor-content .ProseMirror')
@@ -385,7 +390,7 @@ test('shows a readable conflict diff and preserves the dirty copy when reloading
 
   await expect(page.getByTestId('document-title')).toHaveText('README.md')
   await expect(page.getByTestId('source-editor')).toContainText('Disk version wins.')
-  await expect(page.getByRole('button', { name: 'README (conflict copy).md' })).toBeVisible()
+  await expect(page.locator('.pane-tabs').getByRole('button', { name: 'README (conflict copy).md' })).toBeVisible()
 })
 
 test('keeps remote images blocked until the document explicitly allows them', async ({ page }) => {

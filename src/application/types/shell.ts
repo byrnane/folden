@@ -16,6 +16,23 @@ export type EditorPane = {
 
 export type EditorAdapter = {
   flushContent: () => string
+  runVisualCommand?: (command: VisualEditorCommand) => void
 }
+
+export type VisualEditorCommand =
+  | 'heading-1'
+  | 'heading-2'
+  | 'bold'
+  | 'italic'
+  | 'strike'
+  | 'inline-code'
+  | 'clear-formatting'
+  | 'bullet-list'
+  | 'ordered-list'
+  | 'quote'
+  | 'code-block'
+  | 'link'
+  | 'image'
+  | 'horizontal-rule'
 
 export type WindowCloseDecision = 'clean' | 'save' | 'discard' | 'cancel'
