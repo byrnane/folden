@@ -1,0 +1,98 @@
+# Folden Product
+
+Folden is a local-first desktop editor for Markdown and ordinary text files. It is meant to feel like a focused writing tool while preserving the user's direct control over files, folders, and source text.
+
+## Audience
+
+Folden is built for people who write and maintain text as part of real work:
+
+* developers;
+* game designers;
+* technical writers;
+* writers of documentation, notes, specs, scripts, and articles;
+* Markdown users who want visual editing without giving up source control.
+
+## Principles
+
+### Local-first
+
+Folden does not require accounts, cloud storage, telemetry, or a remote service to edit user documents. User content lives on the user's device and is opened from normal filesystem paths.
+
+### File-first
+
+Files are the source of truth. Folden can keep session state, recovery snapshots, settings, diagnostics, and caches, but the document body belongs in the user's files, not in a hidden application database.
+
+### Markdown-friendly
+
+Markdown is the main interchange format. A document should remain useful in another editor, a Git diff, a static-site pipeline, or a plain text viewer.
+
+### Direct before clever
+
+Folden should prefer clear, predictable workflows: open a folder, open a file, edit, save, recover if something goes wrong. Automation such as autosave and recovery must support that workflow instead of hiding it.
+
+## User-owned Data
+
+User-owned data includes:
+
+* opened text and Markdown files;
+* workspace folders and their children;
+* file names, relative paths, line endings, UTF-8 BOM state, and on-disk fingerprints;
+* unsaved scratch document content until the user discards it or saves it.
+
+Application-owned supporting data includes:
+
+* UI session layout;
+* recent workspaces;
+* recovery snapshots;
+* settings such as autosave and workspace ignored names;
+* bounded logs and exported diagnostic reports.
+
+Supporting data must not become the canonical copy of a saved document.
+
+## Current Product Surface
+
+Folden `0.4.15` supports:
+
+* native text file open/save;
+* workspace folder browsing and workspace file operations;
+* multiple documents with tabs;
+* two-pane split view;
+* source mode with CodeMirror;
+* visual Markdown mode with Tiptap;
+* explicit dirty state, undo, redo, save, save as copy, and close protection;
+* autosave for saved documents when enabled;
+* recovery for scratch and saved documents after an unexpected shutdown;
+* external change detection, missing-file states, stale-save protection, and conflict resolution;
+* local diagnostics and log access.
+
+## Boundaries
+
+Folden is not currently:
+
+* a cloud notes platform;
+* a collaborative editor;
+* a task tracker, CRM, wiki service, or project-management system;
+* a mobile application;
+* an online account system;
+* a database-backed document store;
+* a plugin platform;
+* an AI writing product.
+
+Future features should keep the same product contract: user documents stay file-first and readable outside Folden.
+
+## Role of Markdown and Plain Text
+
+Markdown files can open in Visual mode and Source mode. Source mode is a first-class editing surface, not a fallback. Visual mode should help users write common Markdown without taking ownership away from the source file.
+
+Plain text files remain plain text files. Folden should not force arbitrary text into a Markdown or block-document model just because the application has a visual editor.
+
+## Success Criteria
+
+Folden is succeeding when:
+
+* users can trust it with real local documents;
+* common editing, saving, closing, and recovery flows are predictable;
+* Markdown remains portable and reviewable outside the app;
+* external file changes are visible and recoverable instead of silently overwritten;
+* the app starts quickly enough to be used as a daily editor;
+* adding features does not blur ownership of user content.

@@ -1,36 +1,49 @@
 # Folden
 
-Folden is a lightweight local-first Markdown editor.
+Folden is a local-first desktop editor for Markdown and plain text files.
 
-The project goal is to combine a fast desktop writing tool, Markdown-friendly files, and a visual editing experience without hiding user documents in an opaque database.
+The project is built around three product principles:
 
-## Current Status
+* local-first: user content stays on the user's machine;
+* file-first: ordinary files remain the source of truth;
+* Markdown-friendly: documents stay readable and editable outside Folden.
 
-The repository currently contains the 0.4 desktop editor:
+## Status
 
-* Vue 3 + TypeScript + Vite;
-* Tauri 2 shell;
-* visual Markdown editing with Tiptap 3;
-* CodeMirror source mode;
-* native text file open/save;
-* workspace folder opening and file tree;
-* workspace file and folder create/rename/trash actions;
-* multiple open files with tabs;
-* two-pane split view;
-* explicit dirty-state handling with shared undo/redo;
-* atomic saves with stale-write protection;
-* crash recovery for saved and scratch documents;
-* filesystem watcher with conflict and missing-target states;
-* lazy workspace tree loading by directory;
-* optional autosave for existing saved files;
-* Markdown safety checks before Visual mode;
-* production CSP, link validation, and remote-image blocking in Visual mode;
-* bounded local logs, logs-folder access, and local diagnostics export;
-* centered editor canvas with a polished dark theme.
+The repository describes Folden `0.4.15`: a working Windows desktop editor with native file access, workspaces, tabs, split view, source and visual Markdown editing, autosave, recovery, external-change handling, local diagnostics, and a dark focused writing surface.
 
-Still out of scope: backlinks, SQLite indexing, custom blocks, slash commands, plugin API, and arbitrary split grids.
+Already implemented:
 
-## Run Frontend
+* native open/save for text files, including line ending and UTF-8 BOM preservation;
+* workspace opening, lazy directory loading, file tree actions, recent workspaces, and ignored names;
+* tabs, two-pane split view, active-pane state, shared document sessions, undo, and redo;
+* CodeMirror source mode and Tiptap visual Markdown mode;
+* safety checks for Visual mode links and images, with remote images blocked until the user allows them;
+* atomic saves, stale-write detection, missing-file states, and conflict resolution;
+* optional autosave for saved files;
+* session persistence and crash recovery for saved and scratch documents;
+* filesystem watcher integration for workspace and document updates;
+* bounded local logs, logs-folder access, and diagnostic report export;
+* unit, contract, E2E, frontend build, and Rust checks.
+
+Not part of the current implementation: cloud sync, accounts, collaboration, mobile apps, backlinks, SQLite indexing, custom blocks, slash commands, plugin API, export pipelines, and arbitrary split grids.
+
+## Stack
+
+* Vue 3, TypeScript, and Vite for the frontend.
+* Tauri 2 and Rust for native desktop integration.
+* CodeMirror 6 for source/plain-text editing.
+* Tiptap 3 for visual Markdown editing.
+* Vitest, Playwright, ESLint, rustfmt, clippy, and Cargo tests for verification.
+
+## Requirements
+
+* Node.js and npm.
+* Rust toolchain with Cargo.
+* Windows C++ Build Tools with the `Desktop development with C++` workload.
+* Microsoft Edge WebView2 runtime.
+
+## Commands
 
 Install dependencies:
 
@@ -38,13 +51,17 @@ Install dependencies:
 npm install
 ```
 
-Start the development server:
+Run the browser-only frontend:
 
 ```powershell
 npm run vue:dev
 ```
 
-This runs only the Vue/Vite frontend in the browser. Native file dialogs and workspace commands require the desktop app.
+Run the desktop app in development:
+
+```powershell
+npm run app:dev
+```
 
 Build the frontend:
 
@@ -52,69 +69,60 @@ Build the frontend:
 npm run vue:build
 ```
 
-## Run Desktop
-
-Start the Tauri development app:
-
-```powershell
-npm run app:dev
-```
-
-The npm Tauri wrapper automatically adds the standard Rustup Cargo path to `PATH` on Windows.
-
-Build the Tauri app without installers:
+Build the desktop app without installers:
 
 ```powershell
 npm run app:build
 ```
 
-Run the last built desktop app:
+Run the last built desktop executable:
 
 ```powershell
 npm run app:run
 ```
 
-The desktop executable is built into `build/desktop/release/`.
-
-Low-level Tauri CLI access is still available when needed:
+Run the main quality gate:
 
 ```powershell
-npm run tauri -- <command>
+npm run quality
 ```
 
-Prepare the next app version across the tracked release files:
+Run additional checks:
 
 ```powershell
+npm run lint
+npm run test:coverage
+npm run test:e2e
+```
+
+Check or prepare version files when doing a release:
+
+```powershell
+npm run version:check
 npm run version:bump -- patch
 ```
 
-## Desktop Setup
-
-Tauri development requires Rust and Windows native build tools.
-
-Install Rust:
+Rust checks run from `src-tauri/`:
 
 ```powershell
-winget install --id Rustlang.Rustup
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo test
 ```
 
-Then open a new terminal and verify:
+## Documentation
 
-```powershell
-rustc --version
-cargo --version
-```
+* [docs/PRODUCT.md](docs/PRODUCT.md) describes the product principles and boundaries.
+* [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) describes setup, scripts, checks, CI, and release workflow.
+* [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) describes the current code architecture.
+* [CHANGELOG.md](CHANGELOG.md) tracks released changes.
 
-See [docs/SETUP.md](docs/SETUP.md) for the Windows setup notes.
+## Repository Structure
 
-## Project Notes
-
-* [VISION.md](VISION.md) describes the product direction.
-* [TECH_STACK.md](TECH_STACK.md) describes the intended stack.
-* [ROADMAP.md](ROADMAP.md) lists the long-term milestones.
-* [CHANGELOG.md](CHANGELOG.md) tracks version changes.
-* [specs/FOLDEN_V0.4_MEASUREMENTS.md](specs/FOLDEN_V0.4_MEASUREMENTS.md) records the 0.4 release measurement checklist.
-* [specs/FOLDEN_V0.3_MEASUREMENTS.md](specs/FOLDEN_V0.3_MEASUREMENTS.md) records the 0.3 performance baseline and repeatable measurement procedure.
-* [docs/MVP.md](docs/MVP.md) defines the proposed first useful version.
-* [docs/EDITOR_ENGINE.md](docs/EDITOR_ENGINE.md) describes the editor engine split.
-* [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) lists the immediate handoff steps.
+* `src/ui` contains Vue views, editors, dialogs, and workspace UI.
+* `src/application` contains the application facade, controllers, workflows, commands, ports, and shell types.
+* `src/domain` contains framework-independent document, workspace, Markdown, native contract, and save/recovery rules.
+* `src/infrastructure` contains browser/Tauri adapters and settings persistence.
+* `src-tauri/src` contains the Rust native layer and Tauri command registration.
+* `tests` contains frontend unit tests, native contract fixtures, and Playwright E2E smoke tests.
+* `.github/workflows/windows.yml` contains the Windows CI quality gate.
