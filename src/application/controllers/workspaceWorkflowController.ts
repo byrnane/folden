@@ -225,12 +225,12 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     const document = deps.activeDocument.value
     const sourcePane = deps.activePane.value
 
-    if (!document || !sourcePane || sourcePane.id === 'right') {
-      deps.setSplitEnabled(true)
+    if (!document || !sourcePane) {
       return
     }
 
-    deps.moveDocumentToPane(document, sourcePane.id, 'right')
+    const targetPaneId = sourcePane.id === 'right' ? 'left' : 'right'
+    deps.moveDocumentToPane(document, sourcePane.id, targetPaneId)
   }
 
   async function createWorkspaceFile(parentPath = deps.selectedDirectoryPath.value) {

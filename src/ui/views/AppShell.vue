@@ -3,6 +3,8 @@ import {
   Bold,
   Columns2,
   Code,
+  Eye,
+  FileCode2,
   FilePlus,
   FolderOpen,
   FolderPlus,
@@ -14,6 +16,8 @@ import {
   Link as LinkIcon,
   List,
   ListOrdered,
+  Minus,
+  PanelLeftOpen,
   PanelRightOpen,
   Quote,
   RemoveFormatting,
@@ -121,6 +125,7 @@ type DragPayload = {
 }
 
 const openEditorsCollapsed = ref(false)
+const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
 const sidebarResizeStart = ref<{ x: number, width: number } | null>(null)
 const splitResizeStart = ref<{ x: number, ratio: number, width: number } | null>(null)
 
@@ -138,8 +143,13 @@ const shellStyle = computed(() => ({
 
 const showSidebar = computed(() =>
   !layoutSettings.value.focusMode
-  && appSettings.value.appearance.showSidebar
-  && layoutSettings.value.activeActivitySection === 'workspace',
+  && (
+    layoutSettings.value.activeActivitySection === 'settings'
+    || (
+      appSettings.value.appearance.showSidebar
+      && layoutSettings.value.activeActivitySection === 'workspace'
+    )
+  ),
 )
 
 const activePane = computed(() =>
@@ -148,6 +158,14 @@ const activePane = computed(() =>
 const activePaneDocument = computed(() => activePane.value?.activeDocumentId
   ? getDocument(activePane.value.activeDocumentId)
   : null)
+const activePaneIsRight = computed(() => activePaneId.value === 'right')
+const moveActiveTabTitle = computed(() => activePaneIsRight.value ? 'Move active tab left' : 'Move active tab right')
+const moveActiveTabIcon = computed(() => activePaneIsRight.value ? PanelLeftOpen : PanelRightOpen)
+const showDocumentToolbar = computed(() =>
+  (layoutSettings.value.activeActivitySection !== 'settings' || layoutSettings.value.focusMode)
+  && activeDocumentMode.value === 'visual'
+  && activeDocument.value !== null,
+)
 
 const visualToolbarCommands: Array<{
   command: VisualEditorCommand
@@ -168,7 +186,7 @@ const visualToolbarCommands: Array<{
   { command: 'code-block', title: 'Code block', label: 'Block', icon: Code },
   { command: 'link', title: 'Link', label: 'Link', icon: LinkIcon },
   { command: 'image', title: 'Image', label: 'Image', icon: ImageIcon },
-  { command: 'horizontal-rule', title: 'Horizontal rule', label: 'HR' },
+  { command: 'horizontal-rule', title: 'Horizontal rule', label: 'HR', icon: Minus },
 ]
 
 function startDocumentDrag(event: DragEvent, payload: DragPayload) {
@@ -396,145 +414,188 @@ function stopSplitResize() {
       </button>
     </nav>
 
-    <aside v-if="showSidebar" class="workspace-sidebar" aria-label="Workspace" @click.self="clearSidebarSelection">
-      <div class="workspace-header">
-        <div>
-          <p class="app-kicker">Folden</p>
-          <h1>{{ workspace?.name ?? 'No workspace' }}</h1>
+    <aside v-if="showSidebar" class="workspace-sidebar" :aria-label="layoutSettings.activeActivitySection === 'settings' ? 'Settings' : 'Workspace'" @click.self="clearSidebarSelection">
+      <template v-if="layoutSettings.activeActivitySection === 'settings'">
+        <div class="workspace-header">
+          <div>
+            <p class="app-kicker">Folden</p>
+            <h1>Settings</h1>
+          </div>
         </div>
-        <button
-          type="button"
-          class="icon-button"
-          title="Open folder"
-          :disabled="!canExecuteCommand('workspace.open')"
-          @click="executeCommand('workspace.open')"
-        >
-          <FolderOpen :size="17" />
-        </button>
-      </div>
-
-      <div class="workspace-actions">
-        <button
-          type="button"
-          class="icon-button"
-          title="New scratch document"
-          :disabled="!canExecuteCommand('document.new')"
-          @click="executeCommand('document.new')"
-        >
-          <FilePlus :size="16" />
-        </button>
-        <button
-          type="button"
-          class="icon-button"
-          title="New file"
-          :disabled="!canExecuteCommand('workspace.createFile')"
-          @click="executeCommand('workspace.createFile')"
-        >
-          <FilePlus :size="16" />
-        </button>
-        <button
-          type="button"
-          class="icon-button"
-          title="New folder"
-          :disabled="!canExecuteCommand('workspace.createDirectory')"
-          @click="executeCommand('workspace.createDirectory')"
-        >
-          <FolderPlus :size="16" />
-        </button>
-      </div>
-
-      <section v-if="documents.length && !openEditorsCollapsed" class="open-editors" aria-label="Open editors">
-        <button type="button" class="section-header" @click="openEditorsCollapsed = true">
-          Open Editors
-        </button>
-        <button
-          v-for="document in documents"
-          :key="document.id"
-          type="button"
-          class="open-editor-row"
-          :class="{ active: activeDocument?.id === document.id }"
-          :title="document.path ? cleanDisplayPath(document.path) : 'Scratch document'"
-          draggable="true"
-          @dragstart="startDocumentDrag($event, {
-            kind: 'open-editor',
-            documentId: document.id,
-            paneId: getPrimaryDocumentPane(document.id)?.id ?? activePaneId,
-          })"
-          @click="
-            setActiveDocument(
-              getPrimaryDocumentPane(document.id) ?? activePane,
-              document.id,
-            )
-          "
-        >
-          <span class="open-editor-name">{{ document.name }}</span>
-          <span class="open-editor-pane">
-            {{ getDocumentPaneLabel(document.id) }}
-          </span>
-          <span v-if="isDirty(document)" class="tab-dot" />
-        </button>
-      </section>
-      <button v-else-if="documents.length" type="button" class="section-header" @click="openEditorsCollapsed = false">
-        Open Editors
-      </button>
-
-      <div v-if="workspace" class="workspace-root" :title="workspace.rootPath" data-testid="workspace-root">
-        {{ workspace.rootPath }}
-      </div>
-
-      <div
-        v-if="workspace"
-        class="workspace-tree-shell"
-        @click.self="clearSidebarSelection"
-      >
-        <WorkspaceTree
-          :entries="workspace.entries"
-          :active-path="activePath"
-          :selected-path="selectedPath"
-          :expanded-paths="expandedWorkspacePaths"
-          :loading-paths="loadingWorkspacePaths"
-          :load-errors="workspaceLoadErrors"
-          @clear-selection="clearSidebarSelection"
-          @open-file="openWorkspaceFile"
-          @select-path="setSelectedPath($event.path)"
-          @create-file="createWorkspaceFile($event.path)"
-          @create-directory="createWorkspaceDirectory($event.path)"
-          @rename-path="renameWorkspacePath"
-          @trash-path="trashWorkspacePath"
-          @toggle-directory="toggleWorkspaceDirectory"
-        />
-      </div>
-
-      <section v-else class="empty-sidebar">
-        <p>Open a folder to start a workspace.</p>
-        <button
-          type="button"
-          :disabled="!canExecuteCommand('workspace.open')"
-          data-testid="open-folder-empty"
-          @click="executeCommand('workspace.open')"
-        >
-          Open Folder
-        </button>
-
-        <div v-if="recentWorkspaces.length" class="recent-workspaces">
-          <p class="sidebar-label">Recent</p>
+        <nav class="settings-nav" aria-label="Settings sections">
           <button
-            v-for="path in recentWorkspaces"
-            :key="path"
             type="button"
-            class="recent-workspace"
-            :title="path"
-            @click="
-              runFileTask(
-                async () => loadWorkspace(await restoreWorkspaceByPath(path)),
-                'Could not open recent workspace',
-              )
-            "
+            class="settings-nav-button"
+            :class="{ active: activeSettingsSection === 'editor' }"
+            @click="activeSettingsSection = 'editor'"
           >
-            {{ workspaceNameFromPath(path) }}
+            Editor
+          </button>
+          <button
+            type="button"
+            class="settings-nav-button"
+            :class="{ active: activeSettingsSection === 'files' }"
+            @click="activeSettingsSection = 'files'"
+          >
+            Files
+          </button>
+          <button
+            type="button"
+            class="settings-nav-button"
+            :class="{ active: activeSettingsSection === 'appearance' }"
+            @click="activeSettingsSection = 'appearance'"
+          >
+            Appearance
+          </button>
+        </nav>
+      </template>
+
+      <template v-else>
+        <div class="workspace-header">
+          <div>
+            <p class="app-kicker">Folden</p>
+            <h1>{{ workspace?.name ?? 'No workspace' }}</h1>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            title="Open folder"
+            aria-label="Open folder"
+            :disabled="!canExecuteCommand('workspace.open')"
+            @click="executeCommand('workspace.open')"
+          >
+            <FolderOpen :size="17" />
           </button>
         </div>
-      </section>
+
+        <div class="workspace-actions">
+          <button
+            type="button"
+            class="icon-button"
+            title="New scratch document"
+            aria-label="New scratch document"
+            :disabled="!canExecuteCommand('document.new')"
+            @click="executeCommand('document.new')"
+          >
+            <FilePlus :size="16" />
+          </button>
+          <button
+            type="button"
+            class="icon-button"
+            title="New file"
+            aria-label="New file"
+            :disabled="!canExecuteCommand('workspace.createFile')"
+            @click="executeCommand('workspace.createFile')"
+          >
+            <FilePlus :size="16" />
+          </button>
+          <button
+            type="button"
+            class="icon-button"
+            title="New folder"
+            aria-label="New folder"
+            :disabled="!canExecuteCommand('workspace.createDirectory')"
+            @click="executeCommand('workspace.createDirectory')"
+          >
+            <FolderPlus :size="16" />
+          </button>
+        </div>
+
+        <div class="workspace-sidebar-content">
+          <section v-if="documents.length && !openEditorsCollapsed" class="open-editors" aria-label="Open editors">
+            <button type="button" class="section-header" @click="openEditorsCollapsed = true">
+              Open Editors
+            </button>
+            <button
+              v-for="document in documents"
+              :key="document.id"
+              type="button"
+              class="open-editor-row"
+              :class="{ active: activeDocument?.id === document.id }"
+              :title="document.path ? cleanDisplayPath(document.path) : 'Scratch document'"
+              draggable="true"
+              @dragstart="startDocumentDrag($event, {
+                kind: 'open-editor',
+                documentId: document.id,
+                paneId: getPrimaryDocumentPane(document.id)?.id ?? activePaneId,
+              })"
+              @click="
+                setActiveDocument(
+                  getPrimaryDocumentPane(document.id) ?? activePane,
+                  document.id,
+                )
+              "
+            >
+              <span class="open-editor-name">{{ document.name }}</span>
+              <span class="open-editor-pane">
+                {{ getDocumentPaneLabel(document.id) }}
+              </span>
+              <span v-if="isDirty(document)" class="tab-dot" />
+            </button>
+          </section>
+          <button v-else-if="documents.length" type="button" class="section-header" @click="openEditorsCollapsed = false">
+            Open Editors
+          </button>
+
+          <div v-if="workspace" class="workspace-root" :title="workspace.rootPath" data-testid="workspace-root">
+            {{ workspace.rootPath }}
+          </div>
+
+          <div
+            v-if="workspace"
+            class="workspace-tree-shell"
+            @click.self="clearSidebarSelection"
+          >
+            <WorkspaceTree
+              :entries="workspace.entries"
+              :active-path="activePath"
+              :selected-path="selectedPath"
+              :expanded-paths="expandedWorkspacePaths"
+              :loading-paths="loadingWorkspacePaths"
+              :load-errors="workspaceLoadErrors"
+              @clear-selection="clearSidebarSelection"
+              @open-file="openWorkspaceFile"
+              @select-path="setSelectedPath($event.path)"
+              @create-file="createWorkspaceFile($event.path)"
+              @create-directory="createWorkspaceDirectory($event.path)"
+              @rename-path="renameWorkspacePath"
+              @trash-path="trashWorkspacePath"
+              @toggle-directory="toggleWorkspaceDirectory"
+            />
+          </div>
+
+          <section v-else class="empty-sidebar">
+            <p>Open a folder to start a workspace.</p>
+            <button
+              type="button"
+              :disabled="!canExecuteCommand('workspace.open')"
+              data-testid="open-folder-empty"
+              @click="executeCommand('workspace.open')"
+            >
+              Open Folder
+            </button>
+
+            <div v-if="recentWorkspaces.length" class="recent-workspaces">
+              <p class="sidebar-label">Recent</p>
+              <button
+                v-for="path in recentWorkspaces"
+                :key="path"
+                type="button"
+                class="recent-workspace"
+                :title="path"
+                @click="
+                  runFileTask(
+                    async () => loadWorkspace(await restoreWorkspaceByPath(path)),
+                    'Could not open recent workspace',
+                  )
+                "
+              >
+                {{ workspaceNameFromPath(path) }}
+              </button>
+            </div>
+          </section>
+        </div>
+      </template>
     </aside>
 
     <div
@@ -550,31 +611,55 @@ function stopSplitResize() {
       <header class="topbar">
         <div class="topbar-title">
           <span class="document-title" data-testid="document-title">{{ activeDocument?.name ?? 'No document' }}</span>
+          <div
+            v-if="layoutSettings.activeActivitySection !== 'settings' || layoutSettings.focusMode"
+            class="mode-switch topbar-mode-switch"
+            aria-label="Editor mode"
+          >
+            <button
+              type="button"
+              class="icon-button"
+              title="Visual"
+              aria-label="Visual"
+              :class="{ active: activeDocument && activeDocumentMode === 'visual' }"
+              :disabled="!activeDocument || !isMarkdownPath(activeDocument.path)"
+              @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'visual')"
+            >
+              <Eye :size="16" />
+            </button>
+            <button
+              type="button"
+              class="icon-button"
+              title="Source"
+              aria-label="Source"
+              :class="{ active: activeDocument && activeDocumentMode === 'source' }"
+              :disabled="!activeDocument"
+              @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'source')"
+            >
+              <FileCode2 :size="16" />
+            </button>
+          </div>
           <span v-if="dirtyDocuments.length" class="dirty-marker" data-testid="dirty-marker">
             {{ dirtyDocuments.length }} unsaved
           </span>
         </div>
 
         <div class="topbar-actions">
-          <label class="autosave-toggle" title="Automatically save changed existing files after a short pause">
-            <input
-              v-model="appSettings.autosave.enabled"
-              type="checkbox"
-            >
-            <span>Autosave</span>
-          </label>
           <button
             type="button"
+            class="icon-button"
             title="Open file"
+            aria-label="Open file"
             :disabled="!canExecuteCommand('document.open')"
             @click="executeCommand('document.open')"
           >
-            Open
+            <FolderOpen :size="16" />
           </button>
           <button
             type="button"
             class="icon-button"
             title="Save"
+            aria-label="Save"
             data-testid="save-document"
             :disabled="!canExecuteCommand('document.save')"
             @click="executeCommand('document.save')"
@@ -585,6 +670,7 @@ function stopSplitResize() {
             type="button"
             class="icon-button"
             title="Focus mode"
+            aria-label="Focus mode"
             :class="{ active: layoutSettings.focusMode }"
             @click="toggleFocusMode"
           >
@@ -594,6 +680,7 @@ function stopSplitResize() {
             type="button"
             class="icon-button"
             title="Toggle split view"
+            aria-label="Toggle split view"
             :class="{ active: splitEnabled }"
             :disabled="!canExecuteCommand('layout.toggleSplit')"
             @click="executeCommand('layout.toggleSplit')"
@@ -603,11 +690,12 @@ function stopSplitResize() {
           <button
             type="button"
             class="icon-button"
-            title="Move active tab right"
+            :title="moveActiveTabTitle"
+            :aria-label="moveActiveTabTitle"
             :disabled="!canExecuteCommand('layout.moveViewRight')"
             @click="executeCommand('layout.moveViewRight')"
           >
-            <PanelRightOpen :size="16" />
+            <component :is="moveActiveTabIcon" :size="16" />
           </button>
         </div>
       </header>
@@ -618,84 +706,133 @@ function stopSplitResize() {
         aria-label="Settings"
       >
         <div class="settings-panel">
-          <h2>Settings</h2>
-          <section class="settings-section">
-            <h3>Editor</h3>
+          <header class="settings-panel-header">
+            <p class="app-kicker">Settings</p>
+            <h2>
+              {{
+                activeSettingsSection === 'editor'
+                  ? 'Editor'
+                  : activeSettingsSection === 'files'
+                    ? 'Files'
+                    : 'Appearance'
+              }}
+            </h2>
+          </header>
+          <section v-if="activeSettingsSection === 'editor'" class="settings-section">
             <label class="settings-row">
-              <span>Source font</span>
+              <span>
+                <strong>Source font</strong>
+                <small>Font stack for plain text editing.</small>
+              </span>
               <input v-model="appSettings.editor.sourceFontFamily" type="text">
             </label>
             <label class="settings-row">
-              <span>Source size</span>
+              <span>
+                <strong>Source size</strong>
+                <small>Text size in Source mode.</small>
+              </span>
               <input :value="appSettings.editor.sourceFontSize" type="number" min="10" max="28" @input="updateSourceFontSize">
             </label>
             <label class="settings-row">
-              <span>Visual size</span>
+              <span>
+                <strong>Visual size</strong>
+                <small>Text size in Visual mode.</small>
+              </span>
               <input :value="appSettings.editor.visualFontSize" type="number" min="12" max="30" @input="updateVisualFontSize">
             </label>
             <label class="settings-row">
-              <span>Line height</span>
+              <span>
+                <strong>Line height</strong>
+                <small>Shared editor line spacing.</small>
+              </span>
               <input :value="appSettings.editor.lineHeight" type="number" min="1.2" max="2.2" step="0.05" @input="updateLineHeight">
             </label>
             <label class="settings-row">
-              <span>Visual width</span>
+              <span>
+                <strong>Visual width</strong>
+                <small>Maximum readable content width.</small>
+              </span>
               <input :value="appSettings.editor.visualMaxWidth" type="number" min="520" max="1120" @input="updateVisualMaxWidth">
             </label>
-            <label class="settings-row">
-              <span>Word wrap</span>
-              <input v-model="appSettings.editor.wordWrap" type="checkbox">
+            <label class="settings-row settings-toggle-row">
+              <span>
+                <strong>Word wrap</strong>
+                <small>Wrap long lines in Source mode.</small>
+              </span>
+              <input v-model="appSettings.editor.wordWrap" class="settings-switch" type="checkbox">
             </label>
             <label class="settings-row">
-              <span>Markdown opens as</span>
+              <span>
+                <strong>Markdown opens as</strong>
+                <small>Default mode for Markdown files.</small>
+              </span>
               <select v-model="appSettings.editor.defaultMarkdownMode">
                 <option value="visual">Visual</option>
                 <option value="source">Source</option>
               </select>
             </label>
           </section>
-          <section class="settings-section">
-            <h3>Files</h3>
-            <label class="settings-row">
-              <span>Autosave</span>
-              <input v-model="appSettings.autosave.enabled" type="checkbox">
+          <section v-else-if="activeSettingsSection === 'files'" class="settings-section">
+            <label class="settings-row settings-toggle-row">
+              <span>
+                <strong>Autosave</strong>
+                <small>Save changed existing files after a short pause.</small>
+              </span>
+              <input v-model="appSettings.autosave.enabled" class="settings-switch" type="checkbox">
             </label>
             <label class="settings-row">
-              <span>Autosave delay</span>
+              <span>
+                <strong>Autosave delay</strong>
+                <small>Delay before autosave starts, in milliseconds.</small>
+              </span>
               <input :value="appSettings.autosave.debounceMs" type="number" min="250" max="30000" step="250" @input="updateAutosaveDebounce">
             </label>
           </section>
-          <section class="settings-section">
-            <h3>Appearance</h3>
+          <section v-else class="settings-section">
             <label class="settings-row">
-              <span>UI scale</span>
+              <span>
+                <strong>UI scale</strong>
+                <small>Scale controls and application chrome.</small>
+              </span>
               <input :value="appSettings.appearance.uiScale" type="number" min="0.85" max="1.25" step="0.05" @input="updateUiScale">
             </label>
             <label class="settings-row">
-              <span>Density</span>
+              <span>
+                <strong>Density</strong>
+                <small>Spacing preset for controls.</small>
+              </span>
               <select v-model="appSettings.appearance.density">
                 <option value="compact">Compact</option>
                 <option value="comfortable">Comfortable</option>
               </select>
             </label>
-            <label class="settings-row">
-              <span>Status bar</span>
-              <input v-model="appSettings.appearance.showStatusBar" type="checkbox">
+            <label class="settings-row settings-toggle-row">
+              <span>
+                <strong>Status bar</strong>
+                <small>Show document stats at the bottom.</small>
+              </span>
+              <input v-model="appSettings.appearance.showStatusBar" class="settings-switch" type="checkbox">
             </label>
-            <label class="settings-row">
-              <span>Sidebar</span>
-              <input v-model="appSettings.appearance.showSidebar" type="checkbox">
+            <label class="settings-row settings-toggle-row">
+              <span>
+                <strong>Sidebar</strong>
+                <small>Show workspace sidebar outside Settings.</small>
+              </span>
+              <input v-model="appSettings.appearance.showSidebar" class="settings-switch" type="checkbox">
             </label>
-            <button type="button" @click="resetLayoutSettings">
-              Reset layout
-            </button>
-            <button
-              type="button"
-              :disabled="!canExecuteCommand('diagnostics.export')"
-              data-testid="export-diagnostics"
-              @click="executeCommand('diagnostics.export')"
-            >
-              Export diagnostics
-            </button>
+            <div class="settings-actions">
+              <button type="button" @click="resetLayoutSettings">
+                Reset layout
+              </button>
+              <button
+                type="button"
+                :disabled="!canExecuteCommand('diagnostics.export')"
+                data-testid="export-diagnostics"
+                @click="executeCommand('diagnostics.export')"
+              >
+                Export diagnostics
+              </button>
+            </div>
           </section>
         </div>
       </section>
@@ -752,46 +889,28 @@ function stopSplitResize() {
         </div>
       </section>
 
-      <section v-if="layoutSettings.activeActivitySection !== 'settings' || layoutSettings.focusMode" class="shared-toolbar" aria-label="Document toolbar">
-        <div class="mode-switch shared-mode-switch">
-          <button
-            type="button"
-            :class="{ active: activeDocument && activeDocumentMode === 'visual' }"
-            :disabled="!activeDocument || !isMarkdownPath(activeDocument.path)"
-            @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'visual')"
-          >
-            Visual
-          </button>
-          <button
-            type="button"
-            :class="{ active: activeDocument && activeDocumentMode === 'source' }"
-            :disabled="!activeDocument"
-            @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'source')"
-          >
-            Source
-          </button>
-          <button
-            v-if="
-              activeDocumentMode === 'visual'
-              && activePaneDocument
-              && documentHasRemoteImages(activePaneDocument)
-              && !shouldLoadRemoteImages(activePaneDocument)
-            "
-            type="button"
-            class="load-remote-images-button"
-            data-testid="load-remote-images"
-            @click="allowRemoteImagesForDocument(activePaneDocument)"
-          >
-            Load remote images
-          </button>
-        </div>
-        <div v-if="activeDocumentMode === 'visual' && activeDocument" class="format-toolbar shared-format-toolbar">
+      <section v-if="showDocumentToolbar" class="shared-toolbar" aria-label="Document toolbar">
+        <button
+          v-if="
+            activePaneDocument
+            && documentHasRemoteImages(activePaneDocument)
+            && !shouldLoadRemoteImages(activePaneDocument)
+          "
+          type="button"
+          class="load-remote-images-button"
+          data-testid="load-remote-images"
+          @click="allowRemoteImagesForDocument(activePaneDocument)"
+        >
+          Load remote images
+        </button>
+        <div class="format-toolbar shared-format-toolbar">
           <button
             v-for="item in visualToolbarCommands"
             :key="item.command"
             type="button"
             class="icon-button"
             :title="item.title"
+            :aria-label="item.title"
             @click="runActiveVisualCommand(item.command)"
           >
             <component :is="item.icon" v-if="item.icon" :size="16" />

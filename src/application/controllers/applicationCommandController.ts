@@ -103,7 +103,7 @@ export function createApplicationCommandController(deps: CommandControllerDeps) 
     },
     {
       id: 'layout.moveViewRight',
-      title: 'Move Active Tab Right',
+      title: 'Move Active Tab to Other Pane',
       shortcuts: [{ code: 'ArrowRight', mod: true, shift: true }],
       canExecute: () => deps.activeDocument.value !== null,
       execute: () => deps.moveActiveDocumentToRight(),

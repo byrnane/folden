@@ -176,7 +176,7 @@ textarea:focus-visible {
 
 .workspace-sidebar {
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
   border-right: 1px solid var(--border);
   background: var(--sidebar-bg);
@@ -219,6 +219,12 @@ h1 {
   gap: 6px;
   border-bottom: 1px solid var(--border);
   padding: 10px 14px;
+}
+
+.workspace-sidebar-content {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
 }
 
 .open-editors {
@@ -283,6 +289,7 @@ h1 {
 
 .workspace-tree {
   margin: 0;
+  height: 100%;
   min-height: 0;
   list-style: none;
   overflow: auto;
@@ -291,7 +298,31 @@ h1 {
 
 .workspace-tree-shell {
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.settings-nav {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 0;
+  padding: 10px 8px;
+}
+
+.settings-nav-button {
+  justify-content: flex-start;
+  width: 100%;
+  border-color: transparent;
+  background: transparent;
+  color: var(--soft-text);
+  font-weight: 650;
+}
+
+.settings-nav-button:hover,
+.settings-nav-button.active {
+  border-color: rgba(90, 169, 167, 0.28);
+  background: var(--accent-soft);
+  color: var(--strong-text);
 }
 
 .workspace-tree .workspace-tree {
@@ -444,6 +475,13 @@ h1 {
   gap: 10px;
 }
 
+.topbar-mode-switch {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
 .document-title {
   overflow: hidden;
   color: var(--strong-text);
@@ -468,67 +506,107 @@ h1 {
 }
 
 .settings-panel {
-  width: min(100%, 820px);
+  width: min(100%, 760px);
   display: grid;
-  gap: 18px;
-  padding: 22px;
+  gap: 16px;
+  padding: 28px 32px;
 }
 
-.settings-panel h2,
-.settings-section h3 {
+.settings-panel-header {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-panel h2 {
   margin: 0;
   color: var(--strong-text);
 }
 
 .settings-panel h2 {
-  font-size: 18px;
+  font-size: 22px;
+  line-height: 1.2;
 }
 
 .settings-section {
   display: grid;
   gap: 10px;
-  border-top: 1px solid var(--border);
-  padding-top: 14px;
-}
-
-.settings-section h3 {
-  font-size: 13px;
 }
 
 .settings-row {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
+  grid-template-columns: minmax(180px, 0.85fr) minmax(220px, 1.15fr);
+  align-items: start;
+  gap: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
   color: var(--soft-text);
   font-size: 13px;
+  padding: 14px;
+}
+
+.settings-row > span {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-row strong {
+  color: var(--strong-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-row small {
+  color: var(--muted-text);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .settings-row input,
 .settings-row select {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: var(--control-radius);
+  border-radius: 7px;
   background: #111419;
   color: var(--strong-text);
   font: inherit;
   padding: 7px 9px;
 }
 
-.autosave-toggle {
-  display: inline-flex;
+.settings-toggle-row {
   align-items: center;
-  gap: 6px;
-  color: var(--muted-text);
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
 }
 
-.autosave-toggle input {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--accent);
+.settings-switch {
+  justify-self: end;
+  width: 38px !important;
+  height: 22px;
+  appearance: none;
+  border: 1px solid var(--border-strong) !important;
+  border-radius: 999px !important;
+  background:
+    radial-gradient(circle at 10px 50%, var(--soft-text) 0 5px, transparent 6px),
+    #111419 !important;
+  cursor: pointer;
+  padding: 0 !important;
+  transition:
+    background-position var(--motion-fast) ease,
+    background var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
+}
+
+.settings-switch:checked {
+  border-color: rgba(90, 169, 167, 0.75) !important;
+  background:
+    radial-gradient(circle at 27px 50%, #081011 0 5px, transparent 6px),
+    var(--accent-strong) !important;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .dirty-marker {
