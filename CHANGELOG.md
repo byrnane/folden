@@ -6,6 +6,20 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.4.15 - 2026-07-01
+
+* Native DTO и ошибки закреплены в доменном TS-контракте, а Tauri-вызовы собраны в application ports для документов, workspace, session, diagnostics и native events.
+* `applicationShell`, lifecycle, document workflow и workspace workflow переведены на сгруппированные native ports без изменения UI, autosave, recovery, watcher и conflict flow.
+* Rust native layer разнесён из монолитного `lib.rs` по модулям `types`, `errors`, `state`, `paths`, `watcher`, `documents`, `workspace`, `persistence` и `diagnostics` с прежними command names.
+* Добавлены TS/Rust contract tests на стабильный shape native DTO/errors и общий fixture без пользовательских путей.
+* Quality gate расширен ESLint flat config, coverage baseline, dependency-cycle/unused checks и Windows CI шагами для lint, coverage, E2E, Vue build, Rust fmt/clippy/test и app build.
+
+## 0.4.14 - 2026-07-01
+
+* Удалены неиспользуемые импорты и значения, оставшиеся после декомпозиции `applicationShell`.
+* Добавлена строгая проверка `npm run vue:unused` для unused locals/parameters поверх `vue-tsc`.
+* Добавлен локальный `npm run deps:cycles` без новых зависимостей и общий `npm run quality` для быстрого технического gate.
+
 ## 0.4.13 - 2026-07-01
 
 * Закрытие окна теперь блокируется, если Folden не смог финализировать session/recovery persistence.

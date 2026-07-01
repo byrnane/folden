@@ -1,22 +1,7 @@
-import { listen } from '@tauri-apps/api/event'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import {
-  createDialogController,
-  type ConflictDialogDecision,
-  type RecoveryDialogDecision,
-  type UnsavedDialogDecision,
-} from './controllers/dialogController'
+import { createDialogController } from './controllers/dialogController'
 import { createPaneController } from './controllers/paneController'
-import {
-  exportDiagnostics,
-  logFrontendEvent,
-  type NativeFsEvent,
-  openLogsFolder,
-  openTextFileByPath,
-  restoreWorkspaceByPath,
-  type WorkspaceEntry,
-} from '../infrastructure/tauri/files'
+import type { NativeFsEvent } from '../domain/native'
 import {
   type EditorMode,
   type OpenDocument,
@@ -42,23 +27,14 @@ import { createApplicationLifecycleController } from './controllers/applicationL
 import { createWorkspaceWorkflowController } from './controllers/workspaceWorkflowController'
 import { createVisualSafetyController } from './controllers/visualSafetyController'
 import { createApplicationCommandController } from './controllers/applicationCommandController'
-import {
-  loadRecoverySnapshots,
-  loadSessionState,
-  openTextFileAtPath,
-  saveRecoverySnapshots,
-  saveSessionState,
-} from './sessionRecovery'
-import type { EditorAdapter, EditorPane } from './types/shell'
+import { createTauriNativePorts } from '../infrastructure/tauri/nativePorts'
+import type { EditorPane } from './types/shell'
 export type { EditorAdapter } from './types/shell'
-
-type WorkspaceEntryRef = Pick<WorkspaceEntry, 'name' | 'path' | 'kind'> & {
-  readonly children?: unknown
-}
 
 export function useApplicationShell() {
   const initialText = '# Untitled\n\nStart writing in Folden.\n'
   const hasNativeRuntimeOnStartup = isTauriRuntime()
+  const nativePorts = createTauriNativePorts()
   const appSettings = ref(loadApplicationSettings())
   const documentController = createDocumentController(initialText)
   const {
@@ -90,7 +66,6 @@ export function useApplicationShell() {
   const {
     workspace,
     expandedWorkspacePaths,
-    loadedWorkspacePaths,
     loadingWorkspacePaths,
     workspaceLoadErrors,
     selectedPath,
@@ -104,7 +79,6 @@ export function useApplicationShell() {
     clearSidebarSelection,
     setSelectedPath,
     setWatcherVisibleWorkspace,
-    findEntry,
     selectedDirectoryPath: getSelectedDirectoryPath,
     applyWorkspaceBranch,
     loadedDescendantPaths,
@@ -118,7 +92,6 @@ export function useApplicationShell() {
     activePaneId,
     splitEnabled,
     paneDocumentModes,
-    viewSessions,
     paneEditors,
     visiblePanes,
     activePane,
@@ -129,7 +102,6 @@ export function useApplicationShell() {
     ensureViewSession,
     getViewSessionId,
     setActiveDocument,
-    setActiveDocumentInPane,
     setPaneEditorAdapter,
     setDocumentMode,
     setOpenDocumentMode,
@@ -238,6 +210,7 @@ export function useApplicationShell() {
   }
 
   const documentWorkflowController = createDocumentWorkflowController({
+    files: nativePorts.documents,
     initialText,
     appSettings,
     activeDocument,
@@ -282,8 +255,8 @@ export function useApplicationShell() {
     markDocumentMissing,
     acknowledgeDocumentConflict,
     removeDocuments,
-    openWorkspaceFileByPath: openTextFileByPath,
-    openAbsoluteTextFile: openTextFileAtPath,
+    openWorkspaceFileByPath: nativePorts.documents.openTextFileByPath,
+    openAbsoluteTextFile: nativePorts.documents.openTextFileAtPath,
   })
   const {
     addDocumentToPane,
@@ -293,7 +266,6 @@ export function useApplicationShell() {
     closeDocument,
     createScratchDocument,
     flushPaneEditorContent,
-    flushVisibleDocumentViews,
     handleDocumentUpdate,
     openConflictResolution,
     openLoadedDocument,
@@ -314,6 +286,7 @@ export function useApplicationShell() {
   }
 
   workspaceWorkflowController = createWorkspaceWorkflowController({
+    workspaceFiles: nativePorts.workspace,
     workspace,
     documents,
     expandedWorkspacePaths,
@@ -357,7 +330,6 @@ export function useApplicationShell() {
     openEntryInRight,
     openWorkspace,
     refreshWorkspace,
-    refreshWorkspaceBranch,
     renameWorkspacePath,
     scheduleWorkspaceRefresh,
     toggleWorkspaceDirectory,
@@ -389,8 +361,8 @@ export function useApplicationShell() {
 
   async function writeSessionAndRecoveryState() {
     try {
-      await saveSessionState(buildPersistedSessionState())
-      await saveRecoverySnapshots(buildPersistedRecoverySnapshots())
+      await nativePorts.sessionStorage.saveSessionState(buildPersistedSessionState())
+      await nativePorts.sessionStorage.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
     } catch (error) {
       errorMessage.value = `Could not persist session data: ${formatError(error)}`
     }
@@ -474,14 +446,18 @@ export function useApplicationShell() {
           code: string
           operation: string
           userMessage: string
+          technicalMessage?: string | null
           retryable?: boolean
         }
-        void logFrontendEvent(
+        const technicalMessage = nativeError.technicalMessage
+          ? ` technical=${nativeError.technicalMessage.slice(0, 240)}`
+          : ''
+        void nativePorts.diagnostics.logFrontendEvent(
           'warn',
-          `native_error operation=${nativeError.operation} code=${nativeError.code} retryable=${nativeError.retryable ? 'true' : 'false'} message=${nativeError.userMessage}`,
+          `native_error operation=${nativeError.operation} code=${nativeError.code} retryable=${nativeError.retryable ? 'true' : 'false'} message=${nativeError.userMessage}${technicalMessage}`,
         )
       } else {
-        void logFrontendEvent('error', `${message}: ${formatError(error)}`)
+        void nativePorts.diagnostics.logFrontendEvent('error', `${message}: ${formatError(error)}`)
       }
     } finally {
       isFileBusy.value = false
@@ -494,10 +470,12 @@ export function useApplicationShell() {
 
   async function exportDiagnosticReport() {
     await runFileTask(async () => {
-      const exportedPath = await exportDiagnostics()
+      const exportedPath = await nativePorts.diagnostics.exportDiagnostics()
       setWatcherWarning(`Diagnostics exported to ${cleanDisplayPath(exportedPath)}`)
     }, 'Could not export diagnostics')
   }
+  const openLogsFolder = nativePorts.diagnostics.openLogsFolder
+  const restoreWorkspaceByPath = nativePorts.workspace.restoreWorkspaceByPath
 
   const commandController = createApplicationCommandController({
     hasNativeRuntime: hasNativeRuntimeOnStartup,
@@ -528,6 +506,10 @@ export function useApplicationShell() {
   } = commandController
 
   const applicationLifecycleController = createApplicationLifecycleController({
+    documentFiles: nativePorts.documents,
+    workspaceFiles: nativePorts.workspace,
+    sessionStorage: nativePorts.sessionStorage,
+    nativeEvents: nativePorts.events,
     hasNativeRuntime: hasNativeRuntimeOnStartup,
     windowTarget: window,
     errorMessage,
@@ -566,17 +548,8 @@ export function useApplicationShell() {
     disposeSessionController,
     disposeExternalChangesController,
     disposeDocumentWorkflowController,
-    loadSessionState,
-    loadRecoverySnapshots,
-    saveSessionState,
-    saveRecoverySnapshots,
-    restoreWorkspaceByPath,
-    openTextFileByPath,
-    openTextFileAtPath,
     openRecoveryDialog,
     openUnsavedDialog,
-    listen,
-    getCurrentWindow,
   })
   const {
     mount: mountApplicationLifecycle,

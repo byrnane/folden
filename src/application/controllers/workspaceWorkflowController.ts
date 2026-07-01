@@ -1,19 +1,11 @@
-import type { ComputedRef, Ref } from 'vue'
+import type { ComputedRef } from 'vue'
 import type { OpenDocument } from '../../domain/documents/documentState'
 import type {
   OpenedDocument,
   WorkspaceDescriptor,
   WorkspaceEntry,
-} from '../../infrastructure/tauri/files'
-import {
-  createDirectory,
-  createFile,
-  listDirectory,
-  openTextFileByPath,
-  openWorkspaceDirectory,
-  renamePath,
-  trashPath,
-} from '../../infrastructure/tauri/files'
+} from '../../domain/native'
+import type { WorkspaceFilePort } from '../ports/nativePorts'
 import { formatError } from '../helpers/errorHelpers'
 import {
   normalizePath,
@@ -30,6 +22,7 @@ type ReadonlyValue<T> = {
 }
 
 type WorkspaceWorkflowDeps = {
+  workspaceFiles: WorkspaceFilePort
   workspace: ReadonlyValue<{ id: string, rootPath: string } | null>
   documents: ReadonlyValue<OpenDocument[]>
   expandedWorkspacePaths: ReadonlyValue<ReadonlySet<string>>
@@ -91,7 +84,7 @@ type WorkspaceWorkflowDeps = {
 export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
   async function openWorkspace() {
     await deps.runFileTask(async () => {
-      const descriptor = await openWorkspaceDirectory()
+      const descriptor = await deps.workspaceFiles.openWorkspaceDirectory()
 
       if (!descriptor) {
         return
@@ -106,7 +99,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
   }
 
   async function loadWorkspace(descriptor: WorkspaceDescriptor) {
-    deps.setWatcherVisibleWorkspace(descriptor, await listDirectory(descriptor.id, ''))
+    deps.setWatcherVisibleWorkspace(descriptor, await deps.workspaceFiles.listDirectory(descriptor.id, ''))
   }
 
   function getWorkspaceDocumentIds(workspaceId: string) {
@@ -168,7 +161,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     deps.clearWorkspaceLoadError(normalizedBranchPath)
     deps.applyWorkspaceBranch(
       normalizedBranchPath,
-      await listDirectory(deps.workspace.value.id, normalizedBranchPath),
+      await deps.workspaceFiles.listDirectory(deps.workspace.value.id, normalizedBranchPath),
     )
 
     if (!preserveDescendants) {
@@ -261,9 +254,9 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }
 
     await deps.runFileTask(async () => {
-      const path = await createFile(deps.workspace.value!.id, parentPath, name)
+      const path = await deps.workspaceFiles.createFile(deps.workspace.value!.id, parentPath, name)
       await refreshWorkspaceBranch(parentPath)
-      const document = await openTextFileByPath(deps.workspace.value!.id, path)
+      const document = await deps.workspaceFiles.openTextFileByPath(deps.workspace.value!.id, path)
       deps.openLoadedDocument(document)
     }, 'Could not create file')
   }
@@ -289,7 +282,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }
 
     await deps.runFileTask(async () => {
-      await createDirectory(deps.workspace.value!.id, parentPath, name)
+      await deps.workspaceFiles.createDirectory(deps.workspace.value!.id, parentPath, name)
       await refreshWorkspaceBranch(parentPath)
     }, 'Could not create folder')
   }
@@ -315,7 +308,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }
 
     await deps.runFileTask(async () => {
-      const nextPath = await renamePath(deps.workspace.value!.id, entry.path, newName)
+      const nextPath = await deps.workspaceFiles.renamePath(deps.workspace.value!.id, entry.path, newName)
       deps.remapWorkspacePathState(entry.path, nextPath)
       deps.updateDocumentPaths(entry.path, nextPath, deps.workspace.value!.rootPath)
       deps.setSelectedPath(nextPath)
@@ -370,7 +363,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }
 
     await deps.runFileTask(async () => {
-      await trashPath(deps.workspace.value!.id, entry.path)
+      await deps.workspaceFiles.trashPath(deps.workspace.value!.id, entry.path)
       deps.removeWorkspacePathState(entry.path)
       deps.removeDocumentsFromPanes(affectedDocuments.map((document) => document.id))
       deps.setSelectedPath(null)

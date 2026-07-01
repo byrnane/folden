@@ -44,7 +44,6 @@ const {
   getViewSessionId,
   handleDocumentUpdate,
   isDirty,
-  isFileBusy,
   isMarkdownPath,
   allowRemoteImagesForDocument,
   documentHasRemoteImages,

@@ -1,7 +1,7 @@
 import { readonly, ref } from 'vue'
 import { isDocumentDirty } from '../../domain/document'
 import type { OpenDocument } from '../../domain/documents/documentState'
-import type { NativeFsEvent } from '../../infrastructure/tauri/files'
+import type { NativeFsEvent } from '../../domain/native'
 
 export function createExternalChangesController() {
   const watcherWarning = ref<string | null>(null)

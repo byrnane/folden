@@ -1,7 +1,7 @@
 import { readonly, ref, type Ref } from 'vue'
 import { filterWorkspaceEntriesByIgnoredNames } from '../../domain/workspace/workspaceFilters'
 import type { ApplicationSettings } from '../../infrastructure/settings/settings'
-import type { WorkspaceEntry } from '../../infrastructure/tauri/files'
+import type { WorkspaceEntry } from '../../domain/native'
 import { normalizePath } from '../helpers/pathHelpers'
 import type { Workspace } from '../types/shell'
 
