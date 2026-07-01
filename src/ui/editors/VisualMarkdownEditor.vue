@@ -234,6 +234,76 @@ function createEditor(element: HTMLDivElement) {
   })
 }
 
+function slugifyHeading(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .replace(/\s+/gu, '-')
+}
+
+function findAnchorTarget(hash: string) {
+  let anchor = ''
+
+  try {
+    anchor = decodeURIComponent(hash.slice(1))
+  } catch {
+    anchor = hash.slice(1)
+  }
+
+  const root = editorHost.value
+
+  if (!anchor || !root) {
+    return null
+  }
+
+  const exactIdTarget = Array.from(root.querySelectorAll<HTMLElement>('[id]'))
+    .find((element) => element.id === anchor)
+
+  if (exactIdTarget) {
+    return exactIdTarget
+  }
+
+  return Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'))
+    .find((element) => slugifyHeading(element.textContent ?? '') === anchor)
+    ?? null
+}
+
+function openVisualLink(href: string) {
+  const validationError = validateLinkTarget(href)
+
+  if (validationError) {
+    return
+  }
+
+  if (href.startsWith('#')) {
+    findAnchorTarget(href)?.scrollIntoView({ block: 'start' })
+    return
+  }
+
+  if (/^https?:\/\//iu.test(href)) {
+    window.open(href, '_blank', 'noopener,noreferrer')
+  }
+}
+
+function handleVisualClick(event: MouseEvent) {
+  const link = (event.target as HTMLElement | null)?.closest('a[href]')
+
+  if (!(link instanceof HTMLAnchorElement)) {
+    return
+  }
+
+  const href = link.getAttribute('href') ?? ''
+
+  if (!href.startsWith('#') && !event.ctrlKey && !event.metaKey) {
+    return
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  openVisualLink(href)
+}
+
 watch(
   () => [props.documentId, props.modelValue, props.revision] as const,
   ([documentId, value, revision], [previousDocumentId]) => {
@@ -413,7 +483,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="visual-editor" data-testid="visual-editor">
     <div ref="scrollHost" class="visual-editor-scroll">
-      <div ref="editorHost" class="visual-editor-content" />
+      <div ref="editorHost" class="visual-editor-content" @click.capture="handleVisualClick" />
     </div>
 
     <PromptDialog

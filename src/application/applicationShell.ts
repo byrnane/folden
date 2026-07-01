@@ -106,7 +106,7 @@ export function useApplicationShell() {
     getDocumentMode,
     ensureViewSession,
     getViewSessionId,
-    setActiveDocument,
+    setActiveDocument: setActiveDocumentInPaneState,
     setPaneEditorAdapter,
     setDocumentMode,
     setOpenDocumentMode,
@@ -274,7 +274,7 @@ export function useApplicationShell() {
     openConflictDialog,
     getPane,
     getPaneSnapshot,
-    setActiveDocument,
+    setActiveDocument: setActiveDocumentInPaneState,
     addDocumentToPaneState,
     removeDocumentFromPane,
     removeDocumentsFromPaneState,
@@ -310,9 +310,9 @@ export function useApplicationShell() {
     flushPaneEditorContent,
     handleDocumentUpdate,
     openConflictResolution,
-    openLoadedDocument,
-    openNativeDocument,
-    openWorkspaceFile,
+    openLoadedDocument: openLoadedDocumentState,
+    openNativeDocument: openNativeDocumentState,
+    openWorkspaceFile: openWorkspaceFileState,
     reloadDocumentFromDisk,
     removeDocumentsFromPanes,
     runDocumentRedo,
@@ -325,6 +325,47 @@ export function useApplicationShell() {
 
   function syncAutosaveTimers() {
     documentWorkflowController.syncAutosaveTimers(documents.value)
+  }
+
+  async function triggerAutosaveForDocumentSwitch(documentId = activeDocument.value?.id ?? null) {
+    if (!documentId || !appSettings.value.autosave.saveOnDocumentSwitch) {
+      return
+    }
+
+    await documentWorkflowController.triggerAutosaveDocuments([documentId])
+  }
+
+  async function triggerAutosaveOnWindowBlur() {
+    if (!appSettings.value.autosave.saveOnWindowBlur) {
+      return
+    }
+
+    await documentWorkflowController.triggerAutosaveDocuments(documents.value.map((document) => document.id))
+  }
+
+  async function setActiveDocument(pane: EditorPane, documentId: string) {
+    const previousDocumentId = activeDocument.value?.id ?? null
+
+    if (previousDocumentId !== documentId) {
+      await triggerAutosaveForDocumentSwitch(previousDocumentId)
+    }
+
+    setActiveDocumentInPaneState(pane, documentId)
+  }
+
+  async function openNativeDocument() {
+    await triggerAutosaveForDocumentSwitch()
+    await openNativeDocumentState()
+  }
+
+  async function openLoadedDocument(document: Parameters<typeof openLoadedDocumentState>[0], paneId?: EditorPane['id']) {
+    await triggerAutosaveForDocumentSwitch()
+    return openLoadedDocumentState(document, paneId)
+  }
+
+  async function openWorkspaceFile(entry: Parameters<typeof openWorkspaceFileState>[0], paneId?: EditorPane['id']) {
+    await triggerAutosaveForDocumentSwitch()
+    await openWorkspaceFileState(entry, paneId)
   }
 
   workspaceWorkflowController = createWorkspaceWorkflowController({
@@ -727,9 +768,11 @@ export function useApplicationShell() {
 
   onMounted(() => {
     mountApplicationLifecycle(initialText)
+    window.addEventListener('blur', triggerAutosaveOnWindowBlur)
   })
 
   onBeforeUnmount(() => {
+    window.removeEventListener('blur', triggerAutosaveOnWindowBlur)
     disposeApplicationLifecycle()
   })
 

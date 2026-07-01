@@ -27,6 +27,7 @@ describe('application settings', () => {
     })).toEqual({
       ...defaultApplicationSettings,
       autosave: {
+        ...defaultApplicationSettings.autosave,
         enabled: true,
         debounceMs: defaultApplicationSettings.autosave.debounceMs,
       },
@@ -87,8 +88,10 @@ describe('application settings', () => {
     saveApplicationSettings({
       ...defaultApplicationSettings,
       autosave: {
+        ...defaultApplicationSettings.autosave,
         enabled: true,
         debounceMs: 1500,
+        saveOnWindowBlur: true,
       },
     }, storage)
 

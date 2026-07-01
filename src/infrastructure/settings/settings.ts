@@ -1,6 +1,8 @@
 export type AutosaveSettings = {
   enabled: boolean
   debounceMs: number
+  saveOnWindowBlur: boolean
+  saveOnDocumentSwitch: boolean
 }
 
 export type RemoteImagePolicy = 'blocked' | 'allow-per-document'
@@ -53,6 +55,8 @@ export const defaultApplicationSettings: ApplicationSettings = {
   autosave: {
     enabled: false,
     debounceMs: 1200,
+    saveOnWindowBlur: false,
+    saveOnDocumentSwitch: false,
   },
   editor: {
     sourceFontFamily: '"JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
@@ -132,6 +136,12 @@ export function normalizeApplicationSettings(value: unknown): ApplicationSetting
       debounceMs: typeof autosave.debounceMs === 'number' && autosave.debounceMs >= 250
         ? Math.min(autosave.debounceMs, 30_000)
         : defaultApplicationSettings.autosave.debounceMs,
+      saveOnWindowBlur: typeof autosave.saveOnWindowBlur === 'boolean'
+        ? autosave.saveOnWindowBlur
+        : defaultApplicationSettings.autosave.saveOnWindowBlur,
+      saveOnDocumentSwitch: typeof autosave.saveOnDocumentSwitch === 'boolean'
+        ? autosave.saveOnDocumentSwitch
+        : defaultApplicationSettings.autosave.saveOnDocumentSwitch,
     },
     editor: {
       sourceFontFamily: typeof editor.sourceFontFamily === 'string' && editor.sourceFontFamily.trim()

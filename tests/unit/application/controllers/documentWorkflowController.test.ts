@@ -71,7 +71,14 @@ function createHarness(document = createDocument()) {
   const deps = {
     files,
     initialText: '# Untitled\n\nStart writing in Folden.\n',
-    appSettings: ref({ autosave: { enabled: true, debounceMs: 25 } }),
+    appSettings: ref({
+      autosave: {
+        enabled: true,
+        debounceMs: 25,
+        saveOnWindowBlur: false,
+        saveOnDocumentSwitch: false,
+      },
+    }),
     activeDocument,
     activePane,
     activePaneId,
@@ -231,6 +238,29 @@ describe('document workflow controller', () => {
     controller.dispose()
     await vi.advanceTimersByTimeAsync(25)
     expect(files.saveTextFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('runs explicit autosave triggers through existing eligibility checks', async () => {
+    const { controller, document, files } = createHarness()
+    files.saveTextFile.mockResolvedValue(createOpenedDocument({ content: document.content }))
+
+    await controller.triggerAutosaveDocuments([document.id])
+
+    expect(files.saveTextFile).toHaveBeenCalledWith('native-1', document.content, null, document.fileFormat, undefined)
+  })
+
+  it('skips explicit autosave triggers for unsafe or unsaved documents', async () => {
+    const scratchDocument = createDocument({
+      nativeId: null,
+      path: null,
+      workspaceId: null,
+      relativePath: null,
+    })
+    const { controller, files } = createHarness(scratchDocument)
+
+    await controller.triggerAutosaveDocuments([scratchDocument.id])
+
+    expect(files.saveTextFile).not.toHaveBeenCalled()
   })
 
   it('handles dirty close decisions without dropping cancelled documents', async () => {
