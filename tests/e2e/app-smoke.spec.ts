@@ -226,6 +226,66 @@ test('keeps split source and visual panes in sync for the same document', async 
   await expect(leftPane.getByTestId('source-editor')).toContainText('Visual side sync.')
 })
 
+test('reorders tabs with drag and drop', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+  await page.getByTestId('workspace-entry-notes').click()
+  await page.getByTestId('workspace-entry-notes\\daily.md').click()
+
+  const leftTabs = page.locator('.editor-pane').first().locator('.pane-tabs .tab-button')
+  await expect(leftTabs.nth(0)).toContainText('Untitled.md')
+  await expect(leftTabs.nth(1)).toContainText('README.md')
+  await expect(leftTabs.nth(2)).toContainText('daily.md')
+
+  const sourceBox = await leftTabs.nth(2).boundingBox()
+  const targetBox = await leftTabs.nth(1).boundingBox()
+
+  expect(sourceBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+
+  await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 8 })
+  await page.mouse.up()
+
+  await expect(leftTabs.nth(1)).toContainText('daily.md')
+  await expect(leftTabs.nth(2)).toContainText('README.md')
+})
+
+test('shows split open editors and marks the active pane document', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+  await page.locator('button[title="Toggle split view"]').click()
+  await page.locator('button[title="Move active tab right"]').click()
+  await page.locator('.editor-pane').first().click()
+  await page.getByTestId('workspace-entry-notes').click()
+  await page.getByTestId('workspace-entry-notes\\daily.md').click()
+
+  const openEditors = page.locator('.open-editors')
+  await expect(openEditors.locator('.open-editor-row.active')).toHaveCount(2)
+  await expect(openEditors.locator('.open-editor-row.active-pane-document')).toContainText('daily.md')
+
+  await page.locator('.editor-pane').nth(1).click()
+  await expect(openEditors.locator('.open-editor-row.active-pane-document')).toContainText('README.md')
+})
+
+test('shows toolbar labels only in comfortable density', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+
+  const splitLabel = page.locator('button[title="Toggle split view"] span')
+  await expect(splitLabel).toBeHidden()
+
+  await page.locator('button[title="Settings"]').click()
+  await page.getByRole('button', { name: 'Appearance' }).click()
+  await page.getByLabel('Density').selectOption('comfortable')
+  await page.locator('button[title="Workspace"]').click()
+
+  await expect(splitLabel).toBeVisible()
+})
+
 test('loads persisted settings before opening a workspace', async ({ page }) => {
   await openApp(page, {
     storageEntries: {
@@ -246,7 +306,7 @@ test('loads persisted settings before opening a workspace', async ({ page }) => 
 
   await page.locator('button[title="Settings"]').click()
   await page.getByRole('button', { name: 'Files' }).click()
-  await expect(page.getByRole('checkbox', { name: /Autosave/ })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /^Autosave / })).toBeChecked()
   await page.locator('button[title="Workspace"]').click()
   await page.getByTestId('open-folder-empty').click()
 
@@ -256,10 +316,34 @@ test('loads persisted settings before opening a workspace', async ({ page }) => 
 
   await page.locator('button[title="Settings"]').click()
   await page.getByRole('button', { name: 'Files' }).click()
-  await page.getByRole('checkbox', { name: /Autosave/ }).uncheck()
+  await page.getByRole('checkbox', { name: /^Autosave / }).uncheck()
   await expect.poll(async () => page.evaluate((storageKey) => (
     window.localStorage.getItem(storageKey)
   ), applicationSettingsStorageKey)).toContain('"enabled":false')
+})
+
+test('keeps settings number input editable and stores autosave delay as milliseconds', async ({ page }) => {
+  await openApp(page)
+  await page.locator('button[title="Settings"]').click()
+  await expect(page.locator('.topbar')).toHaveCount(0)
+  await expect(page.locator('.statusbar')).toHaveCount(0)
+  await expect(page.getByTestId('document-title')).toHaveCount(0)
+
+  const sourceSize = page.getByLabel('Source size')
+  await sourceSize.fill('1')
+  await expect(sourceSize).toHaveValue('1')
+  await sourceSize.blur()
+  await expect(sourceSize).toHaveValue('10')
+
+  await page.getByRole('button', { name: 'Files' }).click()
+  const autosaveDelay = page.getByLabel('Autosave delay')
+  await expect(autosaveDelay).toHaveValue('1.2')
+  await autosaveDelay.fill('2.5')
+  await autosaveDelay.blur()
+
+  await expect.poll(async () => page.evaluate((storageKey) => (
+    window.localStorage.getItem(storageKey)
+  ), applicationSettingsStorageKey)).toContain('"debounceMs":2500')
 })
 
 test('autosaves existing files but does not autosave scratch documents', async ({ page }) => {
@@ -268,7 +352,7 @@ test('autosaves existing files but does not autosave scratch documents', async (
   await page.getByTestId('workspace-entry-README.md').click()
   await page.locator('button[title="Settings"]').click()
   await page.getByRole('button', { name: 'Files' }).click()
-  await page.getByRole('checkbox', { name: /Autosave/ }).check()
+  await page.getByRole('checkbox', { name: /^Autosave / }).check()
   await page.locator('button[title="Workspace"]').click()
   await page.getByRole('button', { name: 'Source' }).click()
 
@@ -431,6 +515,8 @@ test('keeps remote images blocked until the document explicitly allows them', as
   await page.getByRole('button', { name: 'Visual' }).click()
   await expect(page.getByTestId('visual-editor')).toContainText('Remote image is blocked.')
   await expect(page.getByTestId('load-remote-images')).toBeVisible()
+  await expect(page.locator('.topbar-actions').getByTestId('load-remote-images')).toBeVisible()
+  await expect(page.locator('.shared-toolbar').getByTestId('load-remote-images')).toHaveCount(0)
 
   await page.waitForTimeout(300)
   expect(remoteRequests).toEqual([])
@@ -438,4 +524,54 @@ test('keeps remote images blocked until the document explicitly allows them', as
   await page.getByTestId('load-remote-images').click()
   await expect.poll(() => remoteRequests.length).toBeGreaterThan(0)
   await expect(page.locator('img[src="https://example.com/preview.png"]')).toBeVisible()
+})
+
+test('opens visual links with Ctrl click without hijacking normal editing clicks', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+  await page.getByRole('button', { name: 'Source' }).click()
+
+  const editor = sourceEditor(page)
+  await editor.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
+  await page.keyboard.insertText([
+    '',
+    '[Jump](#target-heading)',
+    '',
+    ...Array.from({ length: 24 }, (_, index) => `filler line ${index + 1}`),
+    '',
+    '## Target Heading',
+    '',
+    '[Example](https://example.com/docs)',
+    '',
+  ].join('\n'))
+  await page.evaluate(() => {
+    Object.assign(window, {
+      __FOLDEN_OPENED_LINK__: null,
+      open: (url: string) => {
+        Object.assign(window, { __FOLDEN_OPENED_LINK__: url })
+        return null
+      },
+    })
+  })
+
+  await page.getByRole('button', { name: 'Visual' }).click()
+  const scrollHost = page.locator('.visual-editor-scroll')
+  await scrollHost.evaluate((node) => {
+    node.scrollTop = 0
+  })
+  await page.locator('.visual-editor-content a[href="#target-heading"]').click()
+  await expect.poll(async () => scrollHost.evaluate((node) => node.scrollTop)).toBeGreaterThan(0)
+
+  const link = page.locator('.visual-editor-content a[href="https://example.com/docs"]')
+  await link.click()
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & { __FOLDEN_OPENED_LINK__?: string | null }).__FOLDEN_OPENED_LINK__
+  ))).toBe(null)
+
+  await link.click({ modifiers: ['Control'] })
+  await expect.poll(async () => page.evaluate(() => (
+    (window as Window & { __FOLDEN_OPENED_LINK__?: string | null }).__FOLDEN_OPENED_LINK__
+  ))).toBe('https://example.com/docs')
 })

@@ -75,7 +75,7 @@ type WorkspaceWorkflowDeps = {
   removeDocumentsFromPanes: (documentIds: string[]) => void
   normalizePaneState: () => void
   updateDocumentPaths: (previousPath: string, nextPath: string, workspaceRootPath?: string) => void
-  openLoadedDocument: (document: OpenedDocument, paneId?: EditorPane['id']) => OpenDocument
+  openLoadedDocument: (document: OpenedDocument, paneId?: EditorPane['id']) => Promise<OpenDocument>
   openWorkspaceFile: (entry: WorkspaceEntryRef, paneId?: EditorPane['id']) => Promise<void>
   setSplitEnabled: (enabled: boolean) => void
   moveDocumentToPane: (document: OpenDocument, sourcePaneId: EditorPane['id'], targetPaneId: EditorPane['id']) => void
@@ -257,7 +257,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
       const path = await deps.workspaceFiles.createFile(deps.workspace.value!.id, parentPath, name)
       await refreshWorkspaceBranch(parentPath)
       const document = await deps.workspaceFiles.openTextFileByPath(deps.workspace.value!.id, path)
-      deps.openLoadedDocument(document)
+      await deps.openLoadedDocument(document)
     }, 'Could not create file')
   }
 

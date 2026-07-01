@@ -7,6 +7,7 @@ import type { WorkspaceEntry } from '../../../../src/domain/native'
 const appSettings = ref<ApplicationSettings>({
   ...defaultApplicationSettings,
   autosave: {
+    ...defaultApplicationSettings.autosave,
     enabled: false,
     debounceMs: 500,
   },

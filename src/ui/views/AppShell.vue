@@ -27,7 +27,7 @@ import {
   Wrench,
   X,
 } from 'lucide-vue-next'
-import { computed, ref, type Component } from 'vue'
+import { computed, ref, watch, type Component } from 'vue'
 import ConfirmDialog from '../dialogs/ConfirmDialog.vue'
 import ConflictResolutionDialog from '../dialogs/ConflictResolutionDialog.vue'
 import MarkdownSafetyDialog from '../dialogs/MarkdownSafetyDialog.vue'
@@ -124,10 +124,26 @@ type DragPayload = {
   paneId: 'left' | 'right'
 }
 
+type TabPointerDrag = {
+  documentId: string
+  sourcePaneId: 'left' | 'right'
+  startX: number
+  startY: number
+  dragging: boolean
+}
+
 const openEditorsCollapsed = ref(false)
 const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
 const sidebarResizeStart = ref<{ x: number, width: number } | null>(null)
 const splitResizeStart = ref<{ x: number, ratio: number, width: number } | null>(null)
+const sourceFontSizeInput = ref(String(appSettings.value.editor.sourceFontSize))
+const visualFontSizeInput = ref(String(appSettings.value.editor.visualFontSize))
+const lineHeightInput = ref(String(appSettings.value.editor.lineHeight))
+const visualMaxWidthInput = ref(String(appSettings.value.editor.visualMaxWidth))
+const autosaveDelaySecondsInput = ref(formatSeconds(appSettings.value.autosave.debounceMs))
+const uiScaleInput = ref(String(appSettings.value.appearance.uiScale))
+const tabPointerDrag = ref<TabPointerDrag | null>(null)
+const suppressNextTabClick = ref(false)
 
 const shellStyle = computed(() => ({
   '--sidebar-width': `${layoutSettings.value.sidebarWidth}px`,
@@ -166,6 +182,10 @@ const showDocumentToolbar = computed(() =>
   && activeDocumentMode.value === 'visual'
   && activeDocument.value !== null,
 )
+const showSettingsView = computed(() =>
+  layoutSettings.value.activeActivitySection === 'settings' && !layoutSettings.value.focusMode,
+)
+const showEditorView = computed(() => !showSettingsView.value)
 
 const visualToolbarCommands: Array<{
   command: VisualEditorCommand
@@ -191,8 +211,16 @@ const visualToolbarCommands: Array<{
 
 function startDocumentDrag(event: DragEvent, payload: DragPayload) {
   event.dataTransfer?.setData('application/x-folden-drag', JSON.stringify(payload))
+  event.dataTransfer?.setData('text/plain', payload.documentId)
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.dropEffect = 'move'
+  }
+}
+
+function handleDocumentDragOver(event: DragEvent) {
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
   }
 }
 
@@ -225,6 +253,7 @@ function handlePaneDrop(event: DragEvent, targetPaneId: 'left' | 'right') {
   }
 
   event.preventDefault()
+  event.stopPropagation()
   moveDocumentIdBetweenPanes(payload.documentId, payload.paneId, targetPaneId)
 }
 
@@ -251,6 +280,7 @@ function handleTabDrop(event: DragEvent, targetPaneId: 'left' | 'right', targetI
   }
 
   event.preventDefault()
+  event.stopPropagation()
 
   if (payload.kind === 'tab' && payload.paneId === targetPaneId) {
     reorderDocumentInPane(targetPaneId, payload.documentId, targetIndex)
@@ -258,6 +288,96 @@ function handleTabDrop(event: DragEvent, targetPaneId: 'left' | 'right', targetI
   }
 
   moveDocumentIdBetweenPanes(payload.documentId, payload.paneId, targetPaneId, targetIndex)
+}
+
+function handleTabListDrop(event: DragEvent, targetPaneId: 'left' | 'right') {
+  const pane = visiblePanes.value.find((candidate) => candidate.id === targetPaneId)
+  handleTabDrop(event, targetPaneId, pane?.documentIds.length ?? 0)
+}
+
+function beginTabPointerDrag(event: PointerEvent, documentId: string, sourcePaneId: 'left' | 'right') {
+  if (event.button !== 0) {
+    return
+  }
+
+  tabPointerDrag.value = {
+    documentId,
+    sourcePaneId,
+    startX: event.clientX,
+    startY: event.clientY,
+    dragging: false,
+  }
+}
+
+function getTabDropTarget(event: PointerEvent) {
+  const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null
+  const tabTarget = target?.closest<HTMLElement>('[data-tab-drop-pane]')
+  const paneTarget = target?.closest<HTMLElement>('[data-pane-id]')
+  const paneId = (tabTarget?.dataset.tabDropPane ?? paneTarget?.dataset.paneId) as 'left' | 'right' | undefined
+
+  if (paneId !== 'left' && paneId !== 'right') {
+    return null
+  }
+
+  const pane = visiblePanes.value.find((candidate) => candidate.id === paneId)
+  const fallbackIndex = pane?.documentIds.length ?? 0
+  const rawIndex = tabTarget?.dataset.tabDropIndex
+  const targetIndex = rawIndex === undefined ? fallbackIndex : Number(rawIndex)
+
+  return {
+    paneId,
+    targetIndex: Number.isFinite(targetIndex) ? targetIndex : fallbackIndex,
+  }
+}
+
+function handleTabPointerMove(event: PointerEvent) {
+  const drag = tabPointerDrag.value
+
+  if (!drag) {
+    return
+  }
+
+  if (
+    !drag.dragging
+    && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 5
+  ) {
+    return
+  }
+
+  drag.dragging = true
+  event.preventDefault()
+}
+
+function finishTabPointerDrag(event: PointerEvent) {
+  const drag = tabPointerDrag.value
+  tabPointerDrag.value = null
+
+  if (!drag?.dragging) {
+    return
+  }
+
+  suppressNextTabClick.value = true
+  const target = getTabDropTarget(event)
+
+  if (!target) {
+    return
+  }
+
+  if (drag.sourcePaneId === target.paneId) {
+    reorderDocumentInPane(target.paneId, drag.documentId, target.targetIndex)
+    return
+  }
+
+  moveDocumentIdBetweenPanes(drag.documentId, drag.sourcePaneId, target.paneId, target.targetIndex)
+}
+
+function handleTabClick(pane: typeof visiblePanes.value[number], documentId: string) {
+  if (suppressNextTabClick.value) {
+    suppressNextTabClick.value = false
+    return
+  }
+
+  void setActiveDocument(pane, documentId)
 }
 
 function closeTabOnAuxClick(event: MouseEvent, pane: typeof visiblePanes.value[number], documentId: string) {
@@ -300,39 +420,62 @@ function getPrimaryDocumentPane(documentId: string) {
   return visiblePanes.value.find((pane) => pane.documentIds.includes(documentId)) ?? activePane.value
 }
 
+function isVisiblePaneDocument(documentId: string) {
+  return visiblePanes.value.some((pane) => pane.activeDocumentId === documentId)
+}
+
+function isActivePaneDocument(documentId: string) {
+  return activePane.value?.activeDocumentId === documentId
+}
+
 function clampNumber(value: unknown, minimum: number, maximum: number, fallback: number) {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(Math.max(value, minimum), maximum)
     : fallback
 }
 
-function inputNumber(event: Event, fallback: number) {
-  const value = Number((event.target as HTMLInputElement).value)
-  return Number.isFinite(value) ? value : fallback
+function inputText(event: Event) {
+  return (event.target as HTMLInputElement).value
 }
 
-function updateSourceFontSize(event: Event) {
-  appSettings.value.editor.sourceFontSize = clampNumber(inputNumber(event, 14), 10, 28, 14)
+function formatSeconds(milliseconds: number) {
+  return String(milliseconds / 1000)
 }
 
-function updateVisualFontSize(event: Event) {
-  appSettings.value.editor.visualFontSize = clampNumber(inputNumber(event, 16), 12, 30, 16)
+function applyNumberInput(value: string, minimum: number, maximum: number, fallback: number) {
+  const numberValue = Number(value)
+  return clampNumber(Number.isFinite(numberValue) ? numberValue : fallback, minimum, maximum, fallback)
 }
 
-function updateLineHeight(event: Event) {
-  appSettings.value.editor.lineHeight = clampNumber(inputNumber(event, 1.65), 1.2, 2.2, 1.65)
+function updateSourceFontSize() {
+  appSettings.value.editor.sourceFontSize = applyNumberInput(sourceFontSizeInput.value, 10, 28, 14)
+  sourceFontSizeInput.value = String(appSettings.value.editor.sourceFontSize)
 }
 
-function updateVisualMaxWidth(event: Event) {
-  appSettings.value.editor.visualMaxWidth = clampNumber(inputNumber(event, 720), 520, 1120, 720)
+function updateVisualFontSize() {
+  appSettings.value.editor.visualFontSize = applyNumberInput(visualFontSizeInput.value, 12, 30, 16)
+  visualFontSizeInput.value = String(appSettings.value.editor.visualFontSize)
 }
 
-function updateAutosaveDebounce(event: Event) {
-  appSettings.value.autosave.debounceMs = clampNumber(inputNumber(event, 1200), 250, 30_000, 1200)
+function updateLineHeight() {
+  appSettings.value.editor.lineHeight = applyNumberInput(lineHeightInput.value, 1.2, 2.2, 1.65)
+  lineHeightInput.value = String(appSettings.value.editor.lineHeight)
 }
 
-function updateUiScale(event: Event) {
-  appSettings.value.appearance.uiScale = clampNumber(inputNumber(event, 1), 0.85, 1.25, 1)
+function updateVisualMaxWidth() {
+  appSettings.value.editor.visualMaxWidth = applyNumberInput(visualMaxWidthInput.value, 520, 1120, 720)
+  visualMaxWidthInput.value = String(appSettings.value.editor.visualMaxWidth)
+}
+
+function updateAutosaveDebounce() {
+  const seconds = applyNumberInput(autosaveDelaySecondsInput.value, 0.25, 30, 1.2)
+  appSettings.value.autosave.debounceMs = Math.round(seconds * 1000)
+  autosaveDelaySecondsInput.value = formatSeconds(appSettings.value.autosave.debounceMs)
+}
+
+function updateUiScale() {
+  appSettings.value.appearance.uiScale = applyNumberInput(uiScaleInput.value, 0.85, 1.25, 1)
+  uiScaleInput.value = String(appSettings.value.appearance.uiScale)
 }
 
 function beginSidebarResize(event: MouseEvent) {
@@ -377,6 +520,25 @@ function stopSplitResize() {
   splitResizeStart.value = null
   window.removeEventListener('mousemove', resizeSplit)
 }
+
+watch(() => appSettings.value.editor.sourceFontSize, (value) => {
+  sourceFontSizeInput.value = String(value)
+})
+watch(() => appSettings.value.editor.visualFontSize, (value) => {
+  visualFontSizeInput.value = String(value)
+})
+watch(() => appSettings.value.editor.lineHeight, (value) => {
+  lineHeightInput.value = String(value)
+})
+watch(() => appSettings.value.editor.visualMaxWidth, (value) => {
+  visualMaxWidthInput.value = String(value)
+})
+watch(() => appSettings.value.autosave.debounceMs, (value) => {
+  autosaveDelaySecondsInput.value = formatSeconds(value)
+})
+watch(() => appSettings.value.appearance.uiScale, (value) => {
+  uiScaleInput.value = String(value)
+})
 </script>
 
 <template>
@@ -388,6 +550,7 @@ function stopSplitResize() {
       'activity-hidden': layoutSettings.focusMode || !appSettings.appearance.showActivityBar,
       'status-hidden': layoutSettings.focusMode || !appSettings.appearance.showStatusBar,
       comfortable: appSettings.appearance.density === 'comfortable',
+      'settings-page': showSettingsView,
     }"
     :style="shellStyle"
     data-testid="app-shell"
@@ -511,7 +674,10 @@ function stopSplitResize() {
               :key="document.id"
               type="button"
               class="open-editor-row"
-              :class="{ active: activeDocument?.id === document.id }"
+              :class="{
+                active: isVisiblePaneDocument(document.id),
+                'active-pane-document': isActivePaneDocument(document.id),
+              }"
               :title="document.path ? cleanDisplayPath(document.path) : 'Scratch document'"
               draggable="true"
               @dragstart="startDocumentDrag($event, {
@@ -526,6 +692,7 @@ function stopSplitResize() {
                 )
               "
             >
+              <span class="open-editor-active-marker" aria-hidden="true" />
               <span class="open-editor-name">{{ document.name }}</span>
               <span class="open-editor-pane">
                 {{ getDocumentPaneLabel(document.id) }}
@@ -607,8 +774,8 @@ function stopSplitResize() {
       @dblclick="resetLayoutSettings"
     />
 
-    <section class="workbench">
-      <header class="topbar">
+    <section class="workbench" :class="{ 'settings-page': showSettingsView }">
+      <header v-if="showEditorView" class="topbar">
         <div class="topbar-title">
           <span class="document-title" data-testid="document-title">{{ activeDocument?.name ?? 'No document' }}</span>
           <div
@@ -618,7 +785,7 @@ function stopSplitResize() {
           >
             <button
               type="button"
-              class="icon-button"
+              class="icon-button labelled-icon-button"
               title="Visual"
               aria-label="Visual"
               :class="{ active: activeDocument && activeDocumentMode === 'visual' }"
@@ -626,10 +793,11 @@ function stopSplitResize() {
               @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'visual')"
             >
               <Eye :size="16" />
+              <span>Visual</span>
             </button>
             <button
               type="button"
-              class="icon-button"
+              class="icon-button labelled-icon-button"
               title="Source"
               aria-label="Source"
               :class="{ active: activeDocument && activeDocumentMode === 'source' }"
@@ -637,6 +805,7 @@ function stopSplitResize() {
               @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'source')"
             >
               <FileCode2 :size="16" />
+              <span>Source</span>
             </button>
           </div>
           <span v-if="dirtyDocuments.length" class="dirty-marker" data-testid="dirty-marker">
@@ -645,6 +814,19 @@ function stopSplitResize() {
         </div>
 
         <div class="topbar-actions">
+          <button
+            v-if="
+              activePaneDocument
+              && documentHasRemoteImages(activePaneDocument)
+              && !shouldLoadRemoteImages(activePaneDocument)
+            "
+            type="button"
+            class="load-remote-images-button"
+            data-testid="load-remote-images"
+            @click="allowRemoteImagesForDocument(activePaneDocument)"
+          >
+            Load remote images
+          </button>
           <button
             type="button"
             class="icon-button"
@@ -678,7 +860,7 @@ function stopSplitResize() {
           </button>
           <button
             type="button"
-            class="icon-button"
+            class="icon-button labelled-icon-button"
             title="Toggle split view"
             aria-label="Toggle split view"
             :class="{ active: splitEnabled }"
@@ -686,16 +868,18 @@ function stopSplitResize() {
             @click="executeCommand('layout.toggleSplit')"
           >
             <Columns2 :size="16" />
+            <span>Split</span>
           </button>
           <button
             type="button"
-            class="icon-button"
+            class="icon-button labelled-icon-button"
             :title="moveActiveTabTitle"
             :aria-label="moveActiveTabTitle"
             :disabled="!canExecuteCommand('layout.moveViewRight')"
             @click="executeCommand('layout.moveViewRight')"
           >
             <component :is="moveActiveTabIcon" :size="16" />
+            <span>{{ activePaneIsRight ? 'Move left' : 'Move right' }}</span>
           </button>
         </div>
       </header>
@@ -731,28 +915,28 @@ function stopSplitResize() {
                 <strong>Source size</strong>
                 <small>Text size in Source mode.</small>
               </span>
-              <input :value="appSettings.editor.sourceFontSize" type="number" min="10" max="28" @input="updateSourceFontSize">
+              <input :value="sourceFontSizeInput" type="number" min="10" max="28" @input="sourceFontSizeInput = inputText($event)" @change="updateSourceFontSize" @blur="updateSourceFontSize">
             </label>
             <label class="settings-row">
               <span>
                 <strong>Visual size</strong>
                 <small>Text size in Visual mode.</small>
               </span>
-              <input :value="appSettings.editor.visualFontSize" type="number" min="12" max="30" @input="updateVisualFontSize">
+              <input :value="visualFontSizeInput" type="number" min="12" max="30" @input="visualFontSizeInput = inputText($event)" @change="updateVisualFontSize" @blur="updateVisualFontSize">
             </label>
             <label class="settings-row">
               <span>
                 <strong>Line height</strong>
                 <small>Shared editor line spacing.</small>
               </span>
-              <input :value="appSettings.editor.lineHeight" type="number" min="1.2" max="2.2" step="0.05" @input="updateLineHeight">
+              <input :value="lineHeightInput" type="number" min="1.2" max="2.2" step="0.05" @input="lineHeightInput = inputText($event)" @change="updateLineHeight" @blur="updateLineHeight">
             </label>
             <label class="settings-row">
               <span>
                 <strong>Visual width</strong>
                 <small>Maximum readable content width.</small>
               </span>
-              <input :value="appSettings.editor.visualMaxWidth" type="number" min="520" max="1120" @input="updateVisualMaxWidth">
+              <input :value="visualMaxWidthInput" type="number" min="520" max="1120" @input="visualMaxWidthInput = inputText($event)" @change="updateVisualMaxWidth" @blur="updateVisualMaxWidth">
             </label>
             <label class="settings-row settings-toggle-row">
               <span>
@@ -783,9 +967,23 @@ function stopSplitResize() {
             <label class="settings-row">
               <span>
                 <strong>Autosave delay</strong>
-                <small>Delay before autosave starts, in milliseconds.</small>
+                <small>Delay before autosave starts, in seconds.</small>
               </span>
-              <input :value="appSettings.autosave.debounceMs" type="number" min="250" max="30000" step="250" @input="updateAutosaveDebounce">
+              <input :value="autosaveDelaySecondsInput" type="number" min="0.25" max="30" step="0.25" @input="autosaveDelaySecondsInput = inputText($event)" @change="updateAutosaveDebounce" @blur="updateAutosaveDebounce">
+            </label>
+            <label class="settings-row settings-toggle-row">
+              <span>
+                <strong>Save on focus loss</strong>
+                <small>Autosave changed existing files when Folden loses focus.</small>
+              </span>
+              <input v-model="appSettings.autosave.saveOnWindowBlur" class="settings-switch" type="checkbox">
+            </label>
+            <label class="settings-row settings-toggle-row">
+              <span>
+                <strong>Save before switching files</strong>
+                <small>Autosave the current file before another document becomes active.</small>
+              </span>
+              <input v-model="appSettings.autosave.saveOnDocumentSwitch" class="settings-switch" type="checkbox">
             </label>
           </section>
           <section v-else class="settings-section">
@@ -794,7 +992,7 @@ function stopSplitResize() {
                 <strong>UI scale</strong>
                 <small>Scale controls and application chrome.</small>
               </span>
-              <input :value="appSettings.appearance.uiScale" type="number" min="0.85" max="1.25" step="0.05" @input="updateUiScale">
+              <input :value="uiScaleInput" type="number" min="0.85" max="1.25" step="0.05" @input="uiScaleInput = inputText($event)" @change="updateUiScale" @blur="updateUiScale">
             </label>
             <label class="settings-row">
               <span>
@@ -847,7 +1045,7 @@ function stopSplitResize() {
         </p>
       </div>
       <section
-        v-if="activeDocument?.externalState === 'conflict'"
+        v-if="showEditorView && activeDocument?.externalState === 'conflict'"
         class="document-warning"
         data-testid="conflict-warning"
       >
@@ -872,7 +1070,7 @@ function stopSplitResize() {
         </div>
       </section>
       <section
-        v-else-if="activeDocument?.externalState === 'missing'"
+        v-else-if="showEditorView && activeDocument?.externalState === 'missing'"
         class="document-warning"
       >
         <div>
@@ -890,31 +1088,18 @@ function stopSplitResize() {
       </section>
 
       <section v-if="showDocumentToolbar" class="shared-toolbar" aria-label="Document toolbar">
-        <button
-          v-if="
-            activePaneDocument
-            && documentHasRemoteImages(activePaneDocument)
-            && !shouldLoadRemoteImages(activePaneDocument)
-          "
-          type="button"
-          class="load-remote-images-button"
-          data-testid="load-remote-images"
-          @click="allowRemoteImagesForDocument(activePaneDocument)"
-        >
-          Load remote images
-        </button>
         <div class="format-toolbar shared-format-toolbar">
           <button
             v-for="item in visualToolbarCommands"
             :key="item.command"
             type="button"
-            class="icon-button"
+            class="toolbar-button"
             :title="item.title"
             :aria-label="item.title"
             @click="runActiveVisualCommand(item.command)"
           >
             <component :is="item.icon" v-if="item.icon" :size="16" />
-            <span v-else>{{ item.label }}</span>
+            <span>{{ item.label }}</span>
           </button>
         </div>
       </section>
@@ -928,35 +1113,52 @@ function stopSplitResize() {
           v-for="pane in visiblePanes"
           :key="pane.id"
           class="editor-pane"
+          :data-pane-id="pane.id"
           :class="{ active: activePaneId === pane.id }"
           @click="setActivePane(pane.id)"
-          @dragover.prevent
+          @dragover.prevent="handleDocumentDragOver"
           @drop="handlePaneDrop($event, pane.id)"
         >
           <header class="pane-header">
-            <div class="pane-tabs">
+            <div
+              class="pane-tabs"
+              @dragover.prevent.stop="handleDocumentDragOver"
+              @drop.stop="handleTabListDrop($event, pane.id)"
+            >
               <button
                 v-for="(documentId, index) in pane.documentIds"
                 :key="documentId"
                 type="button"
                 class="tab-button"
+                :data-tab-drop-pane="pane.id"
+                :data-tab-drop-index="index"
                 :class="{ active: pane.activeDocumentId === documentId }"
                 :title="getDocument(documentId)?.path ? cleanDisplayPath(getDocument(documentId)!.path!) : 'Scratch document'"
-                draggable="true"
-                @dragstart="startDocumentDrag($event, { kind: 'tab', documentId, paneId: pane.id })"
-                @dragover.prevent
+                @dragover.prevent.stop="handleDocumentDragOver"
                 @drop.stop="handleTabDrop($event, pane.id, index)"
+                @pointerdown="beginTabPointerDrag($event, documentId, pane.id)"
+                @pointermove="handleTabPointerMove"
+                @pointerup="finishTabPointerDrag"
+                @pointercancel="tabPointerDrag = null"
                 @auxclick.stop="closeTabOnAuxClick($event, pane, documentId)"
-                @click.stop="setActiveDocument(pane, documentId)"
+                @click.stop="handleTabClick(pane, documentId)"
               >
                 <span>{{ getDocument(documentId)?.name ?? 'Missing' }}</span>
                 <span v-if="getDocument(documentId) && isDirty(getDocument(documentId)!)" class="tab-dot" />
                 <X
                   class="tab-close"
                   :size="13"
+                  @pointerdown.stop
                   @click.stop="closeDocument(pane, documentId)"
                 />
               </button>
+              <span
+                class="tab-drop-tail"
+                :data-tab-drop-pane="pane.id"
+                :data-tab-drop-index="pane.documentIds.length"
+                @dragover.prevent.stop="handleDocumentDragOver"
+                @drop.stop="handleTabDrop($event, pane.id, pane.documentIds.length)"
+              />
             </div>
           </header>
 
@@ -1002,7 +1204,7 @@ function stopSplitResize() {
         />
       </section>
 
-      <footer v-if="appSettings.appearance.showStatusBar && !layoutSettings.focusMode" class="statusbar">
+      <footer v-if="showEditorView && appSettings.appearance.showStatusBar && !layoutSettings.focusMode" class="statusbar">
         <span>{{ documents.length }} open</span>
         <span
           class="path-status"

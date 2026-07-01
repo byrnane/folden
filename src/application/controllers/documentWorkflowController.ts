@@ -30,6 +30,8 @@ type DocumentWorkflowDeps = {
     autosave: {
       enabled: boolean
       debounceMs: number
+      saveOnWindowBlur: boolean
+      saveOnDocumentSwitch: boolean
     }
   }>
   activeDocument: ComputedRef<OpenDocument | null>
@@ -382,6 +384,27 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     }, deps.appSettings.value.autosave.debounceMs)
 
     pendingAutosaves.set(document.id, timeoutId)
+  }
+
+  async function triggerAutosaveDocuments(documentIds: string[]) {
+    for (const documentId of documentIds) {
+      const document = deps.getDocument(documentId)
+
+      if (!document) {
+        continue
+      }
+
+      clearPendingAutosave(document.id)
+      flushVisibleDocumentViews(document.id)
+
+      const currentDocument = deps.getDocument(document.id)
+
+      if (!currentDocument || !canAutosaveDocument(currentDocument)) {
+        continue
+      }
+
+      await saveDocument(currentDocument, 'autosave')
+    }
   }
 
   function syncDocumentExternalStateFromSaveError(documentId: string, error: NativeError) {
@@ -741,5 +764,6 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     saveDocumentAsCopy,
     scheduleAutosave,
     syncAutosaveTimers,
+    triggerAutosaveDocuments,
   }
 }
