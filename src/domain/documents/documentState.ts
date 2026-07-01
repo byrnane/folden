@@ -16,7 +16,7 @@ import {
   undoDocumentHistory,
   type DocumentHistoryState,
 } from './documentHistory'
-import type { NativeError } from '../../infrastructure/tauri/files'
+import type { NativeError } from '../nativeError'
 
 export type EditorMode = 'visual' | 'source'
 export type ExternalDocumentState = 'idle' | 'conflict' | 'missing'

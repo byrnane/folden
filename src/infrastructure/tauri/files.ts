@@ -1,61 +1,19 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { FileFingerprint, TextFileFormat } from '../../domain/document'
-
-export type WorkspaceDescriptor = {
-  id: string
-  rootPath: string
-  name: string
-}
-
-export type WorkspaceEntry = {
-  name: string
-  path: string
-  kind: 'directory' | 'file'
-  children: WorkspaceEntry[]
-}
-
-export type OpenedDocument = {
-  id: string
-  path: string
-  content: string
-  workspaceId: string | null
-  relativePath: string | null
-  fileFormat: TextFileFormat
-  fingerprint: FileFingerprint | null
-}
-
-export type NativeError = {
-  code: string
-  operation: string
-  userMessage: string
-  technicalMessage: string | null
-  retryable: boolean
-}
-
-export type SaveDocumentResult = OpenedDocument
-export type NativeFsEvent = {
-  kind: 'create' | 'modify' | 'remove'
-  path: string
-}
+import type {
+  OpenedDocument,
+  PersistedSessionState,
+  RecoveryLoadResult,
+  RecoverySnapshot,
+  SaveDocumentResult,
+  WorkspaceDescriptor,
+  WorkspaceEntry,
+} from '../../domain/native'
+import { createNativeError, isNativeError, type NativeError } from '../../domain/nativeError'
 
 function normalizeNativeError(error: unknown): NativeError {
-  if (typeof error === 'object' && error !== null) {
-    const candidate = error as Partial<NativeError>
-
-    if (
-      typeof candidate.code === 'string' &&
-      typeof candidate.operation === 'string' &&
-      typeof candidate.userMessage === 'string' &&
-      typeof candidate.retryable === 'boolean'
-    ) {
-      return {
-        code: candidate.code,
-        operation: candidate.operation,
-        userMessage: candidate.userMessage,
-        technicalMessage: candidate.technicalMessage ?? null,
-        retryable: candidate.retryable,
-      }
-    }
+  if (isNativeError(error)) {
+    return createNativeError(error)
   }
 
   throw error
@@ -71,6 +29,12 @@ export async function invokeNative<T>(command: string, payload?: Record<string, 
 
 export async function openTextFile() {
   return invokeNative<OpenedDocument | null>('open_text_file')
+}
+
+export async function openTextFileAtPath(path: string) {
+  return invokeNative<OpenedDocument>('open_text_file_at_path', {
+    path,
+  })
 }
 
 export async function saveTextFile(
@@ -96,6 +60,26 @@ export async function openWorkspaceDirectory() {
 export async function restoreWorkspaceByPath(rootPath: string) {
   return invokeNative<WorkspaceDescriptor>('restore_workspace_by_path', {
     rootPath,
+  })
+}
+
+export async function loadSessionState() {
+  return invokeNative<PersistedSessionState | null>('load_session_state')
+}
+
+export async function saveSessionState(session: PersistedSessionState | null) {
+  return invokeNative<void>('save_session_state', {
+    session,
+  })
+}
+
+export async function loadRecoverySnapshots() {
+  return invokeNative<RecoveryLoadResult>('load_recovery_snapshots')
+}
+
+export async function saveRecoverySnapshots(entries: RecoverySnapshot[]) {
+  return invokeNative<void>('save_recovery_snapshots', {
+    entries,
   })
 }
 

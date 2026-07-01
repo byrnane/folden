@@ -1,4 +1,4 @@
-import type { WorkspaceEntry } from '../../infrastructure/tauri/files'
+import type { WorkspaceEntry } from '../native'
 
 export function filterWorkspaceEntriesByIgnoredNames(
   entries: WorkspaceEntry[],

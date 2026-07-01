@@ -3,20 +3,8 @@ import { computed, ref } from 'vue'
 import { createWorkspaceWorkflowController } from '../../../../src/application/controllers/workspaceWorkflowController'
 import { createTextFileFormat } from '../../../../src/domain/document'
 import type { OpenDocument } from '../../../../src/domain/documents/documentState'
-import type { WorkspaceDescriptor, WorkspaceEntry } from '../../../../src/infrastructure/tauri/files'
-import * as nativeFiles from '../../../../src/infrastructure/tauri/files'
+import type { WorkspaceDescriptor, WorkspaceEntry } from '../../../../src/domain/native'
 import type { EditorPane } from '../../../../src/application/types/shell'
-
-vi.mock('../../../../src/infrastructure/tauri/files', async (importOriginal) => ({
-  ...await importOriginal<typeof import('../../../../src/infrastructure/tauri/files')>(),
-  createDirectory: vi.fn(),
-  createFile: vi.fn(),
-  listDirectory: vi.fn(),
-  openTextFileByPath: vi.fn(),
-  openWorkspaceDirectory: vi.fn(),
-  renamePath: vi.fn(),
-  trashPath: vi.fn(),
-}))
 
 function file(path: string): WorkspaceEntry {
   return {
@@ -78,8 +66,23 @@ function createHarness(options: {
   }))
   const selectedDirectoryPath = computed(() => '')
   const loadedPaths = new Set([''])
+  const workspaceFiles = {
+    createDirectory: vi.fn(),
+    createFile: vi.fn(),
+    listDirectory: vi.fn().mockResolvedValue([]),
+    openTextFileByPath: vi.fn(),
+    openWorkspaceDirectory: vi.fn().mockResolvedValue({
+      id: 'workspace-2',
+      rootPath: 'D:\\Notes',
+      name: 'Notes',
+    }),
+    renamePath: vi.fn(),
+    restoreWorkspaceByPath: vi.fn(),
+    trashPath: vi.fn(),
+  }
 
   const deps = {
+    workspaceFiles,
     workspace,
     documents,
     expandedWorkspacePaths,
@@ -135,18 +138,13 @@ function createHarness(options: {
     controller,
     deps,
     loadedPaths,
+    workspaceFiles,
   }
 }
 
 describe('workspace workflow controller', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(nativeFiles.listDirectory).mockResolvedValue([])
-    vi.mocked(nativeFiles.openWorkspaceDirectory).mockResolvedValue({
-      id: 'workspace-2',
-      rootPath: 'D:\\Notes',
-      name: 'Notes',
-    })
   })
 
   it('handles workspace switch cancel, save, and discard decisions', async () => {
@@ -179,17 +177,17 @@ describe('workspace workflow controller', () => {
   })
 
   it('renames workspace paths and updates open document paths', async () => {
-    const { controller, deps } = createHarness({ documents: [createDocument()] })
+    const { controller, deps, workspaceFiles } = createHarness({ documents: [createDocument()] })
     deps.openPromptDialog.mockResolvedValueOnce('archive.md')
-    vi.mocked(nativeFiles.renamePath).mockResolvedValueOnce('drafts\\archive.md')
+    workspaceFiles.renamePath.mockResolvedValueOnce('drafts\\archive.md')
 
     await controller.renameWorkspacePath(file('drafts\\a.md'))
 
-    expect(nativeFiles.renamePath).toHaveBeenCalledWith('workspace-1', 'drafts\\a.md', 'archive.md')
+    expect(workspaceFiles.renamePath).toHaveBeenCalledWith('workspace-1', 'drafts\\a.md', 'archive.md')
     expect(deps.remapWorkspacePathState).toHaveBeenCalledWith('drafts\\a.md', 'drafts\\archive.md')
     expect(deps.updateDocumentPaths).toHaveBeenCalledWith('drafts\\a.md', 'drafts\\archive.md', 'C:\\Docs')
     expect(deps.setSelectedPath).toHaveBeenCalledWith('drafts\\archive.md')
-    expect(nativeFiles.listDirectory).toHaveBeenCalledWith('workspace-1', 'drafts')
+    expect(workspaceFiles.listDirectory).toHaveBeenCalledWith('workspace-1', 'drafts')
   })
 
   it('handles trash cancel and confirmation paths', async () => {
@@ -198,7 +196,7 @@ describe('workspace workflow controller', () => {
 
     await dirtyHarness.controller.trashWorkspacePath(directory('drafts'))
 
-    expect(nativeFiles.trashPath).not.toHaveBeenCalled()
+    expect(dirtyHarness.workspaceFiles.trashPath).not.toHaveBeenCalled()
     expect(dirtyHarness.deps.removeDocumentsFromPanes).not.toHaveBeenCalled()
 
     const cleanHarness = createHarness({ documents: [createDocument()] })
@@ -206,16 +204,16 @@ describe('workspace workflow controller', () => {
 
     await cleanHarness.controller.trashWorkspacePath(directory('drafts'))
 
-    expect(nativeFiles.trashPath).toHaveBeenCalledWith('workspace-1', 'drafts')
+    expect(cleanHarness.workspaceFiles.trashPath).toHaveBeenCalledWith('workspace-1', 'drafts')
     expect(cleanHarness.deps.removeWorkspacePathState).toHaveBeenCalledWith('drafts')
     expect(cleanHarness.deps.removeDocumentsFromPanes).toHaveBeenCalledWith(['doc-1'])
     expect(cleanHarness.deps.setSelectedPath).toHaveBeenCalledWith(null)
-    expect(nativeFiles.listDirectory).toHaveBeenCalledWith('workspace-1', '')
+    expect(cleanHarness.workspaceFiles.listDirectory).toHaveBeenCalledWith('workspace-1', '')
   })
 
   it('refreshes previously loaded descendant branches', async () => {
-    const { controller, deps } = createHarness()
-    vi.mocked(nativeFiles.listDirectory).mockImplementation(async (_workspaceId, path) => {
+    const { controller, deps, workspaceFiles } = createHarness()
+    workspaceFiles.listDirectory.mockImplementation(async (_workspaceId, path) => {
       if (path === '') {
         return [directory('src')]
       }
@@ -229,17 +227,17 @@ describe('workspace workflow controller', () => {
 
     await controller.refreshWorkspaceBranch('')
 
-    expect(nativeFiles.listDirectory).toHaveBeenNthCalledWith(1, 'workspace-1', '')
-    expect(nativeFiles.listDirectory).toHaveBeenNthCalledWith(2, 'workspace-1', 'src')
-    expect(nativeFiles.listDirectory).toHaveBeenNthCalledWith(3, 'workspace-1', 'src\\nested')
+    expect(workspaceFiles.listDirectory).toHaveBeenNthCalledWith(1, 'workspace-1', '')
+    expect(workspaceFiles.listDirectory).toHaveBeenNthCalledWith(2, 'workspace-1', 'src')
+    expect(workspaceFiles.listDirectory).toHaveBeenNthCalledWith(3, 'workspace-1', 'src\\nested')
     expect(deps.applyWorkspaceBranch).toHaveBeenCalledWith('', [directory('src')])
     expect(deps.applyWorkspaceBranch).toHaveBeenCalledWith('src', [directory('src\\nested')])
     expect(deps.applyWorkspaceBranch).toHaveBeenCalledWith('src\\nested', [file('src\\nested\\note.md')])
   })
 
   it('records lazy loading errors in workspace load errors', async () => {
-    const { controller, deps } = createHarness()
-    vi.mocked(nativeFiles.listDirectory).mockRejectedValueOnce(new Error('permission denied'))
+    const { controller, deps, workspaceFiles } = createHarness()
+    workspaceFiles.listDirectory.mockRejectedValueOnce(new Error('permission denied'))
 
     await controller.toggleWorkspaceDirectory(directory('src'))
 

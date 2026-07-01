@@ -2,6 +2,8 @@ export const nativeErrorCodes = [
   'not_found',
   'permission_denied',
   'outside_workspace',
+  'workspace_root_protected',
+  'file_changed_externally',
   'invalid_name',
   'already_exists',
   'encoding_unsupported',

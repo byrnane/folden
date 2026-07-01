@@ -91,8 +91,52 @@ function createHarness() {
     }),
     destroy: vi.fn().mockResolvedValue(undefined),
   }
+  const loadSessionState = vi.fn().mockResolvedValue(createSession())
+  const loadRecoverySnapshots = vi.fn().mockResolvedValue({ entries: [createRecoverySnapshot()], diagnostics: [] })
+  const saveSessionState = vi.fn().mockResolvedValue(undefined)
+  const saveRecoverySnapshots = vi.fn().mockResolvedValue(undefined)
+  const restoreWorkspaceByPath = vi.fn().mockResolvedValue({ id: 'workspace-1', rootPath: 'C:\\Docs', name: 'Docs' })
+  const openTextFileByPath = vi.fn().mockResolvedValue({
+    id: 'native-1',
+    path: 'C:\\Docs\\doc.md',
+    workspaceId: 'workspace-1',
+    relativePath: 'doc.md',
+    content: document.content,
+    fileFormat: createTextFileFormat(),
+    fingerprint: null,
+  })
+  const openTextFileAtPath = vi.fn()
+  const listen = vi.fn(async (event: string) => event === 'folden://fs-event' ? unlistenFs : unlistenWarning)
+  const getCurrentWindow = vi.fn(() => currentWindow)
 
   const deps = {
+    documentFiles: {
+      closeNativeDocuments: vi.fn(),
+      openTextFile: vi.fn(),
+      openTextFileAtPath,
+      openTextFileByPath,
+      saveTextFile: vi.fn(),
+    },
+    workspaceFiles: {
+      createDirectory: vi.fn(),
+      createFile: vi.fn(),
+      listDirectory: vi.fn(),
+      openTextFileByPath,
+      openWorkspaceDirectory: vi.fn(),
+      renamePath: vi.fn(),
+      restoreWorkspaceByPath,
+      trashPath: vi.fn(),
+    },
+    sessionStorage: {
+      loadRecoverySnapshots,
+      loadSessionState,
+      saveRecoverySnapshots,
+      saveSessionState,
+    },
+    nativeEvents: {
+      getCurrentWindow,
+      listen,
+    },
     hasNativeRuntime: true,
     windowTarget: {
       addEventListener: vi.fn((
@@ -184,25 +228,17 @@ function createHarness() {
     disposeSessionController: vi.fn(),
     disposeExternalChangesController: vi.fn(),
     disposeDocumentWorkflowController: vi.fn(),
-    loadSessionState: vi.fn().mockResolvedValue(createSession()),
-    loadRecoverySnapshots: vi.fn().mockResolvedValue({ entries: [createRecoverySnapshot()], diagnostics: [] }),
-    saveSessionState: vi.fn().mockResolvedValue(undefined),
-    saveRecoverySnapshots: vi.fn().mockResolvedValue(undefined),
-    restoreWorkspaceByPath: vi.fn().mockResolvedValue({ id: 'workspace-1', rootPath: 'C:\\Docs', name: 'Docs' }),
-    openTextFileByPath: vi.fn().mockResolvedValue({
-      id: 'native-1',
-      path: 'C:\\Docs\\doc.md',
-      workspaceId: 'workspace-1',
-      relativePath: 'doc.md',
-      content: document.content,
-      fileFormat: createTextFileFormat(),
-      fingerprint: null,
-    }),
-    openTextFileAtPath: vi.fn(),
+    loadSessionState,
+    loadRecoverySnapshots,
+    saveSessionState,
+    saveRecoverySnapshots,
+    restoreWorkspaceByPath,
+    openTextFileByPath,
+    openTextFileAtPath,
     openRecoveryDialog: vi.fn().mockResolvedValue('restore' as const),
     openUnsavedDialog: vi.fn(),
-    listen: vi.fn(async (event: string) => event === 'folden://fs-event' ? unlistenFs : unlistenWarning),
-    getCurrentWindow: vi.fn(() => currentWindow),
+    listen,
+    getCurrentWindow,
   }
 
   const controller = createApplicationLifecycleController(deps)

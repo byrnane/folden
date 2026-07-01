@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import { createWorkspaceController } from '../../../../src/application/controllers/workspaceController'
 import type { ApplicationSettings } from '../../../../src/infrastructure/settings/settings'
-import type { WorkspaceEntry } from '../../../../src/infrastructure/tauri/files'
+import type { WorkspaceEntry } from '../../../../src/domain/native'
 
 const appSettings = ref<ApplicationSettings>({
   autosave: {

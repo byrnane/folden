@@ -34,14 +34,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check versions
-        run: npm run version:check
+      - name: Quality gate
+        run: npm run quality
 
-      - name: Typecheck
-        run: npm run vue:typecheck
+      - name: Lint
+        run: npm run lint
 
-      - name: Frontend tests
-        run: npm run test:unit
+      - name: Coverage report
+        run: npm run test:coverage
 
       - name: Install Playwright Chromium
         run: npx playwright install chromium

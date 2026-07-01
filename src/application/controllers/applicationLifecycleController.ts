@@ -4,7 +4,7 @@ import type {
   NativeFsEvent,
   OpenedDocument,
   WorkspaceDescriptor,
-} from '../../infrastructure/tauri/files'
+} from '../../domain/native'
 import {
   buildSessionDocumentKey,
   type PersistedSessionState,
@@ -15,6 +15,12 @@ import {
   normalizePath,
   recoveredCopyName,
 } from '../helpers/pathHelpers'
+import type {
+  DocumentFilePort,
+  NativeEventPort,
+  SessionStoragePort,
+  WorkspaceFilePort,
+} from '../ports/nativePorts'
 import type { EditorPane, WindowCloseDecision } from '../types/shell'
 
 type WindowLike = {
@@ -28,16 +34,15 @@ type WindowLike = {
   ) => void
 }
 
-type TauriWindowLike = {
-  onCloseRequested: (handler: (event: { preventDefault: () => void }) => Promise<void> | void) => Promise<() => void>
-  destroy: () => Promise<void>
-}
-
 type ReadonlyValue<T> = {
   readonly value: T
 }
 
 type LifecycleDeps = {
+  documentFiles: DocumentFilePort
+  workspaceFiles: WorkspaceFilePort
+  sessionStorage: SessionStoragePort
+  nativeEvents: NativeEventPort
   hasNativeRuntime: boolean
   windowTarget: WindowLike
   errorMessage: Ref<string | null>
@@ -82,13 +87,6 @@ type LifecycleDeps = {
   disposeSessionController: () => void
   disposeExternalChangesController: () => void
   disposeDocumentWorkflowController: () => void
-  loadSessionState: () => Promise<PersistedSessionState | null>
-  loadRecoverySnapshots: () => Promise<{ entries: RecoverySnapshot[], diagnostics: string[] }>
-  saveSessionState: (state: PersistedSessionState) => Promise<void>
-  saveRecoverySnapshots: (entries: RecoverySnapshot[]) => Promise<void>
-  restoreWorkspaceByPath: (rootPath: string) => Promise<WorkspaceDescriptor>
-  openTextFileByPath: (workspaceId: string, path: string) => Promise<OpenedDocument>
-  openTextFileAtPath: (path: string) => Promise<OpenedDocument>
   openRecoveryDialog: (options: {
     title: string
     message: string
@@ -102,8 +100,6 @@ type LifecycleDeps = {
     cancelLabel: string
     showSave: boolean
   }) => Promise<'save' | 'discard' | 'cancel'>
-  listen: <T>(event: string, handler: (event: { payload: T }) => void) => Promise<() => void>
-  getCurrentWindow: () => TauriWindowLike
 }
 
 export function createApplicationLifecycleController(deps: LifecycleDeps) {
@@ -124,8 +120,8 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
 
   async function writeSessionAndRecoveryState() {
     try {
-      await deps.saveSessionState(buildPersistedSessionState())
-      await deps.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
+      await deps.sessionStorage.saveSessionState(buildPersistedSessionState())
+      await deps.sessionStorage.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
     } catch (error) {
       deps.errorMessage.value = `Could not persist session data: ${formatError(error)}`
     }
@@ -150,14 +146,14 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       normalizePath(deps.workspace.value.rootPath) === normalizePath(record.workspaceRootPath) &&
       record.relativePath
     ) {
-      return deps.openDocumentState(await deps.openTextFileByPath(deps.workspace.value.id, record.relativePath))
+      return deps.openDocumentState(await deps.documentFiles.openTextFileByPath(deps.workspace.value.id, record.relativePath))
     }
 
     if (!record.path) {
       return null
     }
 
-    return deps.openDocumentState(await deps.openTextFileAtPath(record.path))
+    return deps.openDocumentState(await deps.documentFiles.openTextFileAtPath(record.path))
   }
 
   function ensureSessionFallbackDocument(initialText: string) {
@@ -172,8 +168,8 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
   async function restoreSessionSnapshot(initialText: string) {
     const diagnostics: string[] = []
     const [session, recoveryLoadResult] = await Promise.all([
-      deps.loadSessionState(),
-      deps.loadRecoverySnapshots(),
+      deps.sessionStorage.loadSessionState(),
+      deps.sessionStorage.loadRecoverySnapshots(),
     ])
     deps.setPendingRecoveryEntries(recoveryLoadResult.entries)
 
@@ -195,7 +191,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
 
     if (session.workspaceRootPath) {
       try {
-        await deps.loadWorkspace(await deps.restoreWorkspaceByPath(session.workspaceRootPath))
+        await deps.loadWorkspace(await deps.workspaceFiles.restoreWorkspaceByPath(session.workspaceRootPath))
       } catch (error) {
         diagnostics.push(`Could not restore workspace: ${formatError(error)}`)
       }
@@ -290,7 +286,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       normalizePath(deps.workspace.value.rootPath) === normalizePath(entry.workspaceRootPath) &&
       entry.relativePath
     ) {
-      const document = deps.openDocumentState(await deps.openTextFileByPath(deps.workspace.value.id, entry.relativePath))
+      const document = deps.openDocumentState(await deps.documentFiles.openTextFileByPath(deps.workspace.value.id, entry.relativePath))
       deps.addDocumentToPane(document, 'left')
       documentIdByKey.set(entry.key, document.id)
       return document
@@ -300,7 +296,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       return null
     }
 
-    const document = deps.openDocumentState(await deps.openTextFileAtPath(entry.path))
+    const document = deps.openDocumentState(await deps.documentFiles.openTextFileAtPath(entry.path))
     deps.addDocumentToPane(document, 'left')
     documentIdByKey.set(entry.key, document.id)
     return document
@@ -317,7 +313,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
 
   async function inspectRecoverySnapshots(documentIdByKey: Map<string, string>) {
     for (const entry of [...deps.pendingRecoveryEntries.value]) {
-      let currentDocument: OpenDocument | null = null
+      let currentDocument: OpenDocument | null
 
       try {
         currentDocument = await ensureRecoveryDocument(entry, documentIdByKey)
@@ -411,11 +407,11 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
           deps.dirtyDocuments.value.map((document) => buildSessionDocumentKey(document, normalizePath)),
         )
         deps.discardPendingRecoveryEntries(discardedKeys)
-        await deps.saveSessionState(buildPersistedSessionState())
-        await deps.saveRecoverySnapshots(buildPersistedRecoverySnapshots(discardedKeys))
+        await deps.sessionStorage.saveSessionState(buildPersistedSessionState())
+        await deps.sessionStorage.saveRecoverySnapshots(buildPersistedRecoverySnapshots(discardedKeys))
       } else {
-        await deps.saveSessionState(buildPersistedSessionState())
-        await deps.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
+        await deps.sessionStorage.saveSessionState(buildPersistedSessionState())
+        await deps.sessionStorage.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
       }
     } catch (error) {
       deps.errorMessage.value = `Could not finalize session data: ${formatError(error)}`
@@ -445,7 +441,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
     isProgrammaticWindowClose = true
 
     try {
-      await deps.getCurrentWindow().destroy()
+      await deps.nativeEvents.getCurrentWindow().destroy()
     } finally {
       isProgrammaticWindowClose = false
     }
@@ -467,7 +463,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       deps.errorMessage.value = `Could not restore the previous session: ${formatError(error)}`
     })
 
-    void deps.listen<NativeFsEvent>('folden://fs-event', (event) => {
+    void deps.nativeEvents.listen<NativeFsEvent>('folden://fs-event', (event) => {
       deps.handleExternalFileEvent(event.payload)
     }).then((unlisten) => {
       if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
@@ -478,7 +474,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       fsEventUnlisten = unlisten
     })
 
-    void deps.listen<string | null>('folden://watcher-warning', (event) => {
+    void deps.nativeEvents.listen<string | null>('folden://watcher-warning', (event) => {
       deps.setWatcherWarning(event.payload)
     }).then((unlisten) => {
       if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
@@ -489,7 +485,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       watcherWarningUnlisten = unlisten
     })
 
-    void deps.getCurrentWindow().onCloseRequested(handleWindowCloseRequested).then((unlisten) => {
+    void deps.nativeEvents.getCurrentWindow().onCloseRequested(handleWindowCloseRequested).then((unlisten) => {
       if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
         unlisten()
         return

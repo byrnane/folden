@@ -1,0 +1,114 @@
+{
+  "nativeError": {
+    "code": "file_changed_externally",
+    "operation": "save_text_file",
+    "userMessage": "File changed outside Folden.",
+    "technicalMessage": null,
+    "retryable": true
+  },
+  "fileFingerprint": {
+    "size": 42,
+    "modifiedAtMs": 1720000000000
+  },
+  "textFileFormat": {
+    "lineEnding": "crlf",
+    "hasUtf8Bom": true
+  },
+  "workspaceDescriptor": {
+    "id": "workspace-1",
+    "rootPath": "C:\\Fixture",
+    "name": "Fixture"
+  },
+  "workspaceEntry": {
+    "name": "notes",
+    "path": "notes",
+    "kind": "directory",
+    "children": [
+      {
+        "name": "hello.md",
+        "path": "notes\\hello.md",
+        "kind": "file",
+        "children": []
+      }
+    ]
+  },
+  "openedDocument": {
+    "id": "document-1",
+    "path": "C:\\Fixture\\notes\\hello.md",
+    "content": "# Hello",
+    "workspaceId": "workspace-1",
+    "relativePath": "notes\\hello.md",
+    "fileFormat": {
+      "lineEnding": "crlf",
+      "hasUtf8Bom": true
+    },
+    "fingerprint": {
+      "size": 42,
+      "modifiedAtMs": 1720000000000
+    }
+  },
+  "persistedSessionState": {
+    "workspaceRootPath": "C:\\Fixture",
+    "splitEnabled": true,
+    "activePaneId": "right",
+    "panes": [
+      {
+        "id": "left",
+        "documentKeys": ["file:c:\\fixture\\notes\\hello.md"],
+        "activeDocumentKey": "file:c:\\fixture\\notes\\hello.md"
+      },
+      {
+        "id": "right",
+        "documentKeys": ["scratch:scratch-1"],
+        "activeDocumentKey": "scratch:scratch-1"
+      }
+    ],
+    "documents": [
+      {
+        "key": "file:c:\\fixture\\notes\\hello.md",
+        "kind": "saved",
+        "name": "hello.md",
+        "path": "C:\\Fixture\\notes\\hello.md",
+        "workspaceRootPath": "C:\\Fixture",
+        "relativePath": "notes\\hello.md"
+      },
+      {
+        "key": "scratch:scratch-1",
+        "kind": "scratch",
+        "name": "Scratch.md",
+        "path": null,
+        "workspaceRootPath": null,
+        "relativePath": null
+      }
+    ],
+    "paneModes": [
+      {
+        "paneId": "left",
+        "documentKey": "file:c:\\fixture\\notes\\hello.md",
+        "mode": "visual"
+      }
+    ]
+  },
+  "recoverySnapshot": {
+    "key": "file:c:\\fixture\\notes\\hello.md",
+    "kind": "saved",
+    "name": "hello.md",
+    "path": "C:\\Fixture\\notes\\hello.md",
+    "workspaceRootPath": "C:\\Fixture",
+    "relativePath": "notes\\hello.md",
+    "content": "# Recovered",
+    "fileFormat": {
+      "lineEnding": "crlf",
+      "hasUtf8Bom": true
+    },
+    "fingerprint": {
+      "size": 42,
+      "modifiedAtMs": 1720000000000
+    },
+    "updatedAtMs": 1720000000500
+  },
+  "nativeFsEvent": {
+    "kind": "modify",
+    "path": "C:\\Fixture\\notes\\hello.md"
+  }
+}

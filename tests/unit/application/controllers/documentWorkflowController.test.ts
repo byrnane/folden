@@ -4,20 +4,7 @@ import { createDocumentWorkflowController } from '../../../../src/application/co
 import { createTextFileFormat } from '../../../../src/domain/document'
 import type { OpenDocument } from '../../../../src/domain/documents/documentState'
 import type { EditorPane } from '../../../../src/application/types/shell'
-import type { OpenedDocument } from '../../../../src/infrastructure/tauri/files'
-
-const nativeFiles = vi.hoisted(() => ({
-  closeNativeDocuments: vi.fn().mockResolvedValue(undefined),
-  openTextFile: vi.fn(),
-  saveTextFile: vi.fn(),
-}))
-
-vi.mock('../../../../src/infrastructure/tauri/files', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../src/infrastructure/tauri/files')>()),
-  closeNativeDocuments: nativeFiles.closeNativeDocuments,
-  openTextFile: nativeFiles.openTextFile,
-  saveTextFile: nativeFiles.saveTextFile,
-}))
+import type { OpenedDocument } from '../../../../src/domain/native'
 
 function createDocument(overrides: Partial<OpenDocument> = {}): OpenDocument {
   return {
@@ -73,8 +60,16 @@ function createHarness(document = createDocument()) {
     },
   })
   const removedDocumentIds: string[][] = []
+  const files = {
+    closeNativeDocuments: vi.fn().mockResolvedValue(undefined),
+    openTextFile: vi.fn(),
+    openTextFileAtPath: vi.fn(),
+    openTextFileByPath: vi.fn(),
+    saveTextFile: vi.fn(),
+  }
 
   const deps = {
+    files,
     initialText: '# Untitled\n\nStart writing in Folden.\n',
     appSettings: ref({ autosave: { enabled: true, debounceMs: 25 } }),
     activeDocument,
@@ -194,6 +189,7 @@ function createHarness(document = createDocument()) {
     controller: createDocumentWorkflowController(deps),
     deps,
     document,
+    files,
     paneEditors,
     removedDocumentIds,
   }
@@ -210,35 +206,35 @@ describe('document workflow controller', () => {
   })
 
   it('flushes editor content before manual save and persists through the save queue', async () => {
-    const { controller, document, paneEditors, deps } = createHarness()
+    const { controller, document, paneEditors, deps, files } = createHarness()
     paneEditors.value.left.flushContent.mockReturnValue('after')
-    nativeFiles.saveTextFile.mockResolvedValue(createOpenedDocument({ content: 'after' }))
+    files.saveTextFile.mockResolvedValue(createOpenedDocument({ content: 'after' }))
 
     await controller.saveDocument(document)
 
     expect(deps.applyDocumentUpdate).toHaveBeenCalledWith(document.id, 1, 'after')
-    expect(nativeFiles.saveTextFile).toHaveBeenCalledWith('native-1', 'after', null, document.fileFormat, undefined)
+    expect(files.saveTextFile).toHaveBeenCalledWith('native-1', 'after', null, document.fileFormat, undefined)
     expect(deps.markDocumentSaved).toHaveBeenCalled()
   })
 
   it('debounces autosave and clears pending timers on dispose', async () => {
-    const { controller, document } = createHarness()
-    nativeFiles.saveTextFile.mockResolvedValue(createOpenedDocument({ content: document.content }))
+    const { controller, document, files } = createHarness()
+    files.saveTextFile.mockResolvedValue(createOpenedDocument({ content: document.content }))
 
     controller.syncAutosaveTimers([document])
     await vi.advanceTimersByTimeAsync(24)
-    expect(nativeFiles.saveTextFile).not.toHaveBeenCalled()
+    expect(files.saveTextFile).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
-    expect(nativeFiles.saveTextFile).toHaveBeenCalledTimes(1)
+    expect(files.saveTextFile).toHaveBeenCalledTimes(1)
 
     controller.syncAutosaveTimers([document])
     controller.dispose()
     await vi.advanceTimersByTimeAsync(25)
-    expect(nativeFiles.saveTextFile).toHaveBeenCalledTimes(1)
+    expect(files.saveTextFile).toHaveBeenCalledTimes(1)
   })
 
   it('handles dirty close decisions without dropping cancelled documents', async () => {
-    const { controller, deps, document } = createHarness()
+    const { controller, deps, document, files } = createHarness()
     deps.openUnsavedDialog.mockResolvedValueOnce('cancel')
 
     await controller.closeDocument({ id: 'left', title: 'Main', documentIds: [document.id], activeDocumentId: document.id }, document.id)
@@ -247,7 +243,7 @@ describe('document workflow controller', () => {
     deps.openUnsavedDialog.mockResolvedValueOnce('discard')
     await controller.closeDocument({ id: 'left', title: 'Main', documentIds: [document.id], activeDocumentId: document.id }, document.id)
     expect(deps.removeDocuments).toHaveBeenCalledWith([document.id])
-    expect(nativeFiles.closeNativeDocuments).toHaveBeenCalledWith(['native-1'])
+    expect(files.closeNativeDocuments).toHaveBeenCalledWith(['native-1'])
   })
 
   it('reloads a clean document from disk', async () => {

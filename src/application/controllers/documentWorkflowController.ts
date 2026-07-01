@@ -6,15 +6,11 @@ import type { EditorMode, OpenDocument } from '../../domain/documents/documentSt
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import { createDocumentSaveQueue, type SaveJob } from '../../domain/documents/saveQueue'
 import type {
-  NativeError,
   OpenedDocument,
   WorkspaceEntry,
-} from '../../infrastructure/tauri/files'
-import {
-  closeNativeDocuments,
-  openTextFile,
-  saveTextFile,
-} from '../../infrastructure/tauri/files'
+} from '../../domain/native'
+import type { NativeError } from '../../domain/nativeError'
+import type { DocumentFilePort } from '../ports/nativePorts'
 import {
   parentPath,
   suggestFileName,
@@ -28,6 +24,7 @@ type ReadonlyValue<T> = {
 }
 
 type DocumentWorkflowDeps = {
+  files: DocumentFilePort
   initialText: string
   appSettings: Ref<{
     autosave: {
@@ -107,7 +104,7 @@ type DocumentWorkflowDeps = {
 export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
   const pendingAutosaves = new Map<string, ReturnType<typeof globalThis.setTimeout>>()
   const saveQueue = createDocumentSaveQueue({
-    performSave: (job) => saveTextFile(
+    performSave: (job) => deps.files.saveTextFile(
       job.documentNativeId,
       job.contentSnapshot,
       job.expectedFingerprint,
@@ -281,7 +278,7 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
 
   async function openNativeDocument() {
     await deps.runFileTask(async () => {
-      const document = await openTextFile()
+      const document = await deps.files.openTextFile()
 
       if (document) {
         openLoadedDocument(document)
@@ -477,7 +474,7 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
       return
     }
 
-    void closeNativeDocuments(nativeDocumentIds).catch(() => {
+    void deps.files.closeNativeDocuments(nativeDocumentIds).catch(() => {
       // Closing native handles is best-effort; the next open/save will resync watcher state.
     })
   }

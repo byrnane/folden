@@ -9,7 +9,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-vue-next'
-import type { WorkspaceEntry } from '../../infrastructure/tauri/files'
+import type { WorkspaceEntry } from '../../domain/native'
 
 defineOptions({
   name: 'WorkspaceTree',

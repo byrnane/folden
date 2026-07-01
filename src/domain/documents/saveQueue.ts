@@ -1,5 +1,6 @@
 import type { FileFingerprint, TextFileFormat } from '../document'
-import type { NativeError, SaveDocumentResult } from '../../infrastructure/tauri/files'
+import type { SaveDocumentResult } from '../native'
+import type { NativeError } from '../nativeError'
 
 export type SaveJob = {
   documentId: string
