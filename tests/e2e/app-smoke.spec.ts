@@ -274,6 +274,11 @@ test('shows split open editors and marks the active pane document', async ({ pag
 test('shows toolbar labels only in comfortable density', async ({ page }) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+
+  await expect(page.locator('.workspace-tree-actions').getByRole('button', { name: 'New scratch document' })).toBeVisible()
+  await expect(page.locator('.workspace-tree-actions').getByRole('button', { name: 'New file' })).toBeVisible()
+  await expect(page.locator('.workspace-tree-actions').getByRole('button', { name: 'New folder' })).toBeVisible()
 
   const splitLabel = page.locator('button[title="Toggle split view"] span')
   await expect(splitLabel).toBeHidden()
@@ -284,6 +289,14 @@ test('shows toolbar labels only in comfortable density', async ({ page }) => {
   await page.locator('button[title="Workspace"]').click()
 
   await expect(splitLabel).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Heading 1' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Heading 2' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Subtitle' })).toBeVisible()
+
+  await page.locator('summary[title="Headings"]').click()
+  await expect(page.locator('.toolbar-menu[open]')).toHaveCount(1)
+  await page.getByTestId('visual-editor').click()
+  await expect(page.locator('.toolbar-menu[open]')).toHaveCount(0)
 })
 
 test('loads persisted settings before opening a workspace', async ({ page }) => {
@@ -515,7 +528,7 @@ test('keeps remote images blocked until the document explicitly allows them', as
   await page.getByRole('button', { name: 'Visual' }).click()
   await expect(page.getByTestId('visual-editor')).toContainText('Remote image is blocked.')
   await expect(page.getByTestId('load-remote-images')).toBeVisible()
-  await expect(page.locator('.topbar-actions').getByTestId('load-remote-images')).toBeVisible()
+  await expect(page.locator('.topbar-title').getByTestId('load-remote-images')).toBeVisible()
   await expect(page.locator('.shared-toolbar').getByTestId('load-remote-images')).toHaveCount(0)
 
   await page.waitForTimeout(300)

@@ -193,7 +193,7 @@ textarea:focus-visible {
 
 .workspace-sidebar {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   border-right: 1px solid var(--border);
   background: var(--sidebar-bg);
@@ -525,6 +525,7 @@ h1 {
 .topbar-title {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   min-width: 0;
   gap: 10px;
 }
