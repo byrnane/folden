@@ -6,6 +6,7 @@ import {
   Code,
   Eye,
   FileCode2,
+  FilePenLine,
   FilePlus,
   FolderOpen,
   FolderPlus,
@@ -105,6 +106,7 @@ const {
   resetLayoutSettings,
   runActiveVisualCommand,
   setActivitySection,
+  setActivityWidth,
   setSidebarWidth,
   setSplitRatio,
   shouldLoadRemoteImages,
@@ -137,6 +139,10 @@ type TabPointerDrag = {
 
 const openEditorsCollapsed = ref(false)
 const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
+const appShellElement = ref<HTMLElement | null>(null)
+const activityBarElement = ref<HTMLElement | null>(null)
+const workspaceSidebarElement = ref<HTMLElement | null>(null)
+const activityResizeStart = ref<{ x: number, width: number } | null>(null)
 const sidebarResizeStart = ref<{ x: number, width: number } | null>(null)
 const splitResizeStart = ref<{ x: number, ratio: number, width: number } | null>(null)
 const sourceFontSizeInput = ref(String(appSettings.value.editor.sourceFontSize))
@@ -149,6 +155,7 @@ const tabPointerDrag = ref<TabPointerDrag | null>(null)
 const suppressNextTabClick = ref(false)
 
 const shellStyle = computed(() => ({
+  '--activity-width': `${layoutSettings.value.activityWidth}px`,
   '--sidebar-width': `${layoutSettings.value.sidebarWidth}px`,
   '--split-left': `${layoutSettings.value.splitRatio}fr`,
   '--split-right': `${1 - layoutSettings.value.splitRatio}fr`,
@@ -559,6 +566,26 @@ function stopSidebarResize() {
   window.removeEventListener('mousemove', resizeSidebar)
 }
 
+function beginActivityResize(event: MouseEvent) {
+  activityResizeStart.value = {
+    x: event.clientX,
+    width: layoutSettings.value.activityWidth,
+  }
+  window.addEventListener('mousemove', resizeActivity)
+  window.addEventListener('mouseup', stopActivityResize, { once: true })
+}
+
+function resizeActivity(event: MouseEvent) {
+  if (activityResizeStart.value) {
+    setActivityWidth(activityResizeStart.value.width + event.clientX - activityResizeStart.value.x)
+  }
+}
+
+function stopActivityResize() {
+  activityResizeStart.value = null
+  window.removeEventListener('mousemove', resizeActivity)
+}
+
 function beginSplitResize(event: MouseEvent) {
   const parent = (event.currentTarget as HTMLElement).parentElement
 
@@ -582,6 +609,66 @@ function stopSplitResize() {
   window.removeEventListener('mousemove', resizeSplit)
 }
 
+let labelFitObserver: ResizeObserver | null = null
+let labelFitFrame = 0
+const observedFitElements = new Set<Element>()
+
+function observeFitElement(element: Element | null | undefined) {
+  if (!element || observedFitElements.has(element)) {
+    return
+  }
+
+  labelFitObserver?.observe(element)
+  observedFitElements.add(element)
+}
+
+function queueFitLabelUpdate() {
+  if (labelFitFrame) {
+    cancelAnimationFrame(labelFitFrame)
+  }
+
+  labelFitFrame = requestAnimationFrame(updateFittingLabels)
+}
+
+function updateFittingLabels() {
+  labelFitFrame = 0
+
+  observeFitElement(appShellElement.value)
+  observeFitElement(activityBarElement.value)
+  observeFitElement(workspaceSidebarElement.value)
+
+  const buttons = appShellElement.value
+    ? [...appShellElement.value.querySelectorAll<HTMLElement>('.fit-label-button')]
+    : []
+
+  buttons.forEach((button) => {
+    observeFitElement(button)
+    button.classList.remove('label-hidden')
+  })
+
+  buttons.forEach((button) => {
+    button.classList.toggle('label-hidden', !doesButtonLabelFit(button))
+  })
+}
+
+function doesButtonLabelFit(button: HTMLElement) {
+  const label = button.querySelector<HTMLElement>('span')
+
+  if (!label) {
+    return true
+  }
+
+  const style = window.getComputedStyle(button)
+  const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+  const gap = parseFloat(style.columnGap || style.gap || '0') || 0
+  const iconWidth = [...button.children]
+    .filter((child) => child !== label)
+    .reduce((total, child) => total + child.getBoundingClientRect().width, 0)
+  const requiredWidth = padding + iconWidth + gap + label.scrollWidth
+
+  return requiredWidth <= button.clientWidth + 1
+}
+
 watch(() => appSettings.value.editor.sourceFontSize, (value) => {
   sourceFontSizeInput.value = String(value)
 })
@@ -600,20 +687,38 @@ watch(() => appSettings.value.autosave.debounceMs, (value) => {
 watch(() => appSettings.value.appearance.uiScale, (value) => {
   uiScaleInput.value = String(value)
 })
+watch([
+  () => layoutSettings.value.activityWidth,
+  () => layoutSettings.value.sidebarWidth,
+  () => layoutSettings.value.activeActivitySection,
+  () => appSettings.value.appearance.showActivityBar,
+  showSidebar,
+], () => queueFitLabelUpdate(), { flush: 'post' })
 
 onMounted(() => {
   document.addEventListener('pointerdown', handleGlobalPointerDown)
   document.addEventListener('keydown', handleGlobalKeyDown)
+  labelFitObserver = new ResizeObserver(() => queueFitLabelUpdate())
+  queueFitLabelUpdate()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleGlobalPointerDown)
   document.removeEventListener('keydown', handleGlobalKeyDown)
+  stopActivityResize()
+  stopSidebarResize()
+  if (labelFitFrame) {
+    cancelAnimationFrame(labelFitFrame)
+  }
+  labelFitObserver?.disconnect()
+  labelFitObserver = null
+  observedFitElements.clear()
 })
 </script>
 
 <template>
   <main
+    ref="appShellElement"
     class="app-shell"
     :class="{
       'focus-mode': layoutSettings.focusMode,
@@ -626,29 +731,54 @@ onBeforeUnmount(() => {
     :style="shellStyle"
     data-testid="app-shell"
   >
-    <nav v-if="!layoutSettings.focusMode && appSettings.appearance.showActivityBar" class="activity-bar" aria-label="Activity">
+    <nav
+      v-if="!layoutSettings.focusMode && appSettings.appearance.showActivityBar"
+      ref="activityBarElement"
+      class="activity-bar"
+      aria-label="Activity"
+    >
       <button
         type="button"
-        class="activity-button"
+        class="activity-button fit-label-button"
         :class="{ active: layoutSettings.activeActivitySection === 'workspace' }"
         title="Workspace"
+        aria-label="Workspace"
         @click="setActivitySection('workspace')"
       >
         <LayoutPanelLeft :size="18" />
+        <span>Workspace</span>
       </button>
       <div class="activity-spacer" />
       <button
         type="button"
-        class="activity-button"
+        class="activity-button fit-label-button"
         :class="{ active: layoutSettings.activeActivitySection === 'settings' }"
         title="Settings"
+        aria-label="Settings"
         @click="setActivitySection('settings')"
       >
         <Settings :size="18" />
+        <span>Settings</span>
       </button>
     </nav>
 
-    <aside v-if="showSidebar" class="workspace-sidebar" :aria-label="layoutSettings.activeActivitySection === 'settings' ? 'Settings' : 'Workspace'" @click.self="clearSidebarSelection">
+    <div
+      v-if="!layoutSettings.focusMode && appSettings.appearance.showActivityBar"
+      class="activity-splitter"
+      data-testid="activity-splitter"
+      role="separator"
+      aria-label="Resize activity bar"
+      @mousedown.prevent="beginActivityResize"
+      @dblclick="setActivityWidth(44)"
+    />
+
+    <aside
+      v-if="showSidebar"
+      ref="workspaceSidebarElement"
+      class="workspace-sidebar"
+      :aria-label="layoutSettings.activeActivitySection === 'settings' ? 'Settings' : 'Workspace'"
+      @click.self="clearSidebarSelection"
+    >
       <template v-if="layoutSettings.activeActivitySection === 'settings'">
         <div class="workspace-header">
           <div>
@@ -695,7 +825,7 @@ onBeforeUnmount(() => {
           </div>
           <button
             type="button"
-            class="icon-button labelled-icon-button"
+            class="icon-button labelled-icon-button fit-label-button"
             title="Open folder"
             aria-label="Open folder"
             :disabled="!canExecuteCommand('workspace.open')"
@@ -754,18 +884,18 @@ onBeforeUnmount(() => {
             <div class="workspace-tree-actions" aria-label="Workspace file actions">
               <button
                 type="button"
-                class="icon-button labelled-icon-button"
+                class="icon-button labelled-icon-button fit-label-button"
                 title="New scratch document"
                 aria-label="New scratch document"
                 :disabled="!canExecuteCommand('document.new')"
                 @click="executeCommand('document.new')"
               >
-                <FilePlus :size="16" />
+                <FilePenLine :size="16" />
                 <span>New scratch</span>
               </button>
               <button
                 type="button"
-                class="icon-button labelled-icon-button"
+                class="icon-button labelled-icon-button fit-label-button"
                 title="New file"
                 aria-label="New file"
                 :disabled="!canExecuteCommand('workspace.createFile')"
@@ -776,7 +906,7 @@ onBeforeUnmount(() => {
               </button>
               <button
                 type="button"
-                class="icon-button labelled-icon-button"
+                class="icon-button labelled-icon-button fit-label-button"
                 title="New folder"
                 aria-label="New folder"
                 :disabled="!canExecuteCommand('workspace.createDirectory')"
