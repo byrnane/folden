@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   Bold,
+  ChevronDown,
   Columns2,
   Code,
   Eye,
@@ -8,8 +9,10 @@ import {
   FilePlus,
   FolderOpen,
   FolderPlus,
+  Focus,
   Heading1,
   Heading2,
+  Heading3,
   Image as ImageIcon,
   Italic,
   LayoutPanelLeft,
@@ -23,8 +26,8 @@ import {
   RemoveFormatting,
   Save,
   Settings,
+  SquareCode,
   Strikethrough,
-  Wrench,
   X,
 } from 'lucide-vue-next'
 import { computed, ref, watch, type Component } from 'vue'
@@ -176,7 +179,7 @@ const activePaneDocument = computed(() => activePane.value?.activeDocumentId
   : null)
 const activePaneIsRight = computed(() => activePaneId.value === 'right')
 const moveActiveTabTitle = computed(() => activePaneIsRight.value ? 'Move active tab left' : 'Move active tab right')
-const moveActiveTabIcon = computed(() => activePaneIsRight.value ? PanelLeftOpen : PanelRightOpen)
+const moveActiveTabIcon = computed(() => activePaneIsRight.value ? PanelRightOpen : PanelLeftOpen)
 const showDocumentToolbar = computed(() =>
   (layoutSettings.value.activeActivitySection !== 'settings' || layoutSettings.value.focusMode)
   && activeDocumentMode.value === 'visual'
@@ -187,27 +190,59 @@ const showSettingsView = computed(() =>
 )
 const showEditorView = computed(() => !showSettingsView.value)
 
-const visualToolbarCommands: Array<{
+type VisualToolbarItem = {
   command: VisualEditorCommand
   title: string
   label: string
   icon?: Component
-}> = [
-  { command: 'heading-1', title: 'Heading 1', label: 'H1', icon: Heading1 },
-  { command: 'heading-2', title: 'Heading 2', label: 'H2', icon: Heading2 },
-  { command: 'bold', title: 'Bold', label: 'B', icon: Bold },
-  { command: 'italic', title: 'Italic', label: 'I', icon: Italic },
-  { command: 'strike', title: 'Strike', label: 'S', icon: Strikethrough },
-  { command: 'inline-code', title: 'Inline code', label: 'Code', icon: Code },
-  { command: 'clear-formatting', title: 'Clear formatting', label: 'Clear', icon: RemoveFormatting },
-  { command: 'bullet-list', title: 'Bullet list', label: 'List', icon: List },
-  { command: 'ordered-list', title: 'Ordered list', label: '1.', icon: ListOrdered },
-  { command: 'quote', title: 'Quote', label: 'Quote', icon: Quote },
-  { command: 'code-block', title: 'Code block', label: 'Block', icon: Code },
-  { command: 'link', title: 'Link', label: 'Link', icon: LinkIcon },
-  { command: 'image', title: 'Image', label: 'Image', icon: ImageIcon },
-  { command: 'horizontal-rule', title: 'Horizontal rule', label: 'HR', icon: Minus },
+}
+
+const headingToolbarCommands: VisualToolbarItem[] = [
+  { command: 'heading-1', title: 'Heading 1', label: 'Heading 1', icon: Heading1 },
+  { command: 'heading-2', title: 'Heading 2', label: 'Heading 2', icon: Heading2 },
+  { command: 'heading-3', title: 'Subtitle', label: 'Subtitle', icon: Heading3 },
+  { command: 'heading-4', title: 'Heading 4', label: 'Heading 4', icon: Heading3 },
+  { command: 'heading-5', title: 'Heading 5', label: 'Heading 5', icon: Heading3 },
+  { command: 'heading-6', title: 'Heading 6', label: 'Heading 6', icon: Heading3 },
 ]
+
+const visualToolbarGroups: Array<{
+  name: string
+  items: VisualToolbarItem[]
+}> = [
+  {
+    name: 'Text',
+    items: [
+      { command: 'bold', title: 'Bold', label: 'Bold', icon: Bold },
+      { command: 'italic', title: 'Italic', label: 'Italic', icon: Italic },
+      { command: 'strike', title: 'Strikethrough', label: 'Strike', icon: Strikethrough },
+      { command: 'inline-code', title: 'Inline code', label: 'Inline code', icon: Code },
+      { command: 'clear-formatting', title: 'Clear formatting', label: 'Clear', icon: RemoveFormatting },
+    ],
+  },
+  {
+    name: 'Blocks',
+    items: [
+      { command: 'bullet-list', title: 'Bullet list', label: 'Bullets', icon: List },
+      { command: 'ordered-list', title: 'Numbered list', label: 'Numbers', icon: ListOrdered },
+      { command: 'quote', title: 'Quote block', label: 'Quote', icon: Quote },
+      { command: 'code-block', title: 'Code block', label: 'Code block', icon: SquareCode },
+      { command: 'horizontal-rule', title: 'Divider', label: 'Divider', icon: Minus },
+    ],
+  },
+  {
+    name: 'Insert',
+    items: [
+      { command: 'link', title: 'Link', label: 'Link', icon: LinkIcon },
+      { command: 'image', title: 'Image', label: 'Image', icon: ImageIcon },
+    ],
+  },
+]
+
+function runToolbarMenuCommand(event: MouseEvent, command: VisualEditorCommand) {
+  runActiveVisualCommand(command)
+  ;(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')
+}
 
 function startDocumentDrag(event: DragEvent, payload: DragPayload) {
   event.dataTransfer?.setData('application/x-folden-drag', JSON.stringify(payload))
@@ -615,52 +650,37 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
 
       <template v-else>
         <div class="workspace-header">
-          <div>
+          <div class="workspace-title-block">
             <p class="app-kicker">Folden</p>
             <h1>{{ workspace?.name ?? 'No workspace' }}</h1>
+            <p v-if="workspace" class="workspace-root" :title="workspace.rootPath" data-testid="workspace-root">
+              {{ workspace.rootPath }}
+            </p>
           </div>
           <button
             type="button"
-            class="icon-button"
+            class="icon-button labelled-icon-button"
             title="Open folder"
             aria-label="Open folder"
             :disabled="!canExecuteCommand('workspace.open')"
             @click="executeCommand('workspace.open')"
           >
             <FolderOpen :size="17" />
+            <span>Open workspace</span>
           </button>
         </div>
 
         <div class="workspace-actions">
           <button
             type="button"
-            class="icon-button"
+            class="icon-button labelled-icon-button"
             title="New scratch document"
             aria-label="New scratch document"
             :disabled="!canExecuteCommand('document.new')"
             @click="executeCommand('document.new')"
           >
             <FilePlus :size="16" />
-          </button>
-          <button
-            type="button"
-            class="icon-button"
-            title="New file"
-            aria-label="New file"
-            :disabled="!canExecuteCommand('workspace.createFile')"
-            @click="executeCommand('workspace.createFile')"
-          >
-            <FilePlus :size="16" />
-          </button>
-          <button
-            type="button"
-            class="icon-button"
-            title="New folder"
-            aria-label="New folder"
-            :disabled="!canExecuteCommand('workspace.createDirectory')"
-            @click="executeCommand('workspace.createDirectory')"
-          >
-            <FolderPlus :size="16" />
+            <span>New scratch</span>
           </button>
         </div>
 
@@ -704,15 +724,35 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
             Open Editors
           </button>
 
-          <div v-if="workspace" class="workspace-root" :title="workspace.rootPath" data-testid="workspace-root">
-            {{ workspace.rootPath }}
-          </div>
-
           <div
             v-if="workspace"
             class="workspace-tree-shell"
             @click.self="clearSidebarSelection"
           >
+            <div class="workspace-tree-actions" aria-label="Workspace file actions">
+              <button
+                type="button"
+                class="icon-button labelled-icon-button"
+                title="New file"
+                aria-label="New file"
+                :disabled="!canExecuteCommand('workspace.createFile')"
+                @click="executeCommand('workspace.createFile')"
+              >
+                <FilePlus :size="16" />
+                <span>New file</span>
+              </button>
+              <button
+                type="button"
+                class="icon-button labelled-icon-button"
+                title="New folder"
+                aria-label="New folder"
+                :disabled="!canExecuteCommand('workspace.createDirectory')"
+                @click="executeCommand('workspace.createDirectory')"
+              >
+                <FolderPlus :size="16" />
+                <span>New folder</span>
+              </button>
+            </div>
             <WorkspaceTree
               :entries="workspace.entries"
               :active-path="activePath"
@@ -821,25 +861,27 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
               && !shouldLoadRemoteImages(activePaneDocument)
             "
             type="button"
-            class="load-remote-images-button"
+            class="load-remote-images-button labelled-icon-button"
             data-testid="load-remote-images"
             @click="allowRemoteImagesForDocument(activePaneDocument)"
           >
-            Load remote images
+            <ImageIcon :size="16" />
+            <span>Load remote images</span>
           </button>
           <button
             type="button"
-            class="icon-button"
+            class="icon-button labelled-icon-button"
             title="Open file"
             aria-label="Open file"
             :disabled="!canExecuteCommand('document.open')"
             @click="executeCommand('document.open')"
           >
             <FolderOpen :size="16" />
+            <span>Open</span>
           </button>
           <button
             type="button"
-            class="icon-button"
+            class="icon-button labelled-icon-button"
             title="Save"
             aria-label="Save"
             data-testid="save-document"
@@ -847,16 +889,18 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
             @click="executeCommand('document.save')"
           >
             <Save :size="16" />
+            <span>Save</span>
           </button>
           <button
             type="button"
-            class="icon-button"
+            class="icon-button labelled-icon-button"
             title="Focus mode"
             aria-label="Focus mode"
             :class="{ active: layoutSettings.focusMode }"
             @click="toggleFocusMode"
           >
-            <Wrench :size="16" />
+            <Focus :size="16" />
+            <span>Focus</span>
           </button>
           <button
             type="button"
@@ -1089,18 +1133,51 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
 
       <section v-if="showDocumentToolbar" class="shared-toolbar" aria-label="Document toolbar">
         <div class="format-toolbar shared-format-toolbar">
-          <button
-            v-for="item in visualToolbarCommands"
-            :key="item.command"
-            type="button"
-            class="toolbar-button"
-            :title="item.title"
-            :aria-label="item.title"
-            @click="runActiveVisualCommand(item.command)"
-          >
-            <component :is="item.icon" v-if="item.icon" :size="16" />
-            <span>{{ item.label }}</span>
-          </button>
+          <div class="toolbar-group" aria-label="Headings">
+            <details class="toolbar-menu">
+              <summary
+                class="toolbar-button toolbar-menu-trigger"
+                title="Headings"
+                aria-label="Headings"
+              >
+                <Heading1 :size="16" />
+                <span>Headings</span>
+                <ChevronDown class="toolbar-menu-chevron" :size="14" />
+              </summary>
+              <div class="toolbar-menu-list">
+                <button
+                  v-for="item in headingToolbarCommands"
+                  :key="item.command"
+                  type="button"
+                  class="toolbar-menu-item"
+                  :title="item.title"
+                  :aria-label="item.title"
+                  @click="runToolbarMenuCommand($event, item.command)"
+                >
+                  <component :is="item.icon" v-if="item.icon" :size="15" />
+                  <span>{{ item.label }}</span>
+                </button>
+              </div>
+            </details>
+          </div>
+
+          <template v-for="group in visualToolbarGroups" :key="group.name">
+            <span class="toolbar-divider" aria-hidden="true" />
+            <div class="toolbar-group" :aria-label="group.name">
+              <button
+                v-for="item in group.items"
+                :key="item.command"
+                type="button"
+                class="toolbar-button"
+                :title="item.title"
+                :aria-label="item.title"
+                @click="runActiveVisualCommand(item.command)"
+              >
+                <component :is="item.icon" v-if="item.icon" :size="16" />
+                <span>{{ item.label }}</span>
+              </button>
+            </div>
+          </template>
         </div>
       </section>
 

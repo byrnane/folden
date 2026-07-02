@@ -455,6 +455,10 @@ function runVisualCommand(command: VisualEditorCommand) {
   const commands: Record<VisualEditorCommand, () => void | Promise<void>> = {
     'heading-1': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 1 }).run()),
     'heading-2': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 2 }).run()),
+    'heading-3': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 3 }).run()),
+    'heading-4': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 4 }).run()),
+    'heading-5': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 5 }).run()),
+    'heading-6': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 6 }).run()),
     bold: () => runCommand(() => editor.value?.chain().focus().toggleBold().run()),
     italic: () => runCommand(() => editor.value?.chain().focus().toggleItalic().run()),
     strike: () => runCommand(() => editor.value?.chain().focus().toggleStrike().run()),
