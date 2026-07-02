@@ -503,6 +503,10 @@ export function useApplicationShell() {
     layoutSettings.value.sidebarWidth = Math.min(Math.max(width, 220), 520)
   }
 
+  function setActivityWidth(width: number) {
+    layoutSettings.value.activityWidth = Math.min(Math.max(width, 44), 132)
+  }
+
   function setSplitRatio(ratio: number) {
     layoutSettings.value.splitRatio = Math.min(Math.max(ratio, 0.25), 0.75)
   }
@@ -849,6 +853,7 @@ export function useApplicationShell() {
     resetLayoutSettings,
     runActiveVisualCommand,
     setActivitySection,
+    setActivityWidth,
     setSidebarWidth,
     setSplitRatio,
     splitEnabled,

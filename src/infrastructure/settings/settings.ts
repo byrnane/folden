@@ -43,6 +43,7 @@ export type ActivitySection = 'workspace' | 'settings'
 
 export type LayoutSettings = {
   activeActivitySection: ActivitySection
+  activityWidth: number
   sidebarWidth: number
   splitRatio: number
   focusMode: boolean
@@ -84,6 +85,7 @@ export const defaultApplicationSettings: ApplicationSettings = {
 
 export const defaultLayoutSettings: LayoutSettings = {
   activeActivitySection: 'workspace',
+  activityWidth: 44,
   sidebarWidth: 292,
   splitRatio: 0.5,
   focusMode: false,
@@ -195,6 +197,7 @@ export function normalizeLayoutSettings(value: unknown): LayoutSettings {
     activeActivitySection: candidate.activeActivitySection === 'settings'
       ? 'settings'
       : defaultLayoutSettings.activeActivitySection,
+    activityWidth: clampNumber(candidate.activityWidth, 44, 132, defaultLayoutSettings.activityWidth),
     sidebarWidth: clampNumber(candidate.sidebarWidth, 220, 520, defaultLayoutSettings.sidebarWidth),
     splitRatio: clampNumber(candidate.splitRatio, 0.25, 0.75, defaultLayoutSettings.splitRatio),
     focusMode: typeof candidate.focusMode === 'boolean'

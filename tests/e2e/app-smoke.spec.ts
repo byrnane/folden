@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { applicationSettingsStorageKey } from '../../src/infrastructure/settings/settings'
+import { applicationLayoutStorageKey, applicationSettingsStorageKey } from '../../src/infrastructure/settings/settings'
 import { installTauriMock } from './tauriMock'
 
 type OpenAppOptions = {
@@ -38,6 +38,16 @@ async function openApp(page: Page, options: OpenAppOptions = {}) {
 
 function sourceEditor(host: Page | Locator) {
   return host.getByTestId('source-editor').locator('.cm-content')
+}
+
+async function dragBy(locator: Locator, deltaX: number) {
+  const box = await locator.boundingBox()
+  expect(box).not.toBeNull()
+
+  await locator.page().mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+  await locator.page().mouse.down()
+  await locator.page().mouse.move(box!.x + box!.width / 2 + deltaX, box!.y + box!.height / 2, { steps: 8 })
+  await locator.page().mouse.up()
 }
 
 test('opens a mocked workspace and saves an edited Markdown document', async ({ page }) => {
@@ -297,6 +307,35 @@ test('shows toolbar labels only in comfortable density', async ({ page }) => {
   await expect(page.locator('.toolbar-menu[open]')).toHaveCount(1)
   await page.getByTestId('visual-editor').click()
   await expect(page.locator('.toolbar-menu[open]')).toHaveCount(0)
+})
+
+test('fits rail and sidebar action labels to available width', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+
+  const workspaceRailLabel = page.locator('.activity-button[title="Workspace"] span')
+  const scratchButton = page.locator('.workspace-tree-actions button[title="New scratch document"]')
+  const scratchLabel = scratchButton.locator('span')
+
+  await expect(workspaceRailLabel).toBeHidden()
+  await expect(scratchButton.locator('svg')).toHaveClass(/lucide-file-pen-line/)
+  await expect(page.locator('.topbar-mode-switch')).toHaveCSS('border-bottom-width', '0px')
+
+  await dragBy(page.getByTestId('activity-splitter'), 88)
+  await expect.poll(async () => page.locator('.activity-bar').evaluate((element) => (
+    Math.round(element.getBoundingClientRect().width)
+  ))).toBeGreaterThan(100)
+  await expect(workspaceRailLabel).toBeVisible()
+  await expect.poll(async () => page.evaluate((storageKey) => (
+    window.localStorage.getItem(storageKey)
+  ), applicationLayoutStorageKey)).toContain('"activityWidth"')
+
+  await dragBy(page.locator('.sidebar-splitter'), -160)
+  await expect(scratchLabel).toBeHidden()
+
+  await dragBy(page.locator('.sidebar-splitter'), 320)
+  await expect(scratchLabel).toBeVisible()
 })
 
 test('loads persisted settings before opening a workspace', async ({ page }) => {
