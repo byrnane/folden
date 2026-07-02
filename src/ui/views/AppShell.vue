@@ -30,7 +30,7 @@ import {
   Strikethrough,
   X,
 } from 'lucide-vue-next'
-import { computed, ref, watch, type Component } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
 import ConfirmDialog from '../dialogs/ConfirmDialog.vue'
 import ConflictResolutionDialog from '../dialogs/ConflictResolutionDialog.vue'
 import MarkdownSafetyDialog from '../dialogs/MarkdownSafetyDialog.vue'
@@ -206,6 +206,12 @@ const headingToolbarCommands: VisualToolbarItem[] = [
   { command: 'heading-6', title: 'Heading 6', label: 'Heading 6', icon: Heading3 },
 ]
 
+const primaryHeadingToolbarCommands: VisualToolbarItem[] = [
+  { command: 'heading-1', title: 'Heading 1', label: 'H1', icon: Heading1 },
+  { command: 'heading-2', title: 'Heading 2', label: 'H2', icon: Heading2 },
+  { command: 'heading-3', title: 'Subtitle', label: 'Subtitle', icon: Heading3 },
+]
+
 const visualToolbarGroups: Array<{
   name: string
   items: VisualToolbarItem[]
@@ -242,6 +248,26 @@ const visualToolbarGroups: Array<{
 function runToolbarMenuCommand(event: MouseEvent, command: VisualEditorCommand) {
   runActiveVisualCommand(command)
   ;(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')
+}
+
+function closeOpenDisclosureMenus(target: EventTarget | null) {
+  document.querySelectorAll<HTMLDetailsElement>('details[data-close-on-outside][open]').forEach((menu) => {
+    if (target instanceof Node && menu.contains(target)) {
+      return
+    }
+
+    menu.removeAttribute('open')
+  })
+}
+
+function handleGlobalPointerDown(event: PointerEvent) {
+  closeOpenDisclosureMenus(event.target)
+}
+
+function handleGlobalKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeOpenDisclosureMenus(null)
+  }
 }
 
 function startDocumentDrag(event: DragEvent, payload: DragPayload) {
@@ -574,6 +600,16 @@ watch(() => appSettings.value.autosave.debounceMs, (value) => {
 watch(() => appSettings.value.appearance.uiScale, (value) => {
   uiScaleInput.value = String(value)
 })
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleGlobalPointerDown)
+  document.addEventListener('keydown', handleGlobalKeyDown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleGlobalPointerDown)
+  document.removeEventListener('keydown', handleGlobalKeyDown)
+})
 </script>
 
 <template>
@@ -670,20 +706,6 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
           </button>
         </div>
 
-        <div class="workspace-actions">
-          <button
-            type="button"
-            class="icon-button labelled-icon-button"
-            title="New scratch document"
-            aria-label="New scratch document"
-            :disabled="!canExecuteCommand('document.new')"
-            @click="executeCommand('document.new')"
-          >
-            <FilePlus :size="16" />
-            <span>New scratch</span>
-          </button>
-        </div>
-
         <div class="workspace-sidebar-content">
           <section v-if="documents.length && !openEditorsCollapsed" class="open-editors" aria-label="Open editors">
             <button type="button" class="section-header" @click="openEditorsCollapsed = true">
@@ -730,6 +752,17 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
             @click.self="clearSidebarSelection"
           >
             <div class="workspace-tree-actions" aria-label="Workspace file actions">
+              <button
+                type="button"
+                class="icon-button labelled-icon-button"
+                title="New scratch document"
+                aria-label="New scratch document"
+                :disabled="!canExecuteCommand('document.new')"
+                @click="executeCommand('document.new')"
+              >
+                <FilePlus :size="16" />
+                <span>New scratch</span>
+              </button>
               <button
                 type="button"
                 class="icon-button labelled-icon-button"
@@ -848,12 +881,6 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
               <span>Source</span>
             </button>
           </div>
-          <span v-if="dirtyDocuments.length" class="dirty-marker" data-testid="dirty-marker">
-            {{ dirtyDocuments.length }} unsaved
-          </span>
-        </div>
-
-        <div class="topbar-actions">
           <button
             v-if="
               activePaneDocument
@@ -868,6 +895,12 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
             <ImageIcon :size="16" />
             <span>Load remote images</span>
           </button>
+          <span v-if="dirtyDocuments.length" class="dirty-marker" data-testid="dirty-marker">
+            {{ dirtyDocuments.length }} unsaved
+          </span>
+        </div>
+
+        <div class="topbar-actions">
           <button
             type="button"
             class="icon-button labelled-icon-button"
@@ -1134,7 +1167,19 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
       <section v-if="showDocumentToolbar" class="shared-toolbar" aria-label="Document toolbar">
         <div class="format-toolbar shared-format-toolbar">
           <div class="toolbar-group" aria-label="Headings">
-            <details class="toolbar-menu">
+            <button
+              v-for="item in primaryHeadingToolbarCommands"
+              :key="item.command"
+              type="button"
+              class="toolbar-button"
+              :title="item.title"
+              :aria-label="item.title"
+              @click="runActiveVisualCommand(item.command)"
+            >
+              <component :is="item.icon" v-if="item.icon" :size="16" />
+              <span>{{ item.label }}</span>
+            </button>
+            <details class="toolbar-menu" data-close-on-outside>
               <summary
                 class="toolbar-button toolbar-menu-trigger"
                 title="Headings"
