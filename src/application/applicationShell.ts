@@ -492,6 +492,10 @@ export function useApplicationShell() {
     }
   }
 
+  function setActivityRailMode(mode: 'compact' | 'expanded') {
+    layoutSettings.value.activityRailMode = mode
+  }
+
   function resetLayoutSettings() {
     layoutSettings.value = structuredClone(defaultLayoutSettings)
     appSettings.value.appearance.showActivityBar = true
@@ -503,8 +507,22 @@ export function useApplicationShell() {
     layoutSettings.value.sidebarWidth = Math.min(Math.max(width, 220), 520)
   }
 
-  function setActivityWidth(width: number) {
-    layoutSettings.value.activityWidth = Math.min(Math.max(width, 44), 132)
+  function setActivityRailWidth(width: number) {
+    if (layoutSettings.value.activityRailMode === 'expanded') {
+      layoutSettings.value.activityExpandedWidth = Math.min(Math.max(width, 120), 280)
+      return
+    }
+
+    layoutSettings.value.activityCompactWidth = Math.min(Math.max(width, 36), 80)
+  }
+
+  function resetActivityRailWidth() {
+    if (layoutSettings.value.activityRailMode === 'expanded') {
+      layoutSettings.value.activityExpandedWidth = defaultLayoutSettings.activityExpandedWidth
+      return
+    }
+
+    layoutSettings.value.activityCompactWidth = defaultLayoutSettings.activityCompactWidth
   }
 
   function setSplitRatio(ratio: number) {
@@ -853,7 +871,9 @@ export function useApplicationShell() {
     resetLayoutSettings,
     runActiveVisualCommand,
     setActivitySection,
-    setActivityWidth,
+    setActivityRailMode,
+    setActivityRailWidth,
+    resetActivityRailWidth,
     setSidebarWidth,
     setSplitRatio,
     splitEnabled,

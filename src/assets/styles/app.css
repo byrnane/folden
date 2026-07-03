@@ -105,12 +105,10 @@ textarea:focus-visible {
 }
 
 .app-shell:not(.comfortable) .labelled-icon-button span,
-.app-shell:not(.comfortable) .shared-format-toolbar .toolbar-button span,
-.app-shell:not(.comfortable) .toolbar-menu-trigger span {
+.app-shell:not(.comfortable) .shared-format-toolbar .toolbar-button span {
   display: none;
 }
 
-.app-shell:not(.comfortable) .activity-bar .fit-label-button span,
 .app-shell:not(.comfortable) .workspace-sidebar .fit-label-button span {
   display: inline;
 }
@@ -188,7 +186,7 @@ textarea:focus-visible {
 
 .activity-bar {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: 1fr auto;
   gap: 6px;
   min-width: 0;
   min-height: 0;
@@ -197,16 +195,49 @@ textarea:focus-visible {
   padding: 8px 6px;
 }
 
+.activity-main-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
 .activity-button {
   justify-content: flex-start;
   width: 100%;
   min-width: 0;
-  height: 32px;
   border-color: transparent;
   background: transparent;
   color: var(--muted-text);
   padding: 0 7px;
   gap: 7px;
+}
+
+.activity-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-compact {
+  padding: 6px 4px;
+}
+
+.activity-compact .activity-button {
+  aspect-ratio: 1 / 1;
+  height: auto;
+  min-height: 0;
+  justify-content: center;
+  padding: 0;
+}
+
+.activity-compact .activity-button span {
+  display: none;
+}
+
+.activity-expanded .activity-button {
+  height: 34px;
 }
 
 .activity-button:hover:not(:disabled),
@@ -218,10 +249,6 @@ textarea:focus-visible {
 
 .activity-button.label-hidden {
   padding: 0;
-}
-
-.activity-spacer {
-  min-height: 0;
 }
 
 .activity-splitter,
@@ -323,7 +350,7 @@ h1 {
 
 .open-editor-row {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
   align-items: center;
   justify-content: stretch;
   width: 100%;
@@ -345,18 +372,22 @@ h1 {
 }
 
 .open-editor-row.active-pane-document {
-  background: rgba(90, 169, 167, 0.14);
+  background: rgba(90, 169, 167, 0.16);
+  color: #f7fbfd;
 }
 
-.open-editor-active-marker {
+.open-editor-dirty-slot {
+  display: inline-grid;
+  place-items: center;
+  width: 6px;
+  height: 6px;
+}
+
+.open-editor-dirty-dot {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-}
-
-.open-editor-row.active-pane-document .open-editor-active-marker {
   background: var(--accent-strong);
-  box-shadow: 0 0 0 3px rgba(90, 169, 167, 0.12);
 }
 
 .open-editor-name {
@@ -731,16 +762,6 @@ h1 {
   justify-content: flex-end;
 }
 
-.dirty-marker {
-  border: 1px solid var(--warning-border);
-  border-radius: 999px;
-  background: var(--warning-bg);
-  color: var(--warning-text);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 8px;
-}
-
 .toast-stack {
   position: fixed;
   top: 54px;
@@ -1077,8 +1098,10 @@ h1 {
   color: var(--muted-text);
 }
 
-.app-shell:not(.comfortable) .toolbar-menu-chevron {
-  display: none;
+.app-shell:not(.comfortable) .toolbar-menu-trigger {
+  border-color: var(--border-strong);
+  background: #20242b;
+  padding: 0 6px;
 }
 
 .toolbar-menu-list {

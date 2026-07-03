@@ -43,7 +43,9 @@ describe('application settings', () => {
   it('normalizes persisted layout state without document ownership', () => {
     expect(normalizeLayoutSettings({
       activeActivitySection: 'settings',
-      activityWidth: 900,
+      activityRailMode: 'expanded',
+      activityCompactWidth: 900,
+      activityExpandedWidth: 900,
       sidebarWidth: 900,
       splitRatio: 0.1,
       focusMode: true,
@@ -51,20 +53,48 @@ describe('application settings', () => {
     })).toEqual({
       ...defaultLayoutSettings,
       activeActivitySection: 'settings',
-      activityWidth: 132,
+      activityRailMode: 'expanded',
+      activityCompactWidth: 80,
+      activityExpandedWidth: 280,
       sidebarWidth: 520,
       splitRatio: 0.25,
       focusMode: true,
     })
   })
 
-  it('migrates missing activity rail width to the default', () => {
+  it('migrates missing activity rail widths to defaults', () => {
     expect(normalizeLayoutSettings({
       activeActivitySection: 'workspace',
       sidebarWidth: 292,
       splitRatio: 0.5,
       focusMode: false,
     })).toEqual(defaultLayoutSettings)
+  })
+
+  it('migrates legacy activity rail width without persisting activityWidth', () => {
+    expect(normalizeLayoutSettings({
+      activityWidth: 132,
+      sidebarWidth: 292,
+      splitRatio: 0.5,
+      focusMode: false,
+    })).toEqual({
+      ...defaultLayoutSettings,
+      activityRailMode: 'expanded',
+      activityCompactWidth: 80,
+      activityExpandedWidth: 132,
+    })
+  })
+
+  it('keeps compact and expanded rail widths independent and clamped', () => {
+    expect(normalizeLayoutSettings({
+      activityRailMode: 'compact',
+      activityCompactWidth: 12,
+      activityExpandedWidth: 400,
+    })).toEqual({
+      ...defaultLayoutSettings,
+      activityCompactWidth: 36,
+      activityExpandedWidth: 280,
+    })
   })
 
   it('retains built-in ignored workspace names while allowing extra entries', () => {

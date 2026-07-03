@@ -70,7 +70,8 @@ test('opens a mocked workspace and saves an edited Markdown document', async ({ 
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\nEdited by Playwright.\n')
 
-  await expect(page.getByTestId('dirty-marker')).toContainText('1 unsaved')
+  await expect(page.getByTestId('open-documents-status')).toHaveText('2 open · 1 unsaved')
+  await expect(page.locator('.topbar')).not.toContainText('unsaved')
 
   await page.getByRole('button', { name: 'Visual' }).click()
   await expect(page.getByTestId('visual-editor')).toContainText('Edited by Playwright.')
@@ -80,7 +81,7 @@ test('opens a mocked workspace and saves an edited Markdown document', async ({ 
 
   await page.getByTestId('save-document').click()
 
-  await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
+  await expect(page.getByTestId('open-documents-status')).toHaveText('2 open')
   await expect(page.getByTestId('status-path')).toContainText('C:\\FoldenE2E\\README.md')
 })
 
@@ -148,7 +149,7 @@ test('keeps the visual editor mounted after saving an open visual document', asy
   const visualNode = await page.getByTestId('visual-editor').elementHandle()
   await page.getByTestId('save-document').click()
 
-  await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
+  await expect(page.getByTestId('open-documents-status')).not.toContainText('unsaved')
   expect(await page.getByTestId('visual-editor').evaluate((node, previousNode) => (
     node.isSameNode(previousNode as Node)
   ), visualNode)).toBe(true)
@@ -197,7 +198,7 @@ test('keeps nested workspace files visible after saving edits', async ({ page })
   await page.keyboard.type('\nKeep me visible.\n')
   await page.getByTestId('save-document').click()
 
-  await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
+  await expect(page.getByTestId('open-documents-status')).not.toContainText('unsaved')
   await expect(page.getByTestId('workspace-entry-notes\\daily.md')).toBeVisible()
   await expect(page.getByTestId('workspace-entry-notes')).toBeVisible()
 })
@@ -272,13 +273,18 @@ test('shows split open editors and marks the active pane document', async ({ pag
   await page.locator('.editor-pane').first().click()
   await page.getByTestId('workspace-entry-notes').click()
   await page.getByTestId('workspace-entry-notes\\daily.md').click()
+  await page.getByRole('button', { name: 'Source' }).click()
+  await sourceEditor(page).click()
+  await page.keyboard.type('Dirty open editor marker')
 
   const openEditors = page.locator('.open-editors')
   await expect(openEditors.locator('.open-editor-row.active')).toHaveCount(2)
   await expect(openEditors.locator('.open-editor-row.active-pane-document')).toContainText('daily.md')
+  await expect(openEditors.locator('.open-editor-row.active-pane-document .open-editor-dirty-dot')).toHaveCount(1)
 
   await page.locator('.editor-pane').nth(1).click()
   await expect(openEditors.locator('.open-editor-row.active-pane-document')).toContainText('README.md')
+  await expect(openEditors.locator('.open-editor-row').filter({ hasText: 'daily.md' }).locator('.open-editor-dirty-dot')).toHaveCount(1)
 })
 
 test('shows toolbar labels only in comfortable density', async ({ page }) => {
@@ -309,7 +315,7 @@ test('shows toolbar labels only in comfortable density', async ({ page }) => {
   await expect(page.locator('.toolbar-menu[open]')).toHaveCount(0)
 })
 
-test('fits rail and sidebar action labels to available width', async ({ page }) => {
+test('uses explicit activity rail modes and keeps sidebar labels fitted', async ({ page }) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
@@ -319,17 +325,41 @@ test('fits rail and sidebar action labels to available width', async ({ page }) 
   const scratchLabel = scratchButton.locator('span')
 
   await expect(workspaceRailLabel).toBeHidden()
+  await expect(page.locator('.activity-button[title="Settings"]')).toHaveCount(1)
+  await expect(page.locator('.activity-main-items .activity-button[title="Settings"]')).toHaveCount(1)
+  await expect.poll(async () => page.locator('.activity-button[title="Workspace"]').evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    return Math.abs(Math.round(box.width) - Math.round(box.height))
+  })).toBeLessThanOrEqual(1)
   await expect(scratchButton.locator('svg')).toHaveClass(/lucide-file-pen-line/)
   await expect(page.locator('.topbar-mode-switch')).toHaveCSS('border-bottom-width', '0px')
+  await expect(page.locator('summary[title="Headings"] .toolbar-menu-chevron')).toBeVisible()
 
-  await dragBy(page.getByTestId('activity-splitter'), 88)
+  await dragBy(page.getByTestId('activity-splitter'), 100)
   await expect.poll(async () => page.locator('.activity-bar').evaluate((element) => (
     Math.round(element.getBoundingClientRect().width)
-  ))).toBeGreaterThan(100)
+  ))).toBeGreaterThanOrEqual(120)
   await expect(workspaceRailLabel).toBeVisible()
   await expect.poll(async () => page.evaluate((storageKey) => (
     window.localStorage.getItem(storageKey)
-  ), applicationLayoutStorageKey)).toContain('"activityWidth"')
+  ), applicationLayoutStorageKey)).toContain('"activityRailMode":"expanded"')
+  await expect.poll(async () => page.evaluate((storageKey) => (
+    window.localStorage.getItem(storageKey)
+  ), applicationLayoutStorageKey)).toContain('"activityExpandedWidth"')
+
+  await page
+    .getByRole('navigation', { name: 'Activity' })
+    .getByRole('button', { name: 'New scratch document' })
+    .click()
+  await expect(page.getByTestId('document-title')).toHaveText('Untitled.md')
+
+  await expect(page.getByRole('button', { name: 'Search' })).toBeDisabled()
+
+  await page.getByRole('button', { name: 'Collapse rail' }).click()
+  await expect(workspaceRailLabel).toBeHidden()
+  await expect.poll(async () => page.locator('.activity-bar').evaluate((element) => (
+    Math.round(element.getBoundingClientRect().width)
+  ))).toBeLessThanOrEqual(80)
 
   await dragBy(page.locator('.sidebar-splitter'), -160)
   await expect(scratchLabel).toBeHidden()
@@ -413,8 +443,8 @@ test('autosaves existing files but does not autosave scratch documents', async (
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\nAutosaved change.\n')
 
-  await expect(page.getByTestId('dirty-marker')).toContainText('1 unsaved')
-  await expect(page.getByTestId('dirty-marker')).toHaveCount(0, { timeout: 5000 })
+  await expect(page.getByTestId('open-documents-status')).toContainText('1 unsaved')
+  await expect(page.getByTestId('open-documents-status')).not.toContainText('unsaved', { timeout: 5000 })
 
   await expect.poll(async () => page.evaluate(() => (
     (window as Window & {
@@ -422,7 +452,7 @@ test('autosaves existing files but does not autosave scratch documents', async (
     }).__FOLDEN_TAURI_MOCK__?.readFile('README.md')
   ))).toContain('Autosaved change.')
 
-  await page.getByRole('button', { name: 'New scratch document' }).click()
+  await page.locator('.workspace-tree-actions').getByRole('button', { name: 'New scratch document' }).click()
   await page.getByRole('button', { name: 'Source' }).click()
 
   const scratchEditor = sourceEditor(page)
@@ -430,7 +460,7 @@ test('autosaves existing files but does not autosave scratch documents', async (
   await page.keyboard.type('Scratch should stay dirty')
 
   await page.waitForTimeout(1600)
-  await expect(page.getByTestId('dirty-marker')).toContainText('1 unsaved')
+  await expect(page.getByTestId('open-documents-status')).toContainText('1 unsaved')
   await expect(page.getByTestId('status-path')).toContainText('Scratch')
 })
 
@@ -466,7 +496,7 @@ test('restores recovery snapshots into the original document on startup', async 
   await page.getByRole('button', { name: 'Source' }).click()
   await expect(page.getByTestId('document-title')).toHaveText('README.md')
   await expect(page.getByTestId('source-editor')).toContainText('Recovered text.')
-  await expect(page.getByTestId('dirty-marker')).toContainText('1 unsaved')
+  await expect(page.getByTestId('open-documents-status')).toContainText('1 unsaved')
 })
 
 test('asks before closing a dirty document tab', async ({ page }) => {
@@ -497,12 +527,12 @@ test('closes an unchanged visual document without dirty prompt', async ({ page }
   await page.getByTestId('workspace-entry-README.md').click()
 
   await expect(page.getByTestId('document-title')).toHaveText('README.md')
-  await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
+  await expect(page.getByTestId('open-documents-status')).not.toContainText('unsaved')
 
   await page.getByRole('button', { name: 'README.md' }).locator('.tab-close').click()
 
   await expect(page.getByRole('dialog', { name: 'Close README.md?' })).toHaveCount(0)
-  await expect(page.getByTestId('dirty-marker')).toHaveCount(0)
+  await expect(page.getByTestId('open-documents-status')).not.toContainText('unsaved')
   await expect(page.getByTestId('document-title')).toHaveText('Untitled.md')
 })
 
