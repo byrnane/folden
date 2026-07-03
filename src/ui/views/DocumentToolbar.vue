@@ -17,7 +17,7 @@ import {
   SquareCode,
   Strikethrough,
 } from 'lucide-vue-next'
-import { ref, type Component } from 'vue'
+import { onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import type { VisualEditorCommand } from '../../application/types/shell'
 import { uiIconSizes } from '../uiConstants'
 
@@ -33,6 +33,7 @@ const emit = defineEmits<{
 }>()
 
 const headingsMenuOpen = ref(false)
+const headingsMenuElement = ref<HTMLElement | null>(null)
 
 const headingToolbarCommands: VisualToolbarItem[] = [
   { command: 'heading-1', title: 'Heading 1', label: 'Heading 1', icon: Heading1 },
@@ -82,11 +83,46 @@ const visualToolbarGroups: Array<{
   },
 ]
 
-function runToolbarMenuCommand(event: MouseEvent, command: VisualEditorCommand) {
-  emit('runCommand', command)
-  ;(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')
+function closeHeadingsMenu() {
   headingsMenuOpen.value = false
 }
+
+function toggleHeadingsMenu() {
+  headingsMenuOpen.value = !headingsMenuOpen.value
+}
+
+function handleDocumentPointerDown(event: PointerEvent) {
+  if (
+    headingsMenuElement.value
+    && event.target instanceof Node
+    && headingsMenuElement.value.contains(event.target)
+  ) {
+    return
+  }
+
+  closeHeadingsMenu()
+}
+
+function handleDocumentKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeHeadingsMenu()
+  }
+}
+
+function runToolbarMenuCommand(command: VisualEditorCommand) {
+  emit('runCommand', command)
+  closeHeadingsMenu()
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleDocumentPointerDown)
+  document.addEventListener('keydown', handleDocumentKeyDown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown)
+  document.removeEventListener('keydown', handleDocumentKeyDown)
+})
 </script>
 
 <template>
@@ -105,22 +141,24 @@ function runToolbarMenuCommand(event: MouseEvent, command: VisualEditorCommand) 
           <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbar" />
           <span>{{ item.label }}</span>
         </button>
-        <details
+        <div
+          ref="headingsMenuElement"
           class="toolbar-menu"
-          data-close-on-outside
-          @toggle="headingsMenuOpen = ($event.currentTarget as HTMLDetailsElement).open"
         >
-          <summary
+          <button
+            type="button"
             class="toolbar-button toolbar-menu-trigger"
             title="Headings"
             aria-label="Headings"
             :aria-expanded="headingsMenuOpen"
+            aria-haspopup="menu"
+            @click="toggleHeadingsMenu"
           >
             <Heading1 :size="uiIconSizes.toolbar" />
             <span>Headings</span>
             <ChevronDown class="toolbar-menu-chevron" :size="uiIconSizes.toolbarChevron" />
-          </summary>
-          <div class="toolbar-menu-list">
+          </button>
+          <div v-if="headingsMenuOpen" class="toolbar-menu-list" role="menu">
             <button
               v-for="item in headingToolbarCommands"
               :key="item.command"
@@ -128,13 +166,14 @@ function runToolbarMenuCommand(event: MouseEvent, command: VisualEditorCommand) 
               class="toolbar-menu-item"
               :title="item.title"
               :aria-label="item.title"
-              @click="runToolbarMenuCommand($event, item.command)"
+              role="menuitem"
+              @click="runToolbarMenuCommand(item.command)"
             >
               <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbarMenuItem" />
               <span>{{ item.label }}</span>
             </button>
           </div>
-        </details>
+        </div>
       </div>
 
       <template v-for="group in visualToolbarGroups" :key="group.name">

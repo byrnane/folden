@@ -13,7 +13,7 @@ import {
   PanelRightOpen,
   Save,
 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import ConfirmDialog from '../dialogs/ConfirmDialog.vue'
 import ConflictResolutionDialog from '../dialogs/ConflictResolutionDialog.vue'
 import MarkdownSafetyDialog from '../dialogs/MarkdownSafetyDialog.vue'
@@ -29,8 +29,9 @@ import { useApplicationShell } from '../../applicationShell'
 import {
   applicationSettingLimits,
   layoutSettingLimits,
-} from '../../infrastructure/settings/settings'
+} from '../../application/settings'
 import { uiIconSizes } from '../uiConstants'
+import { vFitLabel } from '../fitLabel'
 
 const resizeKeyboardStepPx = 16
 const resizeKeyboardLargeStepPx = 48
@@ -121,8 +122,6 @@ const {
 
 const openEditorsCollapsed = ref(false)
 const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
-const appShellElement = ref<HTMLElement | null>(null)
-const workspaceSidebarElement = ref<HTMLElement | null>(null)
 const sidebarResizeStart = ref<{ x: number, width: number } | null>(null)
 const splitResizeStart = ref<{ x: number, ratio: number, width: number } | null>(null)
 const sourceFontSizeInput = ref(String(appSettings.value.editor.sourceFontSize))
@@ -166,6 +165,35 @@ const activePane = computed(() =>
 const activePaneDocument = computed(() => activePane.value?.activeDocumentId
   ? getDocument(activePane.value.activeDocumentId)
   : null)
+const editorPaneViews = computed(() => visiblePanes.value.map((pane) => {
+  const activeDocumentInPane = pane.activeDocumentId
+    ? getDocument(pane.activeDocumentId)
+    : null
+
+  return {
+    ...pane,
+    tabs: pane.documentIds.flatMap((documentId) => {
+      const document = getDocument(documentId)
+
+      return document
+        ? [{
+            document,
+            title: document.path ? cleanDisplayPath(document.path) : 'Scratch document',
+            isActive: pane.activeDocumentId === document.id,
+            isDirty: isDirty(document),
+          }]
+        : []
+    }),
+    activeDocument: activeDocumentInPane
+      ? {
+          document: activeDocumentInPane,
+          mode: getDocumentMode(pane, activeDocumentInPane),
+          viewSessionId: getViewSessionId(pane, activeDocumentInPane),
+          shouldLoadRemoteImages: shouldLoadRemoteImages(activeDocumentInPane),
+        }
+      : null,
+  }
+}))
 const activePaneIsRight = computed(() => activePaneId.value === 'right')
 const moveActiveTabTitle = computed(() => activePaneIsRight.value ? 'Move active tab left' : 'Move active tab right')
 const moveActiveTabIcon = computed(() => activePaneIsRight.value ? PanelRightOpen : PanelLeftOpen)
@@ -178,26 +206,6 @@ const showSettingsView = computed(() =>
   layoutSettings.value.activeActivitySection === 'settings' && !layoutSettings.value.focusMode,
 )
 const showEditorView = computed(() => !showSettingsView.value)
-
-function closeOpenDisclosureMenus(target: EventTarget | null) {
-  document.querySelectorAll<HTMLDetailsElement>('details[data-close-on-outside][open]').forEach((menu) => {
-    if (target instanceof Node && menu.contains(target)) {
-      return
-    }
-
-    menu.removeAttribute('open')
-  })
-}
-
-function handleGlobalPointerDown(event: PointerEvent) {
-  closeOpenDisclosureMenus(event.target)
-}
-
-function handleGlobalKeyDown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    closeOpenDisclosureMenus(null)
-  }
-}
 
 function clampNumber(value: unknown, limit: { min: number, max: number, fallback: number }) {
   return typeof value === 'number' && Number.isFinite(value)
@@ -333,65 +341,6 @@ function resizeSplitWithKeyboard(event: KeyboardEvent) {
   setSplitRatio(layoutSettings.value.splitRatio + direction * step)
 }
 
-let labelFitObserver: ResizeObserver | null = null
-let labelFitFrame = 0
-const observedFitElements = new Set<Element>()
-
-function observeFitElement(element: Element | null | undefined) {
-  if (!element || observedFitElements.has(element)) {
-    return
-  }
-
-  labelFitObserver?.observe(element)
-  observedFitElements.add(element)
-}
-
-function queueFitLabelUpdate() {
-  if (labelFitFrame) {
-    cancelAnimationFrame(labelFitFrame)
-  }
-
-  labelFitFrame = requestAnimationFrame(updateFittingLabels)
-}
-
-function updateFittingLabels() {
-  labelFitFrame = 0
-
-  observeFitElement(appShellElement.value)
-  observeFitElement(workspaceSidebarElement.value)
-
-  const buttons = appShellElement.value
-    ? [...appShellElement.value.querySelectorAll<HTMLElement>('.workspace-sidebar .fit-label-button')]
-    : []
-
-  buttons.forEach((button) => {
-    observeFitElement(button)
-    button.classList.remove('label-hidden')
-  })
-
-  buttons.forEach((button) => {
-    button.classList.toggle('label-hidden', !doesButtonLabelFit(button))
-  })
-}
-
-function doesButtonLabelFit(button: HTMLElement) {
-  const label = button.querySelector<HTMLElement>('span')
-
-  if (!label) {
-    return true
-  }
-
-  const style = window.getComputedStyle(button)
-  const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
-  const gap = parseFloat(style.columnGap || style.gap || '0') || 0
-  const iconWidth = [...button.children]
-    .filter((child) => child !== label)
-    .reduce((total, child) => total + child.getBoundingClientRect().width, 0)
-  const requiredWidth = padding + iconWidth + gap + label.scrollWidth
-
-  return requiredWidth <= button.clientWidth + 1
-}
-
 watch(() => appSettings.value.editor.sourceFontSize, (value) => {
   sourceFontSizeInput.value = String(value)
 })
@@ -410,36 +359,14 @@ watch(() => appSettings.value.autosave.debounceMs, (value) => {
 watch(() => appSettings.value.appearance.uiScale, (value) => {
   uiScaleInput.value = String(value)
 })
-watch([
-  () => layoutSettings.value.sidebarWidth,
-  () => layoutSettings.value.activeActivitySection,
-  showSidebar,
-], () => queueFitLabelUpdate(), { flush: 'post' })
-
-onMounted(() => {
-  document.addEventListener('pointerdown', handleGlobalPointerDown)
-  document.addEventListener('keydown', handleGlobalKeyDown)
-  labelFitObserver = new ResizeObserver(() => queueFitLabelUpdate())
-  queueFitLabelUpdate()
-})
-
 onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', handleGlobalPointerDown)
-  document.removeEventListener('keydown', handleGlobalKeyDown)
   stopSidebarResize()
   stopSplitResize()
-  if (labelFitFrame) {
-    cancelAnimationFrame(labelFitFrame)
-  }
-  labelFitObserver?.disconnect()
-  labelFitObserver = null
-  observedFitElements.clear()
 })
 </script>
 
 <template>
   <main
-    ref="appShellElement"
     class="app-shell"
     :class="{
       'focus-mode': layoutSettings.focusMode,
@@ -468,7 +395,6 @@ onBeforeUnmount(() => {
 
     <aside
       v-if="showSidebar"
-      ref="workspaceSidebarElement"
       class="workspace-sidebar"
       :aria-label="layoutSettings.activeActivitySection === 'settings' ? 'Settings' : 'Workspace'"
       @click.self="clearSidebarSelection"
@@ -518,6 +444,7 @@ onBeforeUnmount(() => {
             </p>
           </div>
           <button
+            v-fit-label
             type="button"
             class="icon-button labelled-icon-button fit-label-button"
             title="Open folder"
@@ -549,6 +476,7 @@ onBeforeUnmount(() => {
           >
             <div class="workspace-tree-actions" aria-label="Workspace file actions">
               <button
+                v-fit-label
                 type="button"
                 class="icon-button labelled-icon-button fit-label-button"
                 title="New scratch document"
@@ -560,6 +488,7 @@ onBeforeUnmount(() => {
                 <span>New scratch</span>
               </button>
               <button
+                v-fit-label
                 type="button"
                 class="icon-button labelled-icon-button fit-label-button"
                 title="New file"
@@ -571,6 +500,7 @@ onBeforeUnmount(() => {
                 <span>New file</span>
               </button>
               <button
+                v-fit-label
                 type="button"
                 class="icon-button labelled-icon-button fit-label-button"
                 title="New folder"
@@ -970,22 +900,16 @@ onBeforeUnmount(() => {
 
       <EditorPaneGrid
         v-if="layoutSettings.activeActivitySection !== 'settings' || layoutSettings.focusMode"
-        :visible-panes="visiblePanes"
+        :visible-panes="editorPaneViews"
         :active-pane-id="activePaneId"
         :split-enabled="splitEnabled"
         :split-ratio="layoutSettings.splitRatio"
-        :app-settings="appSettings"
+        :source-word-wrap="appSettings.editor.wordWrap"
         :workspace-root-path="workspace?.rootPath ?? null"
-        :clean-display-path="cleanDisplayPath"
         :close-document="closeDocument"
-        :get-document="getDocument"
-        :get-document-mode="getDocumentMode"
-        :get-view-session-id="getViewSessionId"
-        :is-dirty="isDirty"
         :open-dropped-path="openDroppedPath"
         :set-active-document="setActiveDocument"
         :set-pane-editor-adapter="setPaneEditorAdapter"
-        :should-load-remote-images="shouldLoadRemoteImages"
         @begin-split-resize="beginSplitResize"
         @keyboard-split-resize="resizeSplitWithKeyboard"
         @document-update="handleDocumentUpdate"

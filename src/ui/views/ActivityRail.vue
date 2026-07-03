@@ -13,7 +13,7 @@ import {
   layoutSettingLimits,
   type ActivityRailMode,
   type ActivitySection,
-} from '../../infrastructure/settings/settings'
+} from '../../application/settings'
 import { uiIconSizes } from '../uiConstants'
 
 const railKeyboardStepPx = 16

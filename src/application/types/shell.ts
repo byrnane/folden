@@ -1,4 +1,5 @@
 import type { WorkspaceEntry } from '../../domain/native'
+import type { EditorMode, OpenDocument } from '../../domain/documents/documentState'
 
 export type Workspace = {
   id: string
@@ -12,6 +13,25 @@ export type EditorPane = {
   title: string
   documentIds: string[]
   activeDocumentId: string | null
+}
+
+export type EditorPaneTabView = {
+  document: OpenDocument
+  title: string
+  isActive: boolean
+  isDirty: boolean
+}
+
+export type EditorPaneActiveDocumentView = {
+  document: OpenDocument
+  mode: EditorMode
+  viewSessionId: string
+  shouldLoadRemoteImages: boolean
+}
+
+export type EditorPaneView = EditorPane & {
+  tabs: EditorPaneTabView[]
+  activeDocument: EditorPaneActiveDocumentView | null
 }
 
 export type EditorAdapter = {

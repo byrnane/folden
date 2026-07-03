@@ -7,13 +7,15 @@ import {
   type OpenDocument,
 } from '../domain/documents/documentState'
 import {
-  defaultLayoutSettings,
-  layoutSettingLimits,
   loadApplicationSettings,
   loadLayoutSettings,
   saveApplicationSettings,
   saveLayoutSettings,
 } from '../infrastructure/settings/settings'
+import {
+  defaultLayoutSettings,
+  layoutSettingLimits,
+} from './settings'
 import {
   cleanDisplayPath,
   isMarkdownPath,
