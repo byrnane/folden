@@ -40,10 +40,13 @@ export type ApplicationSettings = {
 }
 
 export type ActivitySection = 'workspace' | 'settings'
+export type ActivityRailMode = 'compact' | 'expanded'
 
 export type LayoutSettings = {
   activeActivitySection: ActivitySection
-  activityWidth: number
+  activityRailMode: ActivityRailMode
+  activityCompactWidth: number
+  activityExpandedWidth: number
   sidebarWidth: number
   splitRatio: number
   focusMode: boolean
@@ -85,7 +88,9 @@ export const defaultApplicationSettings: ApplicationSettings = {
 
 export const defaultLayoutSettings: LayoutSettings = {
   activeActivitySection: 'workspace',
-  activityWidth: 44,
+  activityRailMode: 'compact',
+  activityCompactWidth: 44,
+  activityExpandedWidth: 168,
   sidebarWidth: 292,
   splitRatio: 0.5,
   focusMode: false,
@@ -192,12 +197,30 @@ export function normalizeLayoutSettings(value: unknown): LayoutSettings {
   }
 
   const candidate = value as Partial<LayoutSettings>
+  const legacyActivityWidth = (candidate as Partial<LayoutSettings> & { activityWidth?: unknown }).activityWidth
+  const migratedActivityRailMode = typeof legacyActivityWidth === 'number' && legacyActivityWidth > 80
+    ? 'expanded'
+    : defaultLayoutSettings.activityRailMode
 
   return {
     activeActivitySection: candidate.activeActivitySection === 'settings'
       ? 'settings'
       : defaultLayoutSettings.activeActivitySection,
-    activityWidth: clampNumber(candidate.activityWidth, 44, 132, defaultLayoutSettings.activityWidth),
+    activityRailMode: candidate.activityRailMode === 'expanded' || candidate.activityRailMode === 'compact'
+      ? candidate.activityRailMode
+      : migratedActivityRailMode,
+    activityCompactWidth: clampNumber(
+      candidate.activityCompactWidth ?? legacyActivityWidth,
+      36,
+      80,
+      defaultLayoutSettings.activityCompactWidth,
+    ),
+    activityExpandedWidth: clampNumber(
+      candidate.activityExpandedWidth ?? legacyActivityWidth,
+      120,
+      280,
+      defaultLayoutSettings.activityExpandedWidth,
+    ),
     sidebarWidth: clampNumber(candidate.sidebarWidth, 220, 520, defaultLayoutSettings.sidebarWidth),
     splitRatio: clampNumber(candidate.splitRatio, 0.25, 0.75, defaultLayoutSettings.splitRatio),
     focusMode: typeof candidate.focusMode === 'boolean'

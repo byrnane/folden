@@ -16,7 +16,6 @@ import {
   Heading3,
   Image as ImageIcon,
   Italic,
-  LayoutPanelLeft,
   Link as LinkIcon,
   List,
   ListOrdered,
@@ -26,7 +25,6 @@ import {
   Quote,
   RemoveFormatting,
   Save,
-  Settings,
   SquareCode,
   Strikethrough,
   X,
@@ -40,6 +38,7 @@ import RecoveryDialog from '../dialogs/RecoveryDialog.vue'
 import UnsavedChangesDialog from '../dialogs/UnsavedChangesDialog.vue'
 import SourceEditor from '../editors/SourceEditor.vue'
 import VisualMarkdownEditor from '../editors/VisualMarkdownEditor.vue'
+import ActivityRail from './ActivityRail.vue'
 import WorkspaceTree from '../workspace/WorkspaceTree.vue'
 import { useApplicationShell, type EditorAdapter, type VisualEditorCommand } from '../../applicationShell'
 
@@ -104,9 +103,11 @@ const {
   splitEnabled,
   reorderDocumentInPane,
   resetLayoutSettings,
+  resetActivityRailWidth,
   runActiveVisualCommand,
   setActivitySection,
-  setActivityWidth,
+  setActivityRailMode,
+  setActivityRailWidth,
   setSidebarWidth,
   setSplitRatio,
   shouldLoadRemoteImages,
@@ -140,9 +141,7 @@ type TabPointerDrag = {
 const openEditorsCollapsed = ref(false)
 const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
 const appShellElement = ref<HTMLElement | null>(null)
-const activityBarElement = ref<HTMLElement | null>(null)
 const workspaceSidebarElement = ref<HTMLElement | null>(null)
-const activityResizeStart = ref<{ x: number, width: number } | null>(null)
 const sidebarResizeStart = ref<{ x: number, width: number } | null>(null)
 const splitResizeStart = ref<{ x: number, ratio: number, width: number } | null>(null)
 const sourceFontSizeInput = ref(String(appSettings.value.editor.sourceFontSize))
@@ -154,8 +153,12 @@ const uiScaleInput = ref(String(appSettings.value.appearance.uiScale))
 const tabPointerDrag = ref<TabPointerDrag | null>(null)
 const suppressNextTabClick = ref(false)
 
+const activityWidth = computed(() => layoutSettings.value.activityRailMode === 'expanded'
+  ? layoutSettings.value.activityExpandedWidth
+  : layoutSettings.value.activityCompactWidth)
+
 const shellStyle = computed(() => ({
-  '--activity-width': `${layoutSettings.value.activityWidth}px`,
+  '--activity-width': `${activityWidth.value}px`,
   '--sidebar-width': `${layoutSettings.value.sidebarWidth}px`,
   '--split-left': `${layoutSettings.value.splitRatio}fr`,
   '--split-right': `${1 - layoutSettings.value.splitRatio}fr`,
@@ -510,6 +513,12 @@ function formatSeconds(milliseconds: number) {
   return String(milliseconds / 1000)
 }
 
+function formatOpenDocumentsStatus(openCount: number, unsavedCount: number) {
+  return unsavedCount > 0
+    ? `${openCount} open · ${unsavedCount} unsaved`
+    : `${openCount} open`
+}
+
 function applyNumberInput(value: string, minimum: number, maximum: number, fallback: number) {
   const numberValue = Number(value)
   return clampNumber(Number.isFinite(numberValue) ? numberValue : fallback, minimum, maximum, fallback)
@@ -566,26 +575,6 @@ function stopSidebarResize() {
   window.removeEventListener('mousemove', resizeSidebar)
 }
 
-function beginActivityResize(event: MouseEvent) {
-  activityResizeStart.value = {
-    x: event.clientX,
-    width: layoutSettings.value.activityWidth,
-  }
-  window.addEventListener('mousemove', resizeActivity)
-  window.addEventListener('mouseup', stopActivityResize, { once: true })
-}
-
-function resizeActivity(event: MouseEvent) {
-  if (activityResizeStart.value) {
-    setActivityWidth(activityResizeStart.value.width + event.clientX - activityResizeStart.value.x)
-  }
-}
-
-function stopActivityResize() {
-  activityResizeStart.value = null
-  window.removeEventListener('mousemove', resizeActivity)
-}
-
 function beginSplitResize(event: MouseEvent) {
   const parent = (event.currentTarget as HTMLElement).parentElement
 
@@ -634,11 +623,10 @@ function updateFittingLabels() {
   labelFitFrame = 0
 
   observeFitElement(appShellElement.value)
-  observeFitElement(activityBarElement.value)
   observeFitElement(workspaceSidebarElement.value)
 
   const buttons = appShellElement.value
-    ? [...appShellElement.value.querySelectorAll<HTMLElement>('.fit-label-button')]
+    ? [...appShellElement.value.querySelectorAll<HTMLElement>('.workspace-sidebar .fit-label-button')]
     : []
 
   buttons.forEach((button) => {
@@ -688,10 +676,8 @@ watch(() => appSettings.value.appearance.uiScale, (value) => {
   uiScaleInput.value = String(value)
 })
 watch([
-  () => layoutSettings.value.activityWidth,
   () => layoutSettings.value.sidebarWidth,
   () => layoutSettings.value.activeActivitySection,
-  () => appSettings.value.appearance.showActivityBar,
   showSidebar,
 ], () => queueFitLabelUpdate(), { flush: 'post' })
 
@@ -705,7 +691,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleGlobalPointerDown)
   document.removeEventListener('keydown', handleGlobalKeyDown)
-  stopActivityResize()
   stopSidebarResize()
   if (labelFitFrame) {
     cancelAnimationFrame(labelFitFrame)
@@ -731,45 +716,18 @@ onBeforeUnmount(() => {
     :style="shellStyle"
     data-testid="app-shell"
   >
-    <nav
+    <ActivityRail
       v-if="!layoutSettings.focusMode && appSettings.appearance.showActivityBar"
-      ref="activityBarElement"
-      class="activity-bar"
-      aria-label="Activity"
-    >
-      <button
-        type="button"
-        class="activity-button fit-label-button"
-        :class="{ active: layoutSettings.activeActivitySection === 'workspace' }"
-        title="Workspace"
-        aria-label="Workspace"
-        @click="setActivitySection('workspace')"
-      >
-        <LayoutPanelLeft :size="18" />
-        <span>Workspace</span>
-      </button>
-      <div class="activity-spacer" />
-      <button
-        type="button"
-        class="activity-button fit-label-button"
-        :class="{ active: layoutSettings.activeActivitySection === 'settings' }"
-        title="Settings"
-        aria-label="Settings"
-        @click="setActivitySection('settings')"
-      >
-        <Settings :size="18" />
-        <span>Settings</span>
-      </button>
-    </nav>
-
-    <div
-      v-if="!layoutSettings.focusMode && appSettings.appearance.showActivityBar"
-      class="activity-splitter"
-      data-testid="activity-splitter"
-      role="separator"
-      aria-label="Resize activity bar"
-      @mousedown.prevent="beginActivityResize"
-      @dblclick="setActivityWidth(44)"
+      :active-section="layoutSettings.activeActivitySection"
+      :mode="layoutSettings.activityRailMode"
+      :compact-width="layoutSettings.activityCompactWidth"
+      :expanded-width="layoutSettings.activityExpandedWidth"
+      :can-create-document="canExecuteCommand('document.new')"
+      @set-section="setActivitySection"
+      @set-mode="setActivityRailMode"
+      @set-width="setActivityRailWidth"
+      @reset-width="resetActivityRailWidth"
+      @create-document="executeCommand('document.new')"
     />
 
     <aside
@@ -864,12 +822,13 @@ onBeforeUnmount(() => {
                 )
               "
             >
-              <span class="open-editor-active-marker" aria-hidden="true" />
+              <span class="open-editor-dirty-slot" aria-hidden="true">
+                <span v-if="isDirty(document)" class="open-editor-dirty-dot" />
+              </span>
               <span class="open-editor-name">{{ document.name }}</span>
               <span class="open-editor-pane">
                 {{ getDocumentPaneLabel(document.id) }}
               </span>
-              <span v-if="isDirty(document)" class="tab-dot" />
             </button>
           </section>
           <button v-else-if="documents.length" type="button" class="section-header" @click="openEditorsCollapsed = false">
@@ -1025,9 +984,6 @@ onBeforeUnmount(() => {
             <ImageIcon :size="16" />
             <span>Load remote images</span>
           </button>
-          <span v-if="dirtyDocuments.length" class="dirty-marker" data-testid="dirty-marker">
-            {{ dirtyDocuments.length }} unsaved
-          </span>
         </div>
 
         <div class="topbar-actions">
@@ -1457,7 +1413,7 @@ onBeforeUnmount(() => {
       </section>
 
       <footer v-if="showEditorView && appSettings.appearance.showStatusBar && !layoutSettings.focusMode" class="statusbar">
-        <span>{{ documents.length }} open</span>
+        <span data-testid="open-documents-status">{{ formatOpenDocumentsStatus(documents.length, dirtyDocuments.length) }}</span>
         <span
           class="path-status"
           :title="activeDocument?.path ? cleanDisplayPath(activeDocument.path) : 'Scratch document'"
