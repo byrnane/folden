@@ -10,10 +10,14 @@ import {
 import { computed, onBeforeUnmount, ref } from 'vue'
 import {
   activityRailResizeThresholds,
+  layoutSettingLimits,
   type ActivityRailMode,
   type ActivitySection,
 } from '../../infrastructure/settings/settings'
 import { uiIconSizes } from '../uiConstants'
+
+const railKeyboardStepPx = 16
+const railKeyboardLargeStepPx = 64
 
 const props = defineProps<{
   activeSection: ActivitySection
@@ -42,6 +46,10 @@ const resizeStart = ref<ResizeStart | null>(null)
 
 const modeLabel = computed(() => props.mode === 'expanded' ? 'Collapse rail' : 'Expand rail')
 const modeIcon = computed(() => props.mode === 'expanded' ? PanelRightOpen : PanelLeftOpen)
+const currentWidth = computed(() => props.mode === 'expanded' ? props.expandedWidth : props.compactWidth)
+const currentWidthLimits = computed(() => props.mode === 'expanded'
+  ? layoutSettingLimits.activityExpandedWidth
+  : layoutSettingLimits.activityCompactWidth)
 
 function toggleMode() {
   emit('setMode', props.mode === 'expanded' ? 'compact' : 'expanded')
@@ -55,21 +63,11 @@ function beginResize(event: MouseEvent) {
     expandedWidth: props.expandedWidth,
   }
   window.addEventListener('mousemove', resize)
-  window.addEventListener('mouseup', stopResize, { once: true })
+  window.addEventListener('mouseup', stopResize)
 }
 
-function resize(event: MouseEvent) {
-  const start = resizeStart.value
-
-  if (!start) {
-    return
-  }
-
-  const delta = event.clientX - start.x
-  const baseWidth = start.mode === 'expanded' ? start.expandedWidth : start.compactWidth
-  const nextWidth = baseWidth + delta
-
-  if (start.mode === 'compact') {
+function applyResizeWidth(mode: ActivityRailMode, nextWidth: number) {
+  if (mode === 'compact') {
     if (nextWidth > activityRailResizeThresholds.expandFromCompactWidth) {
       emit('setMode', 'expanded')
       emit('setWidth', nextWidth)
@@ -91,9 +89,45 @@ function resize(event: MouseEvent) {
   emit('setWidth', nextWidth)
 }
 
+function resize(event: MouseEvent) {
+  const start = resizeStart.value
+
+  if (!start) {
+    return
+  }
+
+  const delta = event.clientX - start.x
+  const baseWidth = start.mode === 'expanded' ? start.expandedWidth : start.compactWidth
+  applyResizeWidth(start.mode, baseWidth + delta)
+}
+
 function stopResize() {
   resizeStart.value = null
   window.removeEventListener('mousemove', resize)
+  window.removeEventListener('mouseup', stopResize)
+}
+
+function resizeWithKeyboard(event: KeyboardEvent) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+    return
+  }
+
+  event.preventDefault()
+  const direction = event.key === 'ArrowRight' ? 1 : -1
+  const step = event.shiftKey ? railKeyboardLargeStepPx : railKeyboardStepPx
+  const nextWidth = currentWidth.value + direction * step
+
+  if (
+    props.mode === 'compact'
+    && direction > 0
+    && nextWidth >= layoutSettingLimits.activityCompactWidth.max
+  ) {
+    emit('setMode', 'expanded')
+    emit('setWidth', layoutSettingLimits.activityExpandedWidth.min)
+    return
+  }
+
+  applyResizeWidth(props.mode, nextWidth)
 }
 
 onBeforeUnmount(() => {
@@ -170,7 +204,13 @@ onBeforeUnmount(() => {
     data-testid="activity-splitter"
     role="separator"
     aria-label="Resize activity bar"
+    tabindex="0"
+    aria-orientation="vertical"
+    :aria-valuemin="currentWidthLimits.min"
+    :aria-valuemax="currentWidthLimits.max"
+    :aria-valuenow="currentWidth"
     @mousedown.prevent="beginResize"
+    @keydown="resizeWithKeyboard"
     @dblclick="emit('resetWidth')"
   />
 </template>

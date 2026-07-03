@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { OpenDocument } from '../../domain/documents/documentState'
 import type { EditorPane } from '../../application/types/shell'
+import { startDocumentDrag } from '../documentDrag'
 
 const props = defineProps<{
   documents: OpenDocument[]
@@ -16,21 +17,6 @@ const emit = defineEmits<{
   'update:collapsed': [collapsed: boolean]
   selectDocument: [pane: EditorPane, documentId: string]
 }>()
-
-type DragPayload = {
-  kind: 'tab' | 'open-editor'
-  documentId: string
-  paneId: EditorPane['id']
-}
-
-function startDocumentDrag(event: DragEvent, payload: DragPayload) {
-  event.dataTransfer?.setData('application/x-folden-drag', JSON.stringify(payload))
-  event.dataTransfer?.setData('text/plain', payload.documentId)
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.dropEffect = 'move'
-  }
-}
 
 function getDocumentPaneIds(documentId: string) {
   return props.visiblePanes

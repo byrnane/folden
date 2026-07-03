@@ -26,8 +26,16 @@ import EditorPaneGrid from './EditorPaneGrid.vue'
 import OpenEditors from './OpenEditors.vue'
 import WorkspaceTree from '../workspace/WorkspaceTree.vue'
 import { useApplicationShell } from '../../applicationShell'
-import { applicationSettingLimits } from '../../infrastructure/settings/settings'
+import {
+  applicationSettingLimits,
+  layoutSettingLimits,
+} from '../../infrastructure/settings/settings'
 import { uiIconSizes } from '../uiConstants'
+
+const resizeKeyboardStepPx = 16
+const resizeKeyboardLargeStepPx = 48
+const splitKeyboardStep = 0.025
+const splitKeyboardLargeStep = 0.1
 
 const {
   activeDocument,
@@ -264,7 +272,7 @@ function beginSidebarResize(event: MouseEvent) {
     width: layoutSettings.value.sidebarWidth,
   }
   window.addEventListener('mousemove', resizeSidebar)
-  window.addEventListener('mouseup', stopSidebarResize, { once: true })
+  window.addEventListener('mouseup', stopSidebarResize)
 }
 
 function resizeSidebar(event: MouseEvent) {
@@ -276,6 +284,18 @@ function resizeSidebar(event: MouseEvent) {
 function stopSidebarResize() {
   sidebarResizeStart.value = null
   window.removeEventListener('mousemove', resizeSidebar)
+  window.removeEventListener('mouseup', stopSidebarResize)
+}
+
+function resizeSidebarWithKeyboard(event: KeyboardEvent) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+    return
+  }
+
+  event.preventDefault()
+  const direction = event.key === 'ArrowRight' ? 1 : -1
+  const step = event.shiftKey ? resizeKeyboardLargeStepPx : resizeKeyboardStepPx
+  setSidebarWidth(layoutSettings.value.sidebarWidth + direction * step)
 }
 
 function beginSplitResize(event: MouseEvent) {
@@ -287,7 +307,7 @@ function beginSplitResize(event: MouseEvent) {
     width: parent?.clientWidth ?? window.innerWidth,
   }
   window.addEventListener('mousemove', resizeSplit)
-  window.addEventListener('mouseup', stopSplitResize, { once: true })
+  window.addEventListener('mouseup', stopSplitResize)
 }
 
 function resizeSplit(event: MouseEvent) {
@@ -299,6 +319,18 @@ function resizeSplit(event: MouseEvent) {
 function stopSplitResize() {
   splitResizeStart.value = null
   window.removeEventListener('mousemove', resizeSplit)
+  window.removeEventListener('mouseup', stopSplitResize)
+}
+
+function resizeSplitWithKeyboard(event: KeyboardEvent) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+    return
+  }
+
+  event.preventDefault()
+  const direction = event.key === 'ArrowRight' ? 1 : -1
+  const step = event.shiftKey ? splitKeyboardLargeStep : splitKeyboardStep
+  setSplitRatio(layoutSettings.value.splitRatio + direction * step)
 }
 
 let labelFitObserver: ResizeObserver | null = null
@@ -395,6 +427,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleGlobalPointerDown)
   document.removeEventListener('keydown', handleGlobalKeyDown)
   stopSidebarResize()
+  stopSplitResize()
   if (labelFitFrame) {
     cancelAnimationFrame(labelFitFrame)
   }
@@ -606,7 +639,13 @@ onBeforeUnmount(() => {
       class="sidebar-splitter"
       role="separator"
       aria-label="Resize sidebar"
+      tabindex="0"
+      aria-orientation="vertical"
+      :aria-valuemin="layoutSettingLimits.sidebarWidth.min"
+      :aria-valuemax="layoutSettingLimits.sidebarWidth.max"
+      :aria-valuenow="layoutSettings.sidebarWidth"
       @mousedown="beginSidebarResize"
+      @keydown="resizeSidebarWithKeyboard"
       @dblclick="resetLayoutSettings"
     />
 
@@ -934,6 +973,7 @@ onBeforeUnmount(() => {
         :visible-panes="visiblePanes"
         :active-pane-id="activePaneId"
         :split-enabled="splitEnabled"
+        :split-ratio="layoutSettings.splitRatio"
         :app-settings="appSettings"
         :workspace-root-path="workspace?.rootPath ?? null"
         :clean-display-path="cleanDisplayPath"
@@ -947,6 +987,7 @@ onBeforeUnmount(() => {
         :set-pane-editor-adapter="setPaneEditorAdapter"
         :should-load-remote-images="shouldLoadRemoteImages"
         @begin-split-resize="beginSplitResize"
+        @keyboard-split-resize="resizeSplitWithKeyboard"
         @document-update="handleDocumentUpdate"
         @move-document-between-panes="moveDocumentIdBetweenPanes"
         @reorder-document-in-pane="reorderDocumentInPane"

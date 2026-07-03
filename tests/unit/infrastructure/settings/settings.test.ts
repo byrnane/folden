@@ -6,10 +6,12 @@ import {
   defaultLayoutSettings,
   layoutSettingLimits,
   loadApplicationSettings,
+  loadLayoutSettings,
   normalizeLayoutSettings,
   normalizeApplicationSettings,
   normalizeWorkspaceIgnoredNames,
   saveApplicationSettings,
+  saveLayoutSettings,
 } from '../../../../src/infrastructure/settings/settings'
 
 describe('application settings', () => {
@@ -83,9 +85,44 @@ describe('application settings', () => {
       ...defaultLayoutSettings,
       activityRailMode: 'expanded',
       activityCompactWidth: layoutSettingLimits.activityCompactWidth.max,
-      activityExpandedWidth: 132,
+      activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.min,
     })
   })
+
+  it.each([
+    [
+      layoutSettingLimits.activityExpandedWidth.min - 1,
+      layoutSettingLimits.activityExpandedWidth.min,
+      layoutSettingLimits.activityCompactWidth.max,
+    ],
+    [
+      layoutSettingLimits.activityExpandedWidth.min,
+      layoutSettingLimits.activityExpandedWidth.min,
+      layoutSettingLimits.activityCompactWidth.max,
+    ],
+    [
+      layoutSettingLimits.activityExpandedWidth.max,
+      layoutSettingLimits.activityExpandedWidth.max,
+      layoutSettingLimits.activityCompactWidth.max,
+    ],
+    [
+      layoutSettingLimits.activityExpandedWidth.max + 1,
+      layoutSettingLimits.activityExpandedWidth.max,
+      layoutSettingLimits.activityCompactWidth.max,
+    ],
+  ])(
+    'clamps migrated legacy activity width %s to expanded %s',
+    (activityWidth, activityExpandedWidth, activityCompactWidth) => {
+      expect(normalizeLayoutSettings({
+        activityWidth,
+      })).toEqual({
+        ...defaultLayoutSettings,
+        activityRailMode: 'expanded',
+        activityCompactWidth,
+        activityExpandedWidth,
+      })
+    },
+  )
 
   it('keeps compact and expanded rail widths independent and clamped', () => {
     expect(normalizeLayoutSettings({
@@ -117,6 +154,37 @@ describe('application settings', () => {
     }
 
     expect(loadApplicationSettings(storage)).toEqual(defaultApplicationSettings)
+  })
+
+  it('loads default layout settings when persisted layout JSON is invalid', () => {
+    const storage = {
+      getItem: () => '{',
+    }
+
+    expect(loadLayoutSettings(storage)).toEqual(defaultLayoutSettings)
+  })
+
+  it('saves and restores normalized layout settings', () => {
+    let persistedValue = ''
+    const storage = {
+      getItem: () => persistedValue,
+      setItem: (_key: string, value: string) => {
+        persistedValue = value
+      },
+    }
+
+    const settings = {
+      ...defaultLayoutSettings,
+      activityRailMode: 'expanded' as const,
+      activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.min,
+      sidebarWidth: layoutSettingLimits.sidebarWidth.max,
+      splitRatio: layoutSettingLimits.splitRatio.min,
+      focusMode: true,
+    }
+
+    saveLayoutSettings(settings, storage)
+
+    expect(loadLayoutSettings(storage)).toEqual(settings)
   })
 
   it('persists settings without document content', () => {

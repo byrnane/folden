@@ -17,7 +17,7 @@ import {
   SquareCode,
   Strikethrough,
 } from 'lucide-vue-next'
-import type { Component } from 'vue'
+import { ref, type Component } from 'vue'
 import type { VisualEditorCommand } from '../../application/types/shell'
 import { uiIconSizes } from '../uiConstants'
 
@@ -31,6 +31,8 @@ type VisualToolbarItem = {
 const emit = defineEmits<{
   runCommand: [command: VisualEditorCommand]
 }>()
+
+const headingsMenuOpen = ref(false)
 
 const headingToolbarCommands: VisualToolbarItem[] = [
   { command: 'heading-1', title: 'Heading 1', label: 'Heading 1', icon: Heading1 },
@@ -83,6 +85,7 @@ const visualToolbarGroups: Array<{
 function runToolbarMenuCommand(event: MouseEvent, command: VisualEditorCommand) {
   emit('runCommand', command)
   ;(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')
+  headingsMenuOpen.value = false
 }
 </script>
 
@@ -102,11 +105,16 @@ function runToolbarMenuCommand(event: MouseEvent, command: VisualEditorCommand) 
           <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbar" />
           <span>{{ item.label }}</span>
         </button>
-        <details class="toolbar-menu" data-close-on-outside>
+        <details
+          class="toolbar-menu"
+          data-close-on-outside
+          @toggle="headingsMenuOpen = ($event.currentTarget as HTMLDetailsElement).open"
+        >
           <summary
             class="toolbar-button toolbar-menu-trigger"
             title="Headings"
             aria-label="Headings"
+            :aria-expanded="headingsMenuOpen"
           >
             <Heading1 :size="uiIconSizes.toolbar" />
             <span>Headings</span>

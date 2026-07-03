@@ -7,6 +7,11 @@ import type { ApplicationSettings } from '../../infrastructure/settings/settings
 import type { EditorAdapter, EditorPane } from '../../application/types/shell'
 import SourceEditor from '../editors/SourceEditor.vue'
 import VisualMarkdownEditor from '../editors/VisualMarkdownEditor.vue'
+import {
+  readDocumentDragPayload,
+  startDocumentDrag,
+  type DocumentDragPayload,
+} from '../documentDrag'
 import { uiIconSizes } from '../uiConstants'
 
 const tabPointerDragStartDistancePx = 5
@@ -15,6 +20,7 @@ const props = defineProps<{
   visiblePanes: EditorPane[]
   activePaneId: EditorPane['id']
   splitEnabled: boolean
+  splitRatio: number
   appSettings: ApplicationSettings
   workspaceRootPath: string | null
   cleanDisplayPath: (path: string) => string
@@ -38,16 +44,11 @@ const emit = defineEmits<{
     targetPaneId: EditorPane['id'],
     targetIndex?: number,
   ]
+  keyboardSplitResize: [event: KeyboardEvent]
   reorderDocumentInPane: [paneId: EditorPane['id'], documentId: string, targetIndex: number]
   resetLayout: []
   setActivePane: [paneId: EditorPane['id']]
 }>()
-
-type DragPayload = {
-  kind: 'tab' | 'open-editor'
-  documentId: string
-  paneId: EditorPane['id']
-}
 
 type TabPointerDrag = {
   documentId: string
@@ -60,32 +61,9 @@ type TabPointerDrag = {
 const tabPointerDrag = ref<TabPointerDrag | null>(null)
 const suppressNextTabClick = ref(false)
 
-function startDocumentDrag(event: DragEvent, payload: DragPayload) {
-  event.dataTransfer?.setData('application/x-folden-drag', JSON.stringify(payload))
-  event.dataTransfer?.setData('text/plain', payload.documentId)
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.dropEffect = 'move'
-  }
-}
-
 function handleDocumentDragOver(event: DragEvent) {
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'move'
-  }
-}
-
-function readDragPayload(event: DragEvent) {
-  const rawValue = event.dataTransfer?.getData('application/x-folden-drag')
-
-  if (!rawValue) {
-    return null
-  }
-
-  try {
-    return JSON.parse(rawValue) as DragPayload
-  } catch {
-    return null
   }
 }
 
@@ -97,48 +75,54 @@ function getDroppedPath(event: DragEvent) {
   return file?.path ?? file?.webkitRelativePath ?? null
 }
 
-function handlePaneDrop(event: DragEvent, targetPaneId: EditorPane['id']) {
-  const payload = readDragPayload(event)
-
-  if (!payload) {
-    const droppedPath = getDroppedPath(event)
-
-    if (droppedPath) {
-      event.preventDefault()
-      void props.openDroppedPath(droppedPath, targetPaneId)
-    }
-
-    return
-  }
-
-  event.preventDefault()
-  event.stopPropagation()
-  emit('moveDocumentBetweenPanes', payload.documentId, payload.paneId, targetPaneId)
-}
-
-function handleTabDrop(event: DragEvent, targetPaneId: EditorPane['id'], targetIndex: number) {
-  const payload = readDragPayload(event)
-
-  if (!payload) {
-    const droppedPath = getDroppedPath(event)
-
-    if (droppedPath) {
-      event.preventDefault()
-      void props.openDroppedPath(droppedPath, targetPaneId)
-    }
-
-    return
-  }
-
-  event.preventDefault()
-  event.stopPropagation()
-
-  if (payload.kind === 'tab' && payload.paneId === targetPaneId) {
+function moveDroppedDocument(
+  payload: DocumentDragPayload,
+  targetPaneId: EditorPane['id'],
+  targetIndex?: number,
+) {
+  if (payload.kind === 'tab' && payload.paneId === targetPaneId && targetIndex !== undefined) {
     emit('reorderDocumentInPane', targetPaneId, payload.documentId, targetIndex)
     return
   }
 
   emit('moveDocumentBetweenPanes', payload.documentId, payload.paneId, targetPaneId, targetIndex)
+}
+
+function openDroppedFile(event: DragEvent, targetPaneId: EditorPane['id']) {
+  const droppedPath = getDroppedPath(event)
+
+  if (!droppedPath) {
+    return
+  }
+
+  event.preventDefault()
+  void props.openDroppedPath(droppedPath, targetPaneId)
+}
+
+function handlePaneDrop(event: DragEvent, targetPaneId: EditorPane['id']) {
+  const payload = readDocumentDragPayload(event)
+
+  if (!payload) {
+    openDroppedFile(event, targetPaneId)
+    return
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  moveDroppedDocument(payload, targetPaneId)
+}
+
+function handleTabDrop(event: DragEvent, targetPaneId: EditorPane['id'], targetIndex: number) {
+  const payload = readDocumentDragPayload(event)
+
+  if (!payload) {
+    openDroppedFile(event, targetPaneId)
+    return
+  }
+
+  event.preventDefault()
+  event.stopPropagation()
+  moveDroppedDocument(payload, targetPaneId, targetIndex)
 }
 
 function handleTabListDrop(event: DragEvent, targetPaneId: EditorPane['id']) {
@@ -214,12 +198,11 @@ function finishTabPointerDrag(event: PointerEvent) {
     return
   }
 
-  if (drag.sourcePaneId === target.paneId) {
-    emit('reorderDocumentInPane', target.paneId, drag.documentId, target.targetIndex)
-    return
-  }
-
-  emit('moveDocumentBetweenPanes', drag.documentId, drag.sourcePaneId, target.paneId, target.targetIndex)
+  moveDroppedDocument({
+    kind: 'tab',
+    documentId: drag.documentId,
+    paneId: drag.sourcePaneId,
+  }, target.paneId, target.targetIndex)
 }
 
 function handleTabClick(pane: EditorPane, documentId: string) {
@@ -339,7 +322,13 @@ function closeTabOnAuxClick(event: MouseEvent, pane: EditorPane, documentId: str
       class="pane-splitter"
       role="separator"
       aria-label="Resize editor panes"
+      tabindex="0"
+      aria-orientation="vertical"
+      aria-valuemin="25"
+      aria-valuemax="75"
+      :aria-valuenow="Math.round(splitRatio * 100)"
       @mousedown="emit('beginSplitResize', $event)"
+      @keydown="emit('keyboardSplitResize', $event)"
       @dblclick="emit('resetLayout')"
     />
   </section>
