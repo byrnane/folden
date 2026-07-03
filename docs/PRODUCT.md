@@ -51,19 +51,21 @@ Supporting data must not become the canonical copy of a saved document.
 
 ## Current Product Surface
 
-Folden `0.4.15` supports:
+Folden `0.6.9` supports:
 
 * native text file open/save;
-* workspace folder browsing and workspace file operations;
-* multiple documents with tabs;
-* two-pane split view;
+* workspace folder browsing, lazy tree loading, recent workspaces, ignored names, and workspace file operations;
+* multiple documents with tabs, tab reorder, tab transfer between panes, and Open Editors;
+* two-pane split view with shared document sessions and persisted split ratio;
+* activity rail, workspace and settings sections, focus mode, resizable sidebar and rail, density settings, and layout reset;
 * source mode with CodeMirror;
-* visual Markdown mode with Tiptap;
+* visual Markdown mode with Tiptap and a shared Markdown toolbar;
 * explicit dirty state, undo, redo, save, save as copy, and close protection;
-* autosave for saved documents when enabled;
+* autosave for saved documents when enabled, including delay, window-blur, and document-switch settings;
 * recovery for scratch and saved documents after an unexpected shutdown;
 * external change detection, missing-file states, stale-save protection, and conflict resolution;
-* local diagnostics and log access.
+* local diagnostics export, log access, and toast feedback;
+* remote image blocking in Visual mode until the user allows images for the document.
 
 ## Boundaries
 
@@ -76,7 +78,8 @@ Folden is not currently:
 * an online account system;
 * a database-backed document store;
 * a plugin platform;
-* an AI writing product.
+* an AI writing product;
+* an arbitrary split-grid editor.
 
 Future features should keep the same product contract: user documents stay file-first and readable outside Folden.
 
