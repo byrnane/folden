@@ -1,12 +1,15 @@
 # Folden
 
+English | [Русский](README.ru.md)
+
 Folden is a local-first desktop editor for Markdown and plain text files.
 
-The project is built around three product principles:
+The project is built around four product principles:
 
 * local-first: user content stays on the user's machine;
 * file-first: ordinary files remain the source of truth;
-* Markdown-friendly: documents stay readable and editable outside Folden.
+* Markdown-friendly: documents stay readable and editable outside Folden;
+* direct before clever: core workflows should stay clear and predictable.
 
 ## Status
 
