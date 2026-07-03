@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { X } from 'lucide-vue-next'
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import type { EditorAdapter, EditorPane, EditorPaneView } from '../../application/types/shell'
 import SourceEditor from '../editors/SourceEditor.vue'
@@ -9,6 +9,13 @@ import {
   readDocumentDragPayload,
   type DocumentDragPayload,
 } from '../documentDrag'
+import {
+  cleanupEditorPaneGridInteractionState,
+  clearPendingTabClickSuppression,
+  releaseTabPointerCapture,
+  type EditorPaneGridInteractionState,
+  type TabPointerDrag,
+} from './editorPaneGridLifecycle'
 import { uiIconSizes } from '../uiConstants'
 
 const tabPointerDragStartDistancePx = 5
@@ -41,19 +48,14 @@ const emit = defineEmits<{
   setActivePane: [paneId: EditorPane['id']]
 }>()
 
-type TabPointerDrag = {
-  documentId: string
-  sourcePaneId: EditorPane['id']
-  pointerId: number
-  sourceElement: HTMLElement
-  startX: number
-  startY: number
-  dragging: boolean
-}
-
 const tabPointerDrag = ref<TabPointerDrag | null>(null)
 const suppressNextTabClick = ref(false)
-let suppressNextTabClickTimeout = 0
+let editorPaneGridUnmounted = false
+const interactionState: EditorPaneGridInteractionState = {
+  tabPointerDrag,
+  suppressNextTabClick,
+  suppressNextTabClickTimeout: 0,
+}
 
 function handleDocumentDragOver(event: DragEvent) {
   if (event.dataTransfer) {
@@ -186,12 +188,6 @@ function handleTabPointerMove(event: PointerEvent) {
   event.preventDefault()
 }
 
-function releaseTabPointerCapture(drag: TabPointerDrag) {
-  if (drag.sourceElement.hasPointerCapture(drag.pointerId)) {
-    drag.sourceElement.releasePointerCapture(drag.pointerId)
-  }
-}
-
 function cancelTabPointerDrag() {
   const drag = tabPointerDrag.value
   tabPointerDrag.value = null
@@ -221,10 +217,14 @@ function finishTabPointerDrag(event: PointerEvent) {
 
   releaseTabPointerCapture(drag)
   suppressNextTabClick.value = true
-  window.clearTimeout(suppressNextTabClickTimeout)
-  suppressNextTabClickTimeout = window.setTimeout(() => {
+  window.clearTimeout(interactionState.suppressNextTabClickTimeout)
+  interactionState.suppressNextTabClickTimeout = window.setTimeout(() => {
+    if (editorPaneGridUnmounted) {
+      return
+    }
+
     suppressNextTabClick.value = false
-    suppressNextTabClickTimeout = 0
+    interactionState.suppressNextTabClickTimeout = 0
   })
   moveDroppedDocument({
     kind: 'tab',
@@ -235,9 +235,7 @@ function finishTabPointerDrag(event: PointerEvent) {
 
 function handleTabClick(pane: EditorPane, documentId: string) {
   if (suppressNextTabClick.value) {
-    window.clearTimeout(suppressNextTabClickTimeout)
-    suppressNextTabClickTimeout = 0
-    suppressNextTabClick.value = false
+    clearPendingTabClickSuppression(interactionState)
     return
   }
 
@@ -249,6 +247,11 @@ function closeTabOnAuxClick(event: MouseEvent, pane: EditorPane, documentId: str
     void props.closeDocument(pane, documentId)
   }
 }
+
+onBeforeUnmount(() => {
+  editorPaneGridUnmounted = true
+  cleanupEditorPaneGridInteractionState(interactionState)
+})
 </script>
 
 <template>

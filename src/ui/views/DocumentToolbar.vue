@@ -34,6 +34,8 @@ const emit = defineEmits<{
 
 const headingsMenuOpen = ref(false)
 const headingsMenuElement = ref<HTMLElement | null>(null)
+const headingsMenuTriggerElement = ref<HTMLButtonElement | null>(null)
+const headingsMenuId = 'document-toolbar-headings-menu'
 
 const headingToolbarCommands: VisualToolbarItem[] = [
   { command: 'heading-1', title: 'Heading 1', label: 'Heading 1', icon: Heading1 },
@@ -83,8 +85,13 @@ const visualToolbarGroups: Array<{
   },
 ]
 
-function closeHeadingsMenu() {
+function closeHeadingsMenu(options: { restoreFocus?: boolean } = {}) {
+  const wasOpen = headingsMenuOpen.value
   headingsMenuOpen.value = false
+
+  if (wasOpen && options.restoreFocus) {
+    headingsMenuTriggerElement.value?.focus()
+  }
 }
 
 function toggleHeadingsMenu() {
@@ -104,8 +111,9 @@ function handleDocumentPointerDown(event: PointerEvent) {
 }
 
 function handleDocumentKeyDown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    closeHeadingsMenu()
+  if (event.key === 'Escape' && headingsMenuOpen.value) {
+    event.preventDefault()
+    closeHeadingsMenu({ restoreFocus: true })
   }
 }
 
@@ -146,19 +154,20 @@ onBeforeUnmount(() => {
           class="toolbar-menu"
         >
           <button
+            ref="headingsMenuTriggerElement"
             type="button"
             class="toolbar-button toolbar-menu-trigger"
             title="Headings"
             aria-label="Headings"
             :aria-expanded="headingsMenuOpen"
-            aria-haspopup="menu"
+            :aria-controls="headingsMenuId"
             @click="toggleHeadingsMenu"
           >
             <Heading1 :size="uiIconSizes.toolbar" />
             <span>Headings</span>
             <ChevronDown class="toolbar-menu-chevron" :size="uiIconSizes.toolbarChevron" />
           </button>
-          <div v-if="headingsMenuOpen" class="toolbar-menu-list" role="menu">
+          <div v-show="headingsMenuOpen" :id="headingsMenuId" class="toolbar-menu-list">
             <button
               v-for="item in headingToolbarCommands"
               :key="item.command"
@@ -166,7 +175,6 @@ onBeforeUnmount(() => {
               class="toolbar-menu-item"
               :title="item.title"
               :aria-label="item.title"
-              role="menuitem"
               @click="runToolbarMenuCommand(item.command)"
             >
               <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbarMenuItem" />

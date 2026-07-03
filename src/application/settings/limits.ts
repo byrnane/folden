@@ -58,12 +58,3 @@ export const layoutSettingLimits = {
     fallback: 0.5,
   },
 } as const satisfies Record<string, NumberLimit>
-
-export const activityRailResizeThresholds = {
-  expandFromCompactWidth: 104,
-  collapseFromExpandedWidth: 96,
-} as const
-
-export const legacyLayoutSettingThresholds = {
-  expandedActivityRailWidth: layoutSettingLimits.activityCompactWidth.max,
-} as const

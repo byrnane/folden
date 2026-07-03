@@ -5,7 +5,6 @@ import {
 import {
   applicationSettingLimits,
   layoutSettingLimits,
-  legacyLayoutSettingThresholds,
 } from './limits'
 import type {
   AppearanceSettings,
@@ -142,11 +141,6 @@ export function normalizeLayoutSettings(value: unknown): LayoutSettings {
   }
 
   const candidate = value as Partial<LayoutSettings>
-  const legacyActivityWidth = (candidate as Partial<LayoutSettings> & { activityWidth?: unknown }).activityWidth
-  const migratedActivityRailMode = typeof legacyActivityWidth === 'number'
-    && legacyActivityWidth > legacyLayoutSettingThresholds.expandedActivityRailWidth
-    ? 'expanded'
-    : defaultLayoutSettings.activityRailMode
 
   return {
     activeActivitySection: candidate.activeActivitySection === 'settings'
@@ -154,15 +148,15 @@ export function normalizeLayoutSettings(value: unknown): LayoutSettings {
       : defaultLayoutSettings.activeActivitySection,
     activityRailMode: candidate.activityRailMode === 'expanded' || candidate.activityRailMode === 'compact'
       ? candidate.activityRailMode
-      : migratedActivityRailMode,
+      : defaultLayoutSettings.activityRailMode,
     activityCompactWidth: clampNumber(
-      candidate.activityCompactWidth ?? legacyActivityWidth,
+      candidate.activityCompactWidth,
       layoutSettingLimits.activityCompactWidth.min,
       layoutSettingLimits.activityCompactWidth.max,
       defaultLayoutSettings.activityCompactWidth,
     ),
     activityExpandedWidth: clampNumber(
-      candidate.activityExpandedWidth ?? legacyActivityWidth,
+      candidate.activityExpandedWidth,
       layoutSettingLimits.activityExpandedWidth.min,
       layoutSettingLimits.activityExpandedWidth.max,
       defaultLayoutSettings.activityExpandedWidth,
