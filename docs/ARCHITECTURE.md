@@ -1,6 +1,6 @@
 # Folden Architecture
 
-This document describes the current `0.4.15` codebase. It is the main reference for changing the application structure.
+This document describes the current `0.6.9` codebase. It is the main reference for changing the application structure.
 
 ## Dependency Flow
 
@@ -34,6 +34,7 @@ Application orchestration lives here:
 
 * `applicationShell.ts` composes controllers, infrastructure adapters, lifecycle hooks, and the facade returned to the UI.
 * `controllers/` owns application state, workflows, dialogs, commands, session persistence, external changes, and lifecycle.
+* `settings/` owns application and layout setting types, defaults, limits, and normalization.
 * `ports/nativePorts.ts` defines the application-side contracts for native capabilities.
 * helpers and shell types keep application-specific formatting and facade types near the shell.
 
@@ -57,7 +58,7 @@ Infrastructure implements application contracts:
 
 * `infrastructure/tauri/nativePorts.ts` groups Tauri-backed implementations of native ports;
 * `infrastructure/tauri/files.ts` contains low-level Tauri command invocation helpers;
-* `infrastructure/settings/settings.ts` persists browser-side application settings.
+* `infrastructure/settings/settings.ts` persists browser-side application and layout settings and handles legacy layout migration.
 
 Infrastructure can depend on application port types and domain DTOs. It should not own product workflows.
 
@@ -68,6 +69,7 @@ Infrastructure can depend on application port types and domain DTOs. It should n
 * Application workflows do not import Tauri APIs directly.
 * `infrastructure` implements application ports.
 * `ui` calls the application facade returned by `useApplicationShell`.
+* UI layout components such as `ActivityRail.vue`, `OpenEditors.vue`, `DocumentToolbar.vue`, and `EditorPaneGrid.vue` own rendering and direct interaction details, not application workflows.
 * `applicationShell` is the composition root. It wires dependencies and exposes state/actions, but it is not the place for new domain logic or large workflows.
 
 ## State Ownership
@@ -84,6 +86,7 @@ State-controller responsibilities:
 * `visualSafetyController` owns Visual-mode safety decisions and per-document remote-image permissions.
 * `dialogController` owns prompt, confirm, unsaved, Markdown safety, conflict, and recovery dialog state.
 * `commandController` and `applicationCommandController` own command registration and command execution.
+* Application settings and layout settings are normalized in `src/application/settings`. Browser persistence stays in `src/infrastructure/settings/settings.ts`.
 
 Workflow-controller responsibilities:
 
@@ -162,6 +165,14 @@ Module responsibilities:
 3. `visualSafetyController` analyzes Markdown safety and prompts when needed.
 4. The current editor content is flushed before the mode changes.
 5. `paneController` records the selected mode for that pane/document pair.
+
+### Updating settings and layout
+
+1. Settings UI edits `appSettings` or `layoutSettings` exposed by the application facade.
+2. Application setting types, limits, defaults, and normalization live in `src/application/settings`.
+3. Browser persistence is handled by `src/infrastructure/settings/settings.ts`.
+4. Legacy persisted layout values are migrated at load time in infrastructure.
+5. Document state remains separate from settings and session persistence.
 
 ### Opening and updating a workspace
 
@@ -262,6 +273,15 @@ Example feature requiring filesystem/native access:
 | Rust path/filesystem/persistence behavior | Rust module tests |
 | User-visible editing/workspace flow | Playwright E2E smoke plus targeted unit tests |
 | Close, save, recovery, or watcher behavior | Unit tests, Rust tests when native behavior changed, and manual desktop smoke |
+
+Current Playwright E2E specs live in `tests/e2e`:
+
+* `panes-tabs.spec.ts`: split panes, tab reorder/transfer, Open Editors, and malformed drag payloads.
+* `recovery-conflict.spec.ts`: recovery, external changes, missing files, and conflicts.
+* `settings-autosave.spec.ts`: settings persistence, diagnostics export, and autosave behavior.
+* `shell-layout.spec.ts`: activity rail, toolbar behavior, layout persistence, fit labels, and reset layout.
+* `visual-safety.spec.ts`: Visual-mode safety and local/remote image behavior.
+* `workspace-save.spec.ts`: workspace open/create/rename/trash and save refresh flows.
 
 ## Lifecycle and Cleanup
 

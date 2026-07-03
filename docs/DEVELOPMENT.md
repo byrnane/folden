@@ -1,6 +1,6 @@
 # Folden Development
 
-This document covers setup, commands, checks, CI, build artifacts, and release workflow. See [ARCHITECTURE.md](ARCHITECTURE.md) for code ownership and dependency rules.
+This document covers setup, commands, checks, CI, build artifacts, and release workflow. See [ARCHITECTURE.md](ARCHITECTURE.md) for code ownership and dependency rules, and [RELEASE.md](RELEASE.md) for the release checklist.
 
 ## Requirements
 
@@ -76,6 +76,12 @@ Build the Tauri app without installers:
 
 ```powershell
 npm run app:build
+```
+
+Build installer bundles for release verification:
+
+```powershell
+npm run tauri -- build
 ```
 
 Run the last built desktop executable:
@@ -219,4 +225,4 @@ npm run version:bump -- patch
 
 `version:bump` updates the tracked application version files and prepares the top changelog entry. Use it only for an intentional release commit. Documentation-only commits should not bump the version or add a user-facing changelog release entry.
 
-Before a release commit, run the full quality gate expected for the release scope and manually smoke-test the desktop app from the built executable when user-facing behavior changed.
+Before a release commit, run the full quality gate expected for the release scope and manually smoke-test the desktop app from the built executable when user-facing behavior changed. Before publishing a release, use [RELEASE.md](RELEASE.md) and verify the installer bundle, not only `npm run app:build`.
