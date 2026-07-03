@@ -6,6 +6,10 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.6.7 - 2026-07-03
+
+* Черновик release notes.
+
 ## 0.6.6 - 2026-07-03
 
 * `AppShell.vue` разгружен: Open Editors, Visual toolbar и editor pane grid вынесены в отдельные компоненты.

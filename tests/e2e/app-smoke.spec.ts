@@ -5,6 +5,7 @@ import {
   applicationSettingsStorageKey,
   layoutSettingLimits,
 } from '../../src/infrastructure/settings/settings'
+import { documentDragMimeType } from '../../src/ui/documentDrag'
 import { installTauriMock } from './tauriMock'
 
 type OpenAppOptions = {
@@ -53,6 +54,13 @@ async function dragBy(locator: Locator, deltaX: number) {
   await locator.page().mouse.down()
   await locator.page().mouse.move(box!.x + box!.width / 2 + deltaX, box!.y + box!.height / 2, { steps: 8 })
   await locator.page().mouse.up()
+}
+
+async function readPersistedLayout(page: Page) {
+  return page.evaluate((storageKey) => {
+    const value = window.localStorage.getItem(storageKey)
+    return value ? JSON.parse(value) as Record<string, unknown> : null
+  }, applicationLayoutStorageKey)
 }
 
 test('opens a mocked workspace and saves an edited Markdown document', async ({ page }) => {
@@ -269,6 +277,31 @@ test('reorders tabs with drag and drop', async ({ page }) => {
   await expect(leftTabs.nth(2)).toContainText('README.md')
 })
 
+test('ignores malformed document drag payloads', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+  await page.getByTestId('workspace-entry-notes').click()
+  await page.getByTestId('workspace-entry-notes\\daily.md').click()
+
+  const leftTabs = page.locator('.editor-pane').first().locator('.pane-tabs .tab-button')
+  await expect(leftTabs).toHaveCount(3)
+  const beforeDrop = await leftTabs.allTextContents()
+
+  await leftTabs.nth(1).evaluate((target, mimeType) => {
+    const dataTransfer = new DataTransfer()
+    dataTransfer.setData(mimeType, '{"kind":"tab","documentId":42,"paneId":"left"}')
+    target.dispatchEvent(new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer,
+    }))
+  }, documentDragMimeType)
+
+  await expect(leftTabs).toHaveCount(3)
+  expect(await leftTabs.allTextContents()).toEqual(beforeDrop)
+})
+
 test('shows split open editors and marks the active pane document', async ({ page }) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
@@ -371,6 +404,51 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
 
   await dragBy(page.locator('.sidebar-splitter'), 320)
   await expect(scratchLabel).toBeVisible()
+})
+
+test('resizes layout separators with keyboard and exposes values to assistive tech', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+
+  const activitySeparator = page.getByRole('separator', { name: 'Resize activity bar' })
+  await expect(activitySeparator).toHaveAttribute('tabindex', '0')
+  await expect(activitySeparator).toHaveAttribute('aria-orientation', 'vertical')
+  await expect(activitySeparator).toHaveAttribute('aria-valuemin', String(layoutSettingLimits.activityCompactWidth.min))
+  await expect(activitySeparator).toHaveAttribute('aria-valuemax', String(layoutSettingLimits.activityCompactWidth.max))
+  await expect(activitySeparator).toHaveAttribute('aria-valuenow', String(layoutSettingLimits.activityCompactWidth.fallback))
+  await activitySeparator.focus()
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(async () => readPersistedLayout(page)).toMatchObject({
+    activityRailMode: 'expanded',
+  })
+  await expect(activitySeparator).toHaveAttribute('aria-valuemin', String(layoutSettingLimits.activityExpandedWidth.min))
+
+  const sidebarSeparator = page.getByRole('separator', { name: 'Resize sidebar' })
+  await expect(sidebarSeparator).toHaveAttribute('tabindex', '0')
+  await expect(sidebarSeparator).toHaveAttribute('aria-orientation', 'vertical')
+  await expect(sidebarSeparator).toHaveAttribute('aria-valuemin', String(layoutSettingLimits.sidebarWidth.min))
+  await expect(sidebarSeparator).toHaveAttribute('aria-valuemax', String(layoutSettingLimits.sidebarWidth.max))
+  await sidebarSeparator.focus()
+  await page.keyboard.press('Shift+ArrowLeft')
+  await expect.poll(async () => readPersistedLayout(page)).toMatchObject({
+    sidebarWidth: layoutSettingLimits.sidebarWidth.fallback - 48,
+  })
+
+  await page.locator('button[title="Toggle split view"]').click()
+  const splitSeparator = page.getByRole('separator', { name: 'Resize editor panes' })
+  await expect(splitSeparator).toHaveAttribute('tabindex', '0')
+  await expect(splitSeparator).toHaveAttribute('aria-orientation', 'vertical')
+  await expect(splitSeparator).toHaveAttribute('aria-valuemin', '25')
+  await expect(splitSeparator).toHaveAttribute('aria-valuemax', '75')
+  await expect(splitSeparator).toHaveAttribute('aria-valuenow', '50')
+  await splitSeparator.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(async () => readPersistedLayout(page)).toMatchObject({
+    splitRatio: 0.525,
+  })
+  await expect(splitSeparator).toHaveAttribute('aria-valuenow', '53')
 })
 
 test('loads persisted settings before opening a workspace', async ({ page }) => {
