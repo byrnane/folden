@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import {
-  Bold,
-  ChevronDown,
   Columns2,
-  Code,
   Eye,
   FileCode2,
   FilePenLine,
@@ -11,36 +8,26 @@ import {
   FolderOpen,
   FolderPlus,
   Focus,
-  Heading1,
-  Heading2,
-  Heading3,
   Image as ImageIcon,
-  Italic,
-  Link as LinkIcon,
-  List,
-  ListOrdered,
-  Minus,
   PanelLeftOpen,
   PanelRightOpen,
-  Quote,
-  RemoveFormatting,
   Save,
-  SquareCode,
-  Strikethrough,
-  X,
 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ConfirmDialog from '../dialogs/ConfirmDialog.vue'
 import ConflictResolutionDialog from '../dialogs/ConflictResolutionDialog.vue'
 import MarkdownSafetyDialog from '../dialogs/MarkdownSafetyDialog.vue'
 import PromptDialog from '../dialogs/PromptDialog.vue'
 import RecoveryDialog from '../dialogs/RecoveryDialog.vue'
 import UnsavedChangesDialog from '../dialogs/UnsavedChangesDialog.vue'
-import SourceEditor from '../editors/SourceEditor.vue'
-import VisualMarkdownEditor from '../editors/VisualMarkdownEditor.vue'
 import ActivityRail from './ActivityRail.vue'
+import DocumentToolbar from './DocumentToolbar.vue'
+import EditorPaneGrid from './EditorPaneGrid.vue'
+import OpenEditors from './OpenEditors.vue'
 import WorkspaceTree from '../workspace/WorkspaceTree.vue'
-import { useApplicationShell, type EditorAdapter, type VisualEditorCommand } from '../../applicationShell'
+import { useApplicationShell } from '../../applicationShell'
+import { applicationSettingLimits } from '../../infrastructure/settings/settings'
+import { uiIconSizes } from '../uiConstants'
 
 const {
   activeDocument,
@@ -124,20 +111,6 @@ const {
   workspaceNameFromPath,
 } = useApplicationShell()
 
-type DragPayload = {
-  kind: 'tab' | 'open-editor'
-  documentId: string
-  paneId: 'left' | 'right'
-}
-
-type TabPointerDrag = {
-  documentId: string
-  sourcePaneId: 'left' | 'right'
-  startX: number
-  startY: number
-  dragging: boolean
-}
-
 const openEditorsCollapsed = ref(false)
 const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
 const appShellElement = ref<HTMLElement | null>(null)
@@ -150,8 +123,6 @@ const lineHeightInput = ref(String(appSettings.value.editor.lineHeight))
 const visualMaxWidthInput = ref(String(appSettings.value.editor.visualMaxWidth))
 const autosaveDelaySecondsInput = ref(formatSeconds(appSettings.value.autosave.debounceMs))
 const uiScaleInput = ref(String(appSettings.value.appearance.uiScale))
-const tabPointerDrag = ref<TabPointerDrag | null>(null)
-const suppressNextTabClick = ref(false)
 
 const activityWidth = computed(() => layoutSettings.value.activityRailMode === 'expanded'
   ? layoutSettings.value.activityExpandedWidth
@@ -162,12 +133,12 @@ const shellStyle = computed(() => ({
   '--sidebar-width': `${layoutSettings.value.sidebarWidth}px`,
   '--split-left': `${layoutSettings.value.splitRatio}fr`,
   '--split-right': `${1 - layoutSettings.value.splitRatio}fr`,
-  '--ui-scale': String(clampNumber(appSettings.value.appearance.uiScale, 0.85, 1.25, 1)),
+  '--ui-scale': String(clampNumber(appSettings.value.appearance.uiScale, applicationSettingLimits.uiScale)),
   '--source-font-family': appSettings.value.editor.sourceFontFamily,
-  '--source-font-size': `${clampNumber(appSettings.value.editor.sourceFontSize, 10, 28, 14)}px`,
-  '--editor-line-height': String(clampNumber(appSettings.value.editor.lineHeight, 1.2, 2.2, 1.65)),
-  '--visual-font-size': `${clampNumber(appSettings.value.editor.visualFontSize, 12, 30, 16)}px`,
-  '--visual-max-width': `${clampNumber(appSettings.value.editor.visualMaxWidth, 520, 1120, 720)}px`,
+  '--source-font-size': `${clampNumber(appSettings.value.editor.sourceFontSize, applicationSettingLimits.sourceFontSize)}px`,
+  '--editor-line-height': String(clampNumber(appSettings.value.editor.lineHeight, applicationSettingLimits.lineHeight)),
+  '--visual-font-size': `${clampNumber(appSettings.value.editor.visualFontSize, applicationSettingLimits.visualFontSize)}px`,
+  '--visual-max-width': `${clampNumber(appSettings.value.editor.visualMaxWidth, applicationSettingLimits.visualMaxWidth)}px`,
 }))
 
 const showSidebar = computed(() =>
@@ -200,66 +171,6 @@ const showSettingsView = computed(() =>
 )
 const showEditorView = computed(() => !showSettingsView.value)
 
-type VisualToolbarItem = {
-  command: VisualEditorCommand
-  title: string
-  label: string
-  icon?: Component
-}
-
-const headingToolbarCommands: VisualToolbarItem[] = [
-  { command: 'heading-1', title: 'Heading 1', label: 'Heading 1', icon: Heading1 },
-  { command: 'heading-2', title: 'Heading 2', label: 'Heading 2', icon: Heading2 },
-  { command: 'heading-3', title: 'Subtitle', label: 'Subtitle', icon: Heading3 },
-  { command: 'heading-4', title: 'Heading 4', label: 'Heading 4', icon: Heading3 },
-  { command: 'heading-5', title: 'Heading 5', label: 'Heading 5', icon: Heading3 },
-  { command: 'heading-6', title: 'Heading 6', label: 'Heading 6', icon: Heading3 },
-]
-
-const primaryHeadingToolbarCommands: VisualToolbarItem[] = [
-  { command: 'heading-1', title: 'Heading 1', label: 'H1', icon: Heading1 },
-  { command: 'heading-2', title: 'Heading 2', label: 'H2', icon: Heading2 },
-  { command: 'heading-3', title: 'Subtitle', label: 'Subtitle', icon: Heading3 },
-]
-
-const visualToolbarGroups: Array<{
-  name: string
-  items: VisualToolbarItem[]
-}> = [
-  {
-    name: 'Text',
-    items: [
-      { command: 'bold', title: 'Bold', label: 'Bold', icon: Bold },
-      { command: 'italic', title: 'Italic', label: 'Italic', icon: Italic },
-      { command: 'strike', title: 'Strikethrough', label: 'Strike', icon: Strikethrough },
-      { command: 'inline-code', title: 'Inline code', label: 'Inline code', icon: Code },
-      { command: 'clear-formatting', title: 'Clear formatting', label: 'Clear', icon: RemoveFormatting },
-    ],
-  },
-  {
-    name: 'Blocks',
-    items: [
-      { command: 'bullet-list', title: 'Bullet list', label: 'Bullets', icon: List },
-      { command: 'ordered-list', title: 'Numbered list', label: 'Numbers', icon: ListOrdered },
-      { command: 'quote', title: 'Quote block', label: 'Quote', icon: Quote },
-      { command: 'code-block', title: 'Code block', label: 'Code block', icon: SquareCode },
-      { command: 'horizontal-rule', title: 'Divider', label: 'Divider', icon: Minus },
-    ],
-  },
-  {
-    name: 'Insert',
-    items: [
-      { command: 'link', title: 'Link', label: 'Link', icon: LinkIcon },
-      { command: 'image', title: 'Image', label: 'Image', icon: ImageIcon },
-    ],
-  },
-]
-
-function runToolbarMenuCommand(event: MouseEvent, command: VisualEditorCommand) {
-  runActiveVisualCommand(command)
-  ;(event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')
-}
-
 function closeOpenDisclosureMenus(target: EventTarget | null) {
   document.querySelectorAll<HTMLDetailsElement>('details[data-close-on-outside][open]').forEach((menu) => {
     if (target instanceof Node && menu.contains(target)) {
@@ -280,229 +191,10 @@ function handleGlobalKeyDown(event: KeyboardEvent) {
   }
 }
 
-function startDocumentDrag(event: DragEvent, payload: DragPayload) {
-  event.dataTransfer?.setData('application/x-folden-drag', JSON.stringify(payload))
-  event.dataTransfer?.setData('text/plain', payload.documentId)
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.dropEffect = 'move'
-  }
-}
-
-function handleDocumentDragOver(event: DragEvent) {
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move'
-  }
-}
-
-function readDragPayload(event: DragEvent) {
-  const rawValue = event.dataTransfer?.getData('application/x-folden-drag')
-
-  if (!rawValue) {
-    return null
-  }
-
-  try {
-    return JSON.parse(rawValue) as DragPayload
-  } catch {
-    return null
-  }
-}
-
-function handlePaneDrop(event: DragEvent, targetPaneId: 'left' | 'right') {
-  const payload = readDragPayload(event)
-
-  if (!payload) {
-    const droppedPath = getDroppedPath(event)
-
-    if (droppedPath) {
-      event.preventDefault()
-      void openDroppedPath(droppedPath, targetPaneId)
-    }
-
-    return
-  }
-
-  event.preventDefault()
-  event.stopPropagation()
-  moveDocumentIdBetweenPanes(payload.documentId, payload.paneId, targetPaneId)
-}
-
-function getDroppedPath(event: DragEvent) {
-  const file = event.dataTransfer?.files.item(0) as (File & {
-    path?: string
-  }) | null
-
-  return file?.path ?? file?.webkitRelativePath ?? null
-}
-
-function handleTabDrop(event: DragEvent, targetPaneId: 'left' | 'right', targetIndex: number) {
-  const payload = readDragPayload(event)
-
-  if (!payload) {
-    const droppedPath = getDroppedPath(event)
-
-    if (droppedPath) {
-      event.preventDefault()
-      void openDroppedPath(droppedPath, targetPaneId)
-    }
-
-    return
-  }
-
-  event.preventDefault()
-  event.stopPropagation()
-
-  if (payload.kind === 'tab' && payload.paneId === targetPaneId) {
-    reorderDocumentInPane(targetPaneId, payload.documentId, targetIndex)
-    return
-  }
-
-  moveDocumentIdBetweenPanes(payload.documentId, payload.paneId, targetPaneId, targetIndex)
-}
-
-function handleTabListDrop(event: DragEvent, targetPaneId: 'left' | 'right') {
-  const pane = visiblePanes.value.find((candidate) => candidate.id === targetPaneId)
-  handleTabDrop(event, targetPaneId, pane?.documentIds.length ?? 0)
-}
-
-function beginTabPointerDrag(event: PointerEvent, documentId: string, sourcePaneId: 'left' | 'right') {
-  if (event.button !== 0) {
-    return
-  }
-
-  tabPointerDrag.value = {
-    documentId,
-    sourcePaneId,
-    startX: event.clientX,
-    startY: event.clientY,
-    dragging: false,
-  }
-}
-
-function getTabDropTarget(event: PointerEvent) {
-  const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null
-  const tabTarget = target?.closest<HTMLElement>('[data-tab-drop-pane]')
-  const paneTarget = target?.closest<HTMLElement>('[data-pane-id]')
-  const paneId = (tabTarget?.dataset.tabDropPane ?? paneTarget?.dataset.paneId) as 'left' | 'right' | undefined
-
-  if (paneId !== 'left' && paneId !== 'right') {
-    return null
-  }
-
-  const pane = visiblePanes.value.find((candidate) => candidate.id === paneId)
-  const fallbackIndex = pane?.documentIds.length ?? 0
-  const rawIndex = tabTarget?.dataset.tabDropIndex
-  const targetIndex = rawIndex === undefined ? fallbackIndex : Number(rawIndex)
-
-  return {
-    paneId,
-    targetIndex: Number.isFinite(targetIndex) ? targetIndex : fallbackIndex,
-  }
-}
-
-function handleTabPointerMove(event: PointerEvent) {
-  const drag = tabPointerDrag.value
-
-  if (!drag) {
-    return
-  }
-
-  if (
-    !drag.dragging
-    && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 5
-  ) {
-    return
-  }
-
-  drag.dragging = true
-  event.preventDefault()
-}
-
-function finishTabPointerDrag(event: PointerEvent) {
-  const drag = tabPointerDrag.value
-  tabPointerDrag.value = null
-
-  if (!drag?.dragging) {
-    return
-  }
-
-  suppressNextTabClick.value = true
-  const target = getTabDropTarget(event)
-
-  if (!target) {
-    return
-  }
-
-  if (drag.sourcePaneId === target.paneId) {
-    reorderDocumentInPane(target.paneId, drag.documentId, target.targetIndex)
-    return
-  }
-
-  moveDocumentIdBetweenPanes(drag.documentId, drag.sourcePaneId, target.paneId, target.targetIndex)
-}
-
-function handleTabClick(pane: typeof visiblePanes.value[number], documentId: string) {
-  if (suppressNextTabClick.value) {
-    suppressNextTabClick.value = false
-    return
-  }
-
-  void setActiveDocument(pane, documentId)
-}
-
-function closeTabOnAuxClick(event: MouseEvent, pane: typeof visiblePanes.value[number], documentId: string) {
-  if (event.button === 1) {
-    void closeDocument(pane, documentId)
-  }
-}
-
-function getDocumentPaneIds(documentId: string) {
-  return visiblePanes.value
-    .filter((pane) => pane.documentIds.includes(documentId))
-    .map((pane) => pane.id)
-}
-
-function getDocumentPaneLabel(documentId: string) {
-  const paneIds = getDocumentPaneIds(documentId)
-  const hasLeft = paneIds.includes('left')
-  const hasRight = paneIds.includes('right')
-
-  if (hasLeft && hasRight) {
-    return 'L/R'
-  }
-
-  if (hasRight) {
-    return 'R'
-  }
-
-  if (hasLeft) {
-    return 'L'
-  }
-
-  return '-'
-}
-
-function getPrimaryDocumentPane(documentId: string) {
-  if (activePane.value?.documentIds.includes(documentId)) {
-    return activePane.value
-  }
-
-  return visiblePanes.value.find((pane) => pane.documentIds.includes(documentId)) ?? activePane.value
-}
-
-function isVisiblePaneDocument(documentId: string) {
-  return visiblePanes.value.some((pane) => pane.activeDocumentId === documentId)
-}
-
-function isActivePaneDocument(documentId: string) {
-  return activePane.value?.activeDocumentId === documentId
-}
-
-function clampNumber(value: unknown, minimum: number, maximum: number, fallback: number) {
+function clampNumber(value: unknown, limit: { min: number, max: number, fallback: number }) {
   return typeof value === 'number' && Number.isFinite(value)
-    ? Math.min(Math.max(value, minimum), maximum)
-    : fallback
+    ? Math.min(Math.max(value, limit.min), limit.max)
+    : limit.fallback
 }
 
 function inputText(event: Event) {
@@ -513,45 +205,56 @@ function formatSeconds(milliseconds: number) {
   return String(milliseconds / 1000)
 }
 
+function secondsLimit(millisecondsLimit: { min: number, max: number, fallback: number, step: number }) {
+  return {
+    min: millisecondsLimit.min / 1000,
+    max: millisecondsLimit.max / 1000,
+    fallback: millisecondsLimit.fallback / 1000,
+    step: millisecondsLimit.step / 1000,
+  }
+}
+
+const autosaveDelaySecondsLimit = secondsLimit(applicationSettingLimits.autosaveDebounceMs)
+
 function formatOpenDocumentsStatus(openCount: number, unsavedCount: number) {
   return unsavedCount > 0
     ? `${openCount} open · ${unsavedCount} unsaved`
     : `${openCount} open`
 }
 
-function applyNumberInput(value: string, minimum: number, maximum: number, fallback: number) {
+function applyNumberInput(value: string, limit: { min: number, max: number, fallback: number }) {
   const numberValue = Number(value)
-  return clampNumber(Number.isFinite(numberValue) ? numberValue : fallback, minimum, maximum, fallback)
+  return clampNumber(Number.isFinite(numberValue) ? numberValue : limit.fallback, limit)
 }
 
 function updateSourceFontSize() {
-  appSettings.value.editor.sourceFontSize = applyNumberInput(sourceFontSizeInput.value, 10, 28, 14)
+  appSettings.value.editor.sourceFontSize = applyNumberInput(sourceFontSizeInput.value, applicationSettingLimits.sourceFontSize)
   sourceFontSizeInput.value = String(appSettings.value.editor.sourceFontSize)
 }
 
 function updateVisualFontSize() {
-  appSettings.value.editor.visualFontSize = applyNumberInput(visualFontSizeInput.value, 12, 30, 16)
+  appSettings.value.editor.visualFontSize = applyNumberInput(visualFontSizeInput.value, applicationSettingLimits.visualFontSize)
   visualFontSizeInput.value = String(appSettings.value.editor.visualFontSize)
 }
 
 function updateLineHeight() {
-  appSettings.value.editor.lineHeight = applyNumberInput(lineHeightInput.value, 1.2, 2.2, 1.65)
+  appSettings.value.editor.lineHeight = applyNumberInput(lineHeightInput.value, applicationSettingLimits.lineHeight)
   lineHeightInput.value = String(appSettings.value.editor.lineHeight)
 }
 
 function updateVisualMaxWidth() {
-  appSettings.value.editor.visualMaxWidth = applyNumberInput(visualMaxWidthInput.value, 520, 1120, 720)
+  appSettings.value.editor.visualMaxWidth = applyNumberInput(visualMaxWidthInput.value, applicationSettingLimits.visualMaxWidth)
   visualMaxWidthInput.value = String(appSettings.value.editor.visualMaxWidth)
 }
 
 function updateAutosaveDebounce() {
-  const seconds = applyNumberInput(autosaveDelaySecondsInput.value, 0.25, 30, 1.2)
+  const seconds = applyNumberInput(autosaveDelaySecondsInput.value, autosaveDelaySecondsLimit)
   appSettings.value.autosave.debounceMs = Math.round(seconds * 1000)
   autosaveDelaySecondsInput.value = formatSeconds(appSettings.value.autosave.debounceMs)
 }
 
 function updateUiScale() {
-  appSettings.value.appearance.uiScale = applyNumberInput(uiScaleInput.value, 0.85, 1.25, 1)
+  appSettings.value.appearance.uiScale = applyNumberInput(uiScaleInput.value, applicationSettingLimits.uiScale)
   uiScaleInput.value = String(appSettings.value.appearance.uiScale)
 }
 
@@ -795,45 +498,16 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="workspace-sidebar-content">
-          <section v-if="documents.length && !openEditorsCollapsed" class="open-editors" aria-label="Open editors">
-            <button type="button" class="section-header" @click="openEditorsCollapsed = true">
-              Open Editors
-            </button>
-            <button
-              v-for="document in documents"
-              :key="document.id"
-              type="button"
-              class="open-editor-row"
-              :class="{
-                active: isVisiblePaneDocument(document.id),
-                'active-pane-document': isActivePaneDocument(document.id),
-              }"
-              :title="document.path ? cleanDisplayPath(document.path) : 'Scratch document'"
-              draggable="true"
-              @dragstart="startDocumentDrag($event, {
-                kind: 'open-editor',
-                documentId: document.id,
-                paneId: getPrimaryDocumentPane(document.id)?.id ?? activePaneId,
-              })"
-              @click="
-                setActiveDocument(
-                  getPrimaryDocumentPane(document.id) ?? activePane,
-                  document.id,
-                )
-              "
-            >
-              <span class="open-editor-dirty-slot" aria-hidden="true">
-                <span v-if="isDirty(document)" class="open-editor-dirty-dot" />
-              </span>
-              <span class="open-editor-name">{{ document.name }}</span>
-              <span class="open-editor-pane">
-                {{ getDocumentPaneLabel(document.id) }}
-              </span>
-            </button>
-          </section>
-          <button v-else-if="documents.length" type="button" class="section-header" @click="openEditorsCollapsed = false">
-            Open Editors
-          </button>
+          <OpenEditors
+            v-model:collapsed="openEditorsCollapsed"
+            :documents="documents"
+            :visible-panes="visiblePanes"
+            :active-pane="activePane"
+            :active-pane-id="activePaneId"
+            :clean-display-path="cleanDisplayPath"
+            :is-dirty="isDirty"
+            @select-document="(pane, documentId) => setActiveDocument(pane, documentId)"
+          />
 
           <div
             v-if="workspace"
@@ -849,7 +523,7 @@ onBeforeUnmount(() => {
                 :disabled="!canExecuteCommand('document.new')"
                 @click="executeCommand('document.new')"
               >
-                <FilePenLine :size="16" />
+                <FilePenLine :size="uiIconSizes.workspaceAction" />
                 <span>New scratch</span>
               </button>
               <button
@@ -860,7 +534,7 @@ onBeforeUnmount(() => {
                 :disabled="!canExecuteCommand('workspace.createFile')"
                 @click="executeCommand('workspace.createFile')"
               >
-                <FilePlus :size="16" />
+                <FilePlus :size="uiIconSizes.workspaceAction" />
                 <span>New file</span>
               </button>
               <button
@@ -871,7 +545,7 @@ onBeforeUnmount(() => {
                 :disabled="!canExecuteCommand('workspace.createDirectory')"
                 @click="executeCommand('workspace.createDirectory')"
               >
-                <FolderPlus :size="16" />
+                <FolderPlus :size="uiIconSizes.workspaceAction" />
                 <span>New folder</span>
               </button>
             </div>
@@ -954,7 +628,7 @@ onBeforeUnmount(() => {
               :disabled="!activeDocument || !isMarkdownPath(activeDocument.path)"
               @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'visual')"
             >
-              <Eye :size="16" />
+              <Eye :size="uiIconSizes.toolbar" />
               <span>Visual</span>
             </button>
             <button
@@ -966,7 +640,7 @@ onBeforeUnmount(() => {
               :disabled="!activeDocument"
               @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'source')"
             >
-              <FileCode2 :size="16" />
+              <FileCode2 :size="uiIconSizes.toolbar" />
               <span>Source</span>
             </button>
           </div>
@@ -981,7 +655,7 @@ onBeforeUnmount(() => {
             data-testid="load-remote-images"
             @click="allowRemoteImagesForDocument(activePaneDocument)"
           >
-            <ImageIcon :size="16" />
+            <ImageIcon :size="uiIconSizes.toolbar" />
             <span>Load remote images</span>
           </button>
         </div>
@@ -995,7 +669,7 @@ onBeforeUnmount(() => {
             :disabled="!canExecuteCommand('document.open')"
             @click="executeCommand('document.open')"
           >
-            <FolderOpen :size="16" />
+            <FolderOpen :size="uiIconSizes.toolbar" />
             <span>Open</span>
           </button>
           <button
@@ -1007,7 +681,7 @@ onBeforeUnmount(() => {
             :disabled="!canExecuteCommand('document.save')"
             @click="executeCommand('document.save')"
           >
-            <Save :size="16" />
+            <Save :size="uiIconSizes.toolbar" />
             <span>Save</span>
           </button>
           <button
@@ -1018,7 +692,7 @@ onBeforeUnmount(() => {
             :class="{ active: layoutSettings.focusMode }"
             @click="toggleFocusMode"
           >
-            <Focus :size="16" />
+            <Focus :size="uiIconSizes.toolbar" />
             <span>Focus</span>
           </button>
           <button
@@ -1030,7 +704,7 @@ onBeforeUnmount(() => {
             :disabled="!canExecuteCommand('layout.toggleSplit')"
             @click="executeCommand('layout.toggleSplit')"
           >
-            <Columns2 :size="16" />
+            <Columns2 :size="uiIconSizes.toolbar" />
             <span>Split</span>
           </button>
           <button
@@ -1041,7 +715,7 @@ onBeforeUnmount(() => {
             :disabled="!canExecuteCommand('layout.moveViewRight')"
             @click="executeCommand('layout.moveViewRight')"
           >
-            <component :is="moveActiveTabIcon" :size="16" />
+            <component :is="moveActiveTabIcon" :size="uiIconSizes.toolbar" />
             <span>{{ activePaneIsRight ? 'Move left' : 'Move right' }}</span>
           </button>
         </div>
@@ -1078,28 +752,28 @@ onBeforeUnmount(() => {
                 <strong>Source size</strong>
                 <small>Text size in Source mode.</small>
               </span>
-              <input :value="sourceFontSizeInput" type="number" min="10" max="28" @input="sourceFontSizeInput = inputText($event)" @change="updateSourceFontSize" @blur="updateSourceFontSize">
+              <input :value="sourceFontSizeInput" type="number" :min="applicationSettingLimits.sourceFontSize.min" :max="applicationSettingLimits.sourceFontSize.max" @input="sourceFontSizeInput = inputText($event)" @change="updateSourceFontSize" @blur="updateSourceFontSize">
             </label>
             <label class="settings-row">
               <span>
                 <strong>Visual size</strong>
                 <small>Text size in Visual mode.</small>
               </span>
-              <input :value="visualFontSizeInput" type="number" min="12" max="30" @input="visualFontSizeInput = inputText($event)" @change="updateVisualFontSize" @blur="updateVisualFontSize">
+              <input :value="visualFontSizeInput" type="number" :min="applicationSettingLimits.visualFontSize.min" :max="applicationSettingLimits.visualFontSize.max" @input="visualFontSizeInput = inputText($event)" @change="updateVisualFontSize" @blur="updateVisualFontSize">
             </label>
             <label class="settings-row">
               <span>
                 <strong>Line height</strong>
                 <small>Shared editor line spacing.</small>
               </span>
-              <input :value="lineHeightInput" type="number" min="1.2" max="2.2" step="0.05" @input="lineHeightInput = inputText($event)" @change="updateLineHeight" @blur="updateLineHeight">
+              <input :value="lineHeightInput" type="number" :min="applicationSettingLimits.lineHeight.min" :max="applicationSettingLimits.lineHeight.max" :step="applicationSettingLimits.lineHeight.step" @input="lineHeightInput = inputText($event)" @change="updateLineHeight" @blur="updateLineHeight">
             </label>
             <label class="settings-row">
               <span>
                 <strong>Visual width</strong>
                 <small>Maximum readable content width.</small>
               </span>
-              <input :value="visualMaxWidthInput" type="number" min="520" max="1120" @input="visualMaxWidthInput = inputText($event)" @change="updateVisualMaxWidth" @blur="updateVisualMaxWidth">
+              <input :value="visualMaxWidthInput" type="number" :min="applicationSettingLimits.visualMaxWidth.min" :max="applicationSettingLimits.visualMaxWidth.max" @input="visualMaxWidthInput = inputText($event)" @change="updateVisualMaxWidth" @blur="updateVisualMaxWidth">
             </label>
             <label class="settings-row settings-toggle-row">
               <span>
@@ -1132,7 +806,7 @@ onBeforeUnmount(() => {
                 <strong>Autosave delay</strong>
                 <small>Delay before autosave starts, in seconds.</small>
               </span>
-              <input :value="autosaveDelaySecondsInput" type="number" min="0.25" max="30" step="0.25" @input="autosaveDelaySecondsInput = inputText($event)" @change="updateAutosaveDebounce" @blur="updateAutosaveDebounce">
+              <input :value="autosaveDelaySecondsInput" type="number" :min="autosaveDelaySecondsLimit.min" :max="autosaveDelaySecondsLimit.max" :step="autosaveDelaySecondsLimit.step" @input="autosaveDelaySecondsInput = inputText($event)" @change="updateAutosaveDebounce" @blur="updateAutosaveDebounce">
             </label>
             <label class="settings-row settings-toggle-row">
               <span>
@@ -1155,7 +829,7 @@ onBeforeUnmount(() => {
                 <strong>UI scale</strong>
                 <small>Scale controls and application chrome.</small>
               </span>
-              <input :value="uiScaleInput" type="number" min="0.85" max="1.25" step="0.05" @input="uiScaleInput = inputText($event)" @change="updateUiScale" @blur="updateUiScale">
+              <input :value="uiScaleInput" type="number" :min="applicationSettingLimits.uiScale.min" :max="applicationSettingLimits.uiScale.max" :step="applicationSettingLimits.uiScale.step" @input="uiScaleInput = inputText($event)" @change="updateUiScale" @blur="updateUiScale">
             </label>
             <label class="settings-row">
               <span>
@@ -1250,167 +924,35 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section v-if="showDocumentToolbar" class="shared-toolbar" aria-label="Document toolbar">
-        <div class="format-toolbar shared-format-toolbar">
-          <div class="toolbar-group" aria-label="Headings">
-            <button
-              v-for="item in primaryHeadingToolbarCommands"
-              :key="item.command"
-              type="button"
-              class="toolbar-button"
-              :title="item.title"
-              :aria-label="item.title"
-              @click="runActiveVisualCommand(item.command)"
-            >
-              <component :is="item.icon" v-if="item.icon" :size="16" />
-              <span>{{ item.label }}</span>
-            </button>
-            <details class="toolbar-menu" data-close-on-outside>
-              <summary
-                class="toolbar-button toolbar-menu-trigger"
-                title="Headings"
-                aria-label="Headings"
-              >
-                <Heading1 :size="16" />
-                <span>Headings</span>
-                <ChevronDown class="toolbar-menu-chevron" :size="14" />
-              </summary>
-              <div class="toolbar-menu-list">
-                <button
-                  v-for="item in headingToolbarCommands"
-                  :key="item.command"
-                  type="button"
-                  class="toolbar-menu-item"
-                  :title="item.title"
-                  :aria-label="item.title"
-                  @click="runToolbarMenuCommand($event, item.command)"
-                >
-                  <component :is="item.icon" v-if="item.icon" :size="15" />
-                  <span>{{ item.label }}</span>
-                </button>
-              </div>
-            </details>
-          </div>
+      <DocumentToolbar
+        v-if="showDocumentToolbar"
+        @run-command="runActiveVisualCommand"
+      />
 
-          <template v-for="group in visualToolbarGroups" :key="group.name">
-            <span class="toolbar-divider" aria-hidden="true" />
-            <div class="toolbar-group" :aria-label="group.name">
-              <button
-                v-for="item in group.items"
-                :key="item.command"
-                type="button"
-                class="toolbar-button"
-                :title="item.title"
-                :aria-label="item.title"
-                @click="runActiveVisualCommand(item.command)"
-              >
-                <component :is="item.icon" v-if="item.icon" :size="16" />
-                <span>{{ item.label }}</span>
-              </button>
-            </div>
-          </template>
-        </div>
-      </section>
-
-      <section
+      <EditorPaneGrid
         v-if="layoutSettings.activeActivitySection !== 'settings' || layoutSettings.focusMode"
-        class="pane-grid"
-        :class="{ split: splitEnabled }"
-      >
-        <section
-          v-for="pane in visiblePanes"
-          :key="pane.id"
-          class="editor-pane"
-          :data-pane-id="pane.id"
-          :class="{ active: activePaneId === pane.id }"
-          @click="setActivePane(pane.id)"
-          @dragover.prevent="handleDocumentDragOver"
-          @drop="handlePaneDrop($event, pane.id)"
-        >
-          <header class="pane-header">
-            <div
-              class="pane-tabs"
-              @dragover.prevent.stop="handleDocumentDragOver"
-              @drop.stop="handleTabListDrop($event, pane.id)"
-            >
-              <button
-                v-for="(documentId, index) in pane.documentIds"
-                :key="documentId"
-                type="button"
-                class="tab-button"
-                :data-tab-drop-pane="pane.id"
-                :data-tab-drop-index="index"
-                :class="{ active: pane.activeDocumentId === documentId }"
-                :title="getDocument(documentId)?.path ? cleanDisplayPath(getDocument(documentId)!.path!) : 'Scratch document'"
-                @dragover.prevent.stop="handleDocumentDragOver"
-                @drop.stop="handleTabDrop($event, pane.id, index)"
-                @pointerdown="beginTabPointerDrag($event, documentId, pane.id)"
-                @pointermove="handleTabPointerMove"
-                @pointerup="finishTabPointerDrag"
-                @pointercancel="tabPointerDrag = null"
-                @auxclick.stop="closeTabOnAuxClick($event, pane, documentId)"
-                @click.stop="handleTabClick(pane, documentId)"
-              >
-                <span>{{ getDocument(documentId)?.name ?? 'Missing' }}</span>
-                <span v-if="getDocument(documentId) && isDirty(getDocument(documentId)!)" class="tab-dot" />
-                <X
-                  class="tab-close"
-                  :size="13"
-                  @pointerdown.stop
-                  @click.stop="closeDocument(pane, documentId)"
-                />
-              </button>
-              <span
-                class="tab-drop-tail"
-                :data-tab-drop-pane="pane.id"
-                :data-tab-drop-index="pane.documentIds.length"
-                @dragover.prevent.stop="handleDocumentDragOver"
-                @drop.stop="handleTabDrop($event, pane.id, pane.documentIds.length)"
-              />
-            </div>
-          </header>
-
-          <template v-if="pane.activeDocumentId && getDocument(pane.activeDocumentId)">
-            <VisualMarkdownEditor
-              v-if="getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'visual'"
-              :key="`${getViewSessionId(pane, getDocument(pane.activeDocumentId)!)}:${shouldLoadRemoteImages(getDocument(pane.activeDocumentId)! ) ? 'remote-on' : 'remote-off'}`"
-              :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
-              :document-id="getDocument(pane.activeDocumentId)!.id"
-              :view-id="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
-              :model-value="getDocument(pane.activeDocumentId)!.content"
-              :revision="getDocument(pane.activeDocumentId)!.revision"
-              :document-path="getDocument(pane.activeDocumentId)!.path"
-              :workspace-root-path="workspace?.rootPath ?? null"
-              :allow-remote-images="shouldLoadRemoteImages(getDocument(pane.activeDocumentId)!)"
-              @document-update="handleDocumentUpdate"
-            />
-            <section v-else class="source-editor-frame">
-              <SourceEditor
-                :key="`${getViewSessionId(pane, getDocument(pane.activeDocumentId)!)}:${appSettings.editor.wordWrap ? 'wrap' : 'nowrap'}`"
-                :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
-                :document-id="getDocument(pane.activeDocumentId)!.id"
-                :view-id="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
-                :model-value="getDocument(pane.activeDocumentId)!.content"
-                :revision="getDocument(pane.activeDocumentId)!.revision"
-                :word-wrap="appSettings.editor.wordWrap"
-                @document-update="handleDocumentUpdate"
-              />
-            </section>
-          </template>
-
-          <div v-else class="empty-pane">
-            <p>No open file in this pane.</p>
-          </div>
-        </section>
-        <div
-          v-if="splitEnabled"
-          class="pane-splitter"
-          role="separator"
-          aria-label="Resize editor panes"
-          @mousedown="beginSplitResize"
-          @dblclick="resetLayoutSettings"
-        />
-      </section>
+        :visible-panes="visiblePanes"
+        :active-pane-id="activePaneId"
+        :split-enabled="splitEnabled"
+        :app-settings="appSettings"
+        :workspace-root-path="workspace?.rootPath ?? null"
+        :clean-display-path="cleanDisplayPath"
+        :close-document="closeDocument"
+        :get-document="getDocument"
+        :get-document-mode="getDocumentMode"
+        :get-view-session-id="getViewSessionId"
+        :is-dirty="isDirty"
+        :open-dropped-path="openDroppedPath"
+        :set-active-document="setActiveDocument"
+        :set-pane-editor-adapter="setPaneEditorAdapter"
+        :should-load-remote-images="shouldLoadRemoteImages"
+        @begin-split-resize="beginSplitResize"
+        @document-update="handleDocumentUpdate"
+        @move-document-between-panes="moveDocumentIdBetweenPanes"
+        @reorder-document-in-pane="reorderDocumentInPane"
+        @reset-layout="resetLayoutSettings"
+        @set-active-pane="setActivePane"
+      />
 
       <footer v-if="showEditorView && appSettings.appearance.showStatusBar && !layoutSettings.focusMode" class="statusbar">
         <span data-testid="open-documents-status">{{ formatOpenDocumentsStatus(documents.length, dirtyDocuments.length) }}</span>

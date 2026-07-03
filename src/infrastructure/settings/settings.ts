@@ -55,24 +55,102 @@ export type LayoutSettings = {
 export const applicationSettingsStorageKey = 'folden:settings:v1'
 export const applicationLayoutStorageKey = 'folden:layout:v1'
 
+export type NumberLimit = {
+  min: number
+  max: number
+  fallback: number
+}
+
+export type StepNumberLimit = NumberLimit & {
+  step: number
+}
+
+export const applicationSettingLimits = {
+  autosaveDebounceMs: {
+    min: 250,
+    max: 30_000,
+    fallback: 1200,
+    step: 250,
+  },
+  sourceFontSize: {
+    min: 10,
+    max: 28,
+    fallback: 14,
+  },
+  visualFontSize: {
+    min: 12,
+    max: 30,
+    fallback: 16,
+  },
+  lineHeight: {
+    min: 1.2,
+    max: 2.2,
+    fallback: 1.65,
+    step: 0.05,
+  },
+  visualMaxWidth: {
+    min: 520,
+    max: 1120,
+    fallback: 720,
+  },
+  uiScale: {
+    min: 0.85,
+    max: 1.25,
+    fallback: 1,
+    step: 0.05,
+  },
+} as const satisfies Record<string, NumberLimit | StepNumberLimit>
+
+export const layoutSettingLimits = {
+  activityCompactWidth: {
+    min: 36,
+    max: 64,
+    fallback: 44,
+  },
+  activityExpandedWidth: {
+    min: 144,
+    max: 280,
+    fallback: 168,
+  },
+  sidebarWidth: {
+    min: 220,
+    max: 520,
+    fallback: 292,
+  },
+  splitRatio: {
+    min: 0.25,
+    max: 0.75,
+    fallback: 0.5,
+  },
+} as const satisfies Record<string, NumberLimit>
+
+export const activityRailResizeThresholds = {
+  expandFromCompactWidth: 104,
+  collapseFromExpandedWidth: 96,
+} as const
+
+export const legacyLayoutSettingThresholds = {
+  expandedActivityRailWidth: layoutSettingLimits.activityCompactWidth.max,
+} as const
+
 export const defaultApplicationSettings: ApplicationSettings = {
   autosave: {
     enabled: false,
-    debounceMs: 1200,
+    debounceMs: applicationSettingLimits.autosaveDebounceMs.fallback,
     saveOnWindowBlur: false,
     saveOnDocumentSwitch: false,
   },
   editor: {
     sourceFontFamily: '"JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
-    sourceFontSize: 14,
-    visualFontSize: 16,
-    lineHeight: 1.65,
+    sourceFontSize: applicationSettingLimits.sourceFontSize.fallback,
+    visualFontSize: applicationSettingLimits.visualFontSize.fallback,
+    lineHeight: applicationSettingLimits.lineHeight.fallback,
     wordWrap: true,
-    visualMaxWidth: 720,
+    visualMaxWidth: applicationSettingLimits.visualMaxWidth.fallback,
     defaultMarkdownMode: 'visual',
   },
   appearance: {
-    uiScale: 1,
+    uiScale: applicationSettingLimits.uiScale.fallback,
     density: 'compact',
     showStatusBar: true,
     showActivityBar: true,
@@ -89,10 +167,10 @@ export const defaultApplicationSettings: ApplicationSettings = {
 export const defaultLayoutSettings: LayoutSettings = {
   activeActivitySection: 'workspace',
   activityRailMode: 'compact',
-  activityCompactWidth: 44,
-  activityExpandedWidth: 168,
-  sidebarWidth: 292,
-  splitRatio: 0.5,
+  activityCompactWidth: layoutSettingLimits.activityCompactWidth.fallback,
+  activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.fallback,
+  sidebarWidth: layoutSettingLimits.sidebarWidth.fallback,
+  splitRatio: layoutSettingLimits.splitRatio.fallback,
   focusMode: false,
 }
 
@@ -140,8 +218,8 @@ export function normalizeApplicationSettings(value: unknown): ApplicationSetting
       enabled: typeof autosave.enabled === 'boolean'
         ? autosave.enabled
         : defaultApplicationSettings.autosave.enabled,
-      debounceMs: typeof autosave.debounceMs === 'number' && autosave.debounceMs >= 250
-        ? Math.min(autosave.debounceMs, 30_000)
+      debounceMs: typeof autosave.debounceMs === 'number' && autosave.debounceMs >= applicationSettingLimits.autosaveDebounceMs.min
+        ? Math.min(autosave.debounceMs, applicationSettingLimits.autosaveDebounceMs.max)
         : defaultApplicationSettings.autosave.debounceMs,
       saveOnWindowBlur: typeof autosave.saveOnWindowBlur === 'boolean'
         ? autosave.saveOnWindowBlur
@@ -154,19 +232,44 @@ export function normalizeApplicationSettings(value: unknown): ApplicationSetting
       sourceFontFamily: typeof editor.sourceFontFamily === 'string' && editor.sourceFontFamily.trim()
         ? editor.sourceFontFamily.trim()
         : defaultApplicationSettings.editor.sourceFontFamily,
-      sourceFontSize: clampNumber(editor.sourceFontSize, 10, 28, defaultApplicationSettings.editor.sourceFontSize),
-      visualFontSize: clampNumber(editor.visualFontSize, 12, 30, defaultApplicationSettings.editor.visualFontSize),
-      lineHeight: clampNumber(editor.lineHeight, 1.2, 2.2, defaultApplicationSettings.editor.lineHeight),
+      sourceFontSize: clampNumber(
+        editor.sourceFontSize,
+        applicationSettingLimits.sourceFontSize.min,
+        applicationSettingLimits.sourceFontSize.max,
+        defaultApplicationSettings.editor.sourceFontSize,
+      ),
+      visualFontSize: clampNumber(
+        editor.visualFontSize,
+        applicationSettingLimits.visualFontSize.min,
+        applicationSettingLimits.visualFontSize.max,
+        defaultApplicationSettings.editor.visualFontSize,
+      ),
+      lineHeight: clampNumber(
+        editor.lineHeight,
+        applicationSettingLimits.lineHeight.min,
+        applicationSettingLimits.lineHeight.max,
+        defaultApplicationSettings.editor.lineHeight,
+      ),
       wordWrap: typeof editor.wordWrap === 'boolean'
         ? editor.wordWrap
         : defaultApplicationSettings.editor.wordWrap,
-      visualMaxWidth: clampNumber(editor.visualMaxWidth, 520, 1120, defaultApplicationSettings.editor.visualMaxWidth),
+      visualMaxWidth: clampNumber(
+        editor.visualMaxWidth,
+        applicationSettingLimits.visualMaxWidth.min,
+        applicationSettingLimits.visualMaxWidth.max,
+        defaultApplicationSettings.editor.visualMaxWidth,
+      ),
       defaultMarkdownMode: editor.defaultMarkdownMode === 'source'
         ? 'source'
         : defaultApplicationSettings.editor.defaultMarkdownMode,
     },
     appearance: {
-      uiScale: clampNumber(appearance.uiScale, 0.85, 1.25, defaultApplicationSettings.appearance.uiScale),
+      uiScale: clampNumber(
+        appearance.uiScale,
+        applicationSettingLimits.uiScale.min,
+        applicationSettingLimits.uiScale.max,
+        defaultApplicationSettings.appearance.uiScale,
+      ),
       density: appearance.density === 'comfortable'
         ? 'comfortable'
         : defaultApplicationSettings.appearance.density,
@@ -198,7 +301,8 @@ export function normalizeLayoutSettings(value: unknown): LayoutSettings {
 
   const candidate = value as Partial<LayoutSettings>
   const legacyActivityWidth = (candidate as Partial<LayoutSettings> & { activityWidth?: unknown }).activityWidth
-  const migratedActivityRailMode = typeof legacyActivityWidth === 'number' && legacyActivityWidth > 80
+  const migratedActivityRailMode = typeof legacyActivityWidth === 'number'
+    && legacyActivityWidth > legacyLayoutSettingThresholds.expandedActivityRailWidth
     ? 'expanded'
     : defaultLayoutSettings.activityRailMode
 
@@ -211,18 +315,28 @@ export function normalizeLayoutSettings(value: unknown): LayoutSettings {
       : migratedActivityRailMode,
     activityCompactWidth: clampNumber(
       candidate.activityCompactWidth ?? legacyActivityWidth,
-      36,
-      80,
+      layoutSettingLimits.activityCompactWidth.min,
+      layoutSettingLimits.activityCompactWidth.max,
       defaultLayoutSettings.activityCompactWidth,
     ),
     activityExpandedWidth: clampNumber(
       candidate.activityExpandedWidth ?? legacyActivityWidth,
-      120,
-      280,
+      layoutSettingLimits.activityExpandedWidth.min,
+      layoutSettingLimits.activityExpandedWidth.max,
       defaultLayoutSettings.activityExpandedWidth,
     ),
-    sidebarWidth: clampNumber(candidate.sidebarWidth, 220, 520, defaultLayoutSettings.sidebarWidth),
-    splitRatio: clampNumber(candidate.splitRatio, 0.25, 0.75, defaultLayoutSettings.splitRatio),
+    sidebarWidth: clampNumber(
+      candidate.sidebarWidth,
+      layoutSettingLimits.sidebarWidth.min,
+      layoutSettingLimits.sidebarWidth.max,
+      defaultLayoutSettings.sidebarWidth,
+    ),
+    splitRatio: clampNumber(
+      candidate.splitRatio,
+      layoutSettingLimits.splitRatio.min,
+      layoutSettingLimits.splitRatio.max,
+      defaultLayoutSettings.splitRatio,
+    ),
     focusMode: typeof candidate.focusMode === 'boolean'
       ? candidate.focusMode
       : defaultLayoutSettings.focusMode,

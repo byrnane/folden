@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-vue-next'
 import type { WorkspaceEntry } from '../../domain/native'
+import { uiIconSizes } from '../uiConstants'
 
 defineOptions({
   name: 'WorkspaceTree',
@@ -102,13 +103,13 @@ function selectEntry(entry: WorkspaceTreeEntry) {
           :disabled="isLoading(entry)"
           @click.stop="toggleDirectory(entry)"
         >
-          <ChevronDown v-if="isExpanded(entry)" :size="14" />
-          <ChevronRight v-else :size="14" />
+          <ChevronDown v-if="isExpanded(entry)" :size="uiIconSizes.workspaceTreeChevron" />
+          <ChevronRight v-else :size="uiIconSizes.workspaceTreeChevron" />
         </button>
         <span v-else class="tree-toggle-spacer" />
 
-        <Folder v-if="isDirectory(entry)" class="tree-icon" :size="15" />
-        <FileText v-else class="tree-icon" :size="15" />
+        <Folder v-if="isDirectory(entry)" class="tree-icon" :size="uiIconSizes.workspaceTreeIcon" />
+        <FileText v-else class="tree-icon" :size="uiIconSizes.workspaceTreeIcon" />
         <span class="tree-name">{{ entry.name }}</span>
         <span v-if="isDirectory(entry) && isLoading(entry)" class="tree-meta">Loading...</span>
         <span v-else-if="loadErrors[entry.path]" class="tree-meta danger-text" :title="loadErrors[entry.path]">
@@ -123,7 +124,7 @@ function selectEntry(entry: WorkspaceTreeEntry) {
             title="New file"
             @click.stop="emit('createFile', entry)"
           >
-            <FilePlus :size="13" />
+            <FilePlus :size="uiIconSizes.workspaceTreeAction" />
           </button>
           <button
             v-if="isDirectory(entry)"
@@ -132,7 +133,7 @@ function selectEntry(entry: WorkspaceTreeEntry) {
             title="New folder"
             @click.stop="emit('createDirectory', entry)"
           >
-            <FolderPlus :size="13" />
+            <FolderPlus :size="uiIconSizes.workspaceTreeAction" />
           </button>
           <button
             type="button"
@@ -140,7 +141,7 @@ function selectEntry(entry: WorkspaceTreeEntry) {
             title="Rename"
             @click.stop="emit('renamePath', entry)"
           >
-            <Pencil :size="13" />
+            <Pencil :size="uiIconSizes.workspaceTreeAction" />
           </button>
           <button
             type="button"
@@ -148,7 +149,7 @@ function selectEntry(entry: WorkspaceTreeEntry) {
             title="Move to trash"
             @click.stop="emit('trashPath', entry)"
           >
-            <Trash2 :size="13" />
+            <Trash2 :size="uiIconSizes.workspaceTreeAction" />
           </button>
         </span>
       </div>

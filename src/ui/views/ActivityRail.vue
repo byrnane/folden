@@ -8,7 +8,12 @@ import {
   Settings,
 } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, ref } from 'vue'
-import type { ActivityRailMode, ActivitySection } from '../../infrastructure/settings/settings'
+import {
+  activityRailResizeThresholds,
+  type ActivityRailMode,
+  type ActivitySection,
+} from '../../infrastructure/settings/settings'
+import { uiIconSizes } from '../uiConstants'
 
 const props = defineProps<{
   activeSection: ActivitySection
@@ -65,7 +70,7 @@ function resize(event: MouseEvent) {
   const nextWidth = baseWidth + delta
 
   if (start.mode === 'compact') {
-    if (nextWidth > 104) {
+    if (nextWidth > activityRailResizeThresholds.expandFromCompactWidth) {
       emit('setMode', 'expanded')
       emit('setWidth', nextWidth)
       return
@@ -76,7 +81,7 @@ function resize(event: MouseEvent) {
     return
   }
 
-  if (nextWidth < 96) {
+  if (nextWidth < activityRailResizeThresholds.collapseFromExpandedWidth) {
     emit('setMode', 'compact')
     emit('setWidth', nextWidth)
     return
@@ -112,7 +117,7 @@ onBeforeUnmount(() => {
         aria-label="Workspace"
         @click="emit('setSection', 'workspace')"
       >
-        <LayoutPanelLeft :size="18" />
+        <LayoutPanelLeft :size="uiIconSizes.activityRail" />
         <span>Workspace</span>
       </button>
       <button
@@ -122,7 +127,7 @@ onBeforeUnmount(() => {
         aria-label="Search"
         disabled
       >
-        <Search :size="18" />
+        <Search :size="uiIconSizes.activityRail" />
         <span>Search</span>
       </button>
       <button
@@ -133,7 +138,7 @@ onBeforeUnmount(() => {
         :disabled="!canCreateDocument"
         @click="emit('createDocument')"
       >
-        <FilePenLine :size="18" />
+        <FilePenLine :size="uiIconSizes.activityRail" />
         <span>Create</span>
       </button>
       <button
@@ -144,7 +149,7 @@ onBeforeUnmount(() => {
         aria-label="Settings"
         @click="emit('setSection', 'settings')"
       >
-        <Settings :size="18" />
+        <Settings :size="uiIconSizes.activityRail" />
         <span>Settings</span>
       </button>
     </div>
@@ -155,7 +160,7 @@ onBeforeUnmount(() => {
       :aria-label="modeLabel"
       @click="toggleMode"
     >
-      <component :is="modeIcon" :size="18" />
+      <component :is="modeIcon" :size="uiIconSizes.activityRail" />
       <span>{{ modeLabel }}</span>
     </button>
   </nav>

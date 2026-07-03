@@ -8,6 +8,7 @@ import {
 } from '../domain/documents/documentState'
 import {
   defaultLayoutSettings,
+  layoutSettingLimits,
   loadApplicationSettings,
   loadLayoutSettings,
   saveApplicationSettings,
@@ -504,16 +505,25 @@ export function useApplicationShell() {
   }
 
   function setSidebarWidth(width: number) {
-    layoutSettings.value.sidebarWidth = Math.min(Math.max(width, 220), 520)
+    layoutSettings.value.sidebarWidth = Math.min(
+      Math.max(width, layoutSettingLimits.sidebarWidth.min),
+      layoutSettingLimits.sidebarWidth.max,
+    )
   }
 
   function setActivityRailWidth(width: number) {
     if (layoutSettings.value.activityRailMode === 'expanded') {
-      layoutSettings.value.activityExpandedWidth = Math.min(Math.max(width, 120), 280)
+      layoutSettings.value.activityExpandedWidth = Math.min(
+        Math.max(width, layoutSettingLimits.activityExpandedWidth.min),
+        layoutSettingLimits.activityExpandedWidth.max,
+      )
       return
     }
 
-    layoutSettings.value.activityCompactWidth = Math.min(Math.max(width, 36), 80)
+    layoutSettings.value.activityCompactWidth = Math.min(
+      Math.max(width, layoutSettingLimits.activityCompactWidth.min),
+      layoutSettingLimits.activityCompactWidth.max,
+    )
   }
 
   function resetActivityRailWidth() {
@@ -526,7 +536,10 @@ export function useApplicationShell() {
   }
 
   function setSplitRatio(ratio: number) {
-    layoutSettings.value.splitRatio = Math.min(Math.max(ratio, 0.25), 0.75)
+    layoutSettings.value.splitRatio = Math.min(
+      Math.max(ratio, layoutSettingLimits.splitRatio.min),
+      layoutSettingLimits.splitRatio.max,
+    )
   }
 
   function toggleFocusMode() {

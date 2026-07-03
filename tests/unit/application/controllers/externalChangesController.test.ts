@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createExternalChangesController } from '../../../../src/application/controllers/externalChangesController'
+import {
+  createExternalChangesController,
+  externalFileEventDebounceMs,
+} from '../../../../src/application/controllers/externalChangesController'
 import { createTextFileFormat } from '../../../../src/domain/document'
 import type { OpenDocument } from '../../../../src/domain/documents/documentState'
 
@@ -47,7 +50,7 @@ describe('external changes controller', () => {
     controller.scheduleWorkspaceRefresh('src', refresh)
     controller.scheduleDocumentReload('doc-1', reload)
     controller.scheduleDocumentReload('doc-1', reload)
-    await vi.advanceTimersByTimeAsync(180)
+    await vi.advanceTimersByTimeAsync(externalFileEventDebounceMs)
 
     expect(refresh).toHaveBeenCalledTimes(1)
     expect(reload).toHaveBeenCalledTimes(1)
@@ -61,7 +64,7 @@ describe('external changes controller', () => {
     controller.scheduleWorkspaceRefresh('src', refresh)
     controller.scheduleDocumentReload('doc-1', reload)
     controller.dispose()
-    await vi.advanceTimersByTimeAsync(180)
+    await vi.advanceTimersByTimeAsync(externalFileEventDebounceMs)
 
     expect(refresh).not.toHaveBeenCalled()
     expect(reload).not.toHaveBeenCalled()
