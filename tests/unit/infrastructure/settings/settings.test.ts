@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   applicationSettingLimits,
-  applicationSettingsStorageKey,
   defaultApplicationSettings,
   defaultLayoutSettings,
   layoutSettingLimits,
-  loadApplicationSettings,
-  loadLayoutSettings,
   normalizeLayoutSettings,
   normalizeApplicationSettings,
   normalizeWorkspaceIgnoredNames,
+} from '../../../../src/application/settings'
+import {
+  applicationSettingsStorageKey,
+  loadApplicationSettings,
+  loadLayoutSettings,
   saveApplicationSettings,
   saveLayoutSettings,
 } from '../../../../src/infrastructure/settings/settings'

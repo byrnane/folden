@@ -1059,14 +1059,6 @@ h1 {
   position: relative;
 }
 
-.toolbar-menu summary {
-  list-style: none;
-}
-
-.toolbar-menu summary::-webkit-details-marker {
-  display: none;
-}
-
 .toolbar-menu-trigger {
   display: inline-flex;
   align-items: center;
@@ -1088,7 +1080,7 @@ h1 {
 }
 
 .toolbar-menu-trigger:hover,
-.toolbar-menu[open] .toolbar-menu-trigger {
+.toolbar-menu-trigger[aria-expanded="true"] {
   border-color: var(--border-strong);
   background: var(--panel-raised-bg);
   color: var(--strong-text);

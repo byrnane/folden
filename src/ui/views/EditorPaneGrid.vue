@@ -2,14 +2,11 @@
 import { X } from 'lucide-vue-next'
 import { ref } from 'vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
-import type { OpenDocument, EditorMode } from '../../domain/documents/documentState'
-import type { ApplicationSettings } from '../../infrastructure/settings/settings'
-import type { EditorAdapter, EditorPane } from '../../application/types/shell'
+import type { EditorAdapter, EditorPane, EditorPaneView } from '../../application/types/shell'
 import SourceEditor from '../editors/SourceEditor.vue'
 import VisualMarkdownEditor from '../editors/VisualMarkdownEditor.vue'
 import {
   readDocumentDragPayload,
-  startDocumentDrag,
   type DocumentDragPayload,
 } from '../documentDrag'
 import { uiIconSizes } from '../uiConstants'
@@ -17,22 +14,16 @@ import { uiIconSizes } from '../uiConstants'
 const tabPointerDragStartDistancePx = 5
 
 const props = defineProps<{
-  visiblePanes: EditorPane[]
+  visiblePanes: EditorPaneView[]
   activePaneId: EditorPane['id']
   splitEnabled: boolean
   splitRatio: number
-  appSettings: ApplicationSettings
+  sourceWordWrap: boolean
   workspaceRootPath: string | null
-  cleanDisplayPath: (path: string) => string
   closeDocument: (pane: EditorPane, documentId: string) => void | Promise<void>
-  getDocument: (documentId: string) => OpenDocument | null
-  getDocumentMode: (pane: EditorPane, document: OpenDocument) => EditorMode
-  getViewSessionId: (pane: EditorPane, document: OpenDocument) => string
-  isDirty: (document: OpenDocument) => boolean
   openDroppedPath: (path: string, paneId: EditorPane['id']) => void | Promise<void>
   setActiveDocument: (pane: EditorPane, documentId: string) => void | Promise<void>
   setPaneEditorAdapter: (paneId: EditorPane['id'], adapter: EditorAdapter | null) => void
-  shouldLoadRemoteImages: (document: OpenDocument) => boolean
 }>()
 
 const emit = defineEmits<{
@@ -53,6 +44,8 @@ const emit = defineEmits<{
 type TabPointerDrag = {
   documentId: string
   sourcePaneId: EditorPane['id']
+  pointerId: number
+  sourceElement: HTMLElement
   startX: number
   startY: number
   dragging: boolean
@@ -60,6 +53,7 @@ type TabPointerDrag = {
 
 const tabPointerDrag = ref<TabPointerDrag | null>(null)
 const suppressNextTabClick = ref(false)
+let suppressNextTabClickTimeout = 0
 
 function handleDocumentDragOver(event: DragEvent) {
   if (event.dataTransfer) {
@@ -127,7 +121,7 @@ function handleTabDrop(event: DragEvent, targetPaneId: EditorPane['id'], targetI
 
 function handleTabListDrop(event: DragEvent, targetPaneId: EditorPane['id']) {
   const pane = props.visiblePanes.find((candidate) => candidate.id === targetPaneId)
-  handleTabDrop(event, targetPaneId, pane?.documentIds.length ?? 0)
+  handleTabDrop(event, targetPaneId, pane?.tabs.length ?? 0)
 }
 
 function beginTabPointerDrag(event: PointerEvent, documentId: string, sourcePaneId: EditorPane['id']) {
@@ -135,9 +129,18 @@ function beginTabPointerDrag(event: PointerEvent, documentId: string, sourcePane
     return
   }
 
+  const sourceElement = event.currentTarget as HTMLElement
+  try {
+    sourceElement.setPointerCapture(event.pointerId)
+  } catch {
+    return
+  }
+
   tabPointerDrag.value = {
     documentId,
     sourcePaneId,
+    pointerId: event.pointerId,
+    sourceElement,
     startX: event.clientX,
     startY: event.clientY,
     dragging: false,
@@ -155,7 +158,7 @@ function getTabDropTarget(event: PointerEvent) {
   }
 
   const pane = props.visiblePanes.find((candidate) => candidate.id === paneId)
-  const fallbackIndex = pane?.documentIds.length ?? 0
+  const fallbackIndex = pane?.tabs.length ?? 0
   const rawIndex = tabTarget?.dataset.tabDropIndex
   const targetIndex = rawIndex === undefined ? fallbackIndex : Number(rawIndex)
 
@@ -183,21 +186,46 @@ function handleTabPointerMove(event: PointerEvent) {
   event.preventDefault()
 }
 
+function releaseTabPointerCapture(drag: TabPointerDrag) {
+  if (drag.sourceElement.hasPointerCapture(drag.pointerId)) {
+    drag.sourceElement.releasePointerCapture(drag.pointerId)
+  }
+}
+
+function cancelTabPointerDrag() {
+  const drag = tabPointerDrag.value
+  tabPointerDrag.value = null
+
+  if (drag) {
+    releaseTabPointerCapture(drag)
+  }
+}
+
 function finishTabPointerDrag(event: PointerEvent) {
   const drag = tabPointerDrag.value
   tabPointerDrag.value = null
 
   if (!drag?.dragging) {
+    if (drag) {
+      releaseTabPointerCapture(drag)
+    }
     return
   }
 
-  suppressNextTabClick.value = true
   const target = getTabDropTarget(event)
 
   if (!target) {
+    releaseTabPointerCapture(drag)
     return
   }
 
+  releaseTabPointerCapture(drag)
+  suppressNextTabClick.value = true
+  window.clearTimeout(suppressNextTabClickTimeout)
+  suppressNextTabClickTimeout = window.setTimeout(() => {
+    suppressNextTabClick.value = false
+    suppressNextTabClickTimeout = 0
+  })
   moveDroppedDocument({
     kind: 'tab',
     documentId: drag.documentId,
@@ -207,6 +235,8 @@ function finishTabPointerDrag(event: PointerEvent) {
 
 function handleTabClick(pane: EditorPane, documentId: string) {
   if (suppressNextTabClick.value) {
+    window.clearTimeout(suppressNextTabClickTimeout)
+    suppressNextTabClickTimeout = 0
     suppressNextTabClick.value = false
     return
   }
@@ -243,71 +273,64 @@ function closeTabOnAuxClick(event: MouseEvent, pane: EditorPane, documentId: str
           @drop.stop="handleTabListDrop($event, pane.id)"
         >
           <button
-            v-for="(documentId, index) in pane.documentIds"
-            :key="documentId"
+            v-for="(tab, index) in pane.tabs"
+            :key="tab.document.id"
             type="button"
             class="tab-button"
             :data-tab-drop-pane="pane.id"
             :data-tab-drop-index="index"
-            :class="{ active: pane.activeDocumentId === documentId }"
-            :title="getDocument(documentId)?.path ? cleanDisplayPath(getDocument(documentId)!.path!) : 'Scratch document'"
-            draggable="true"
-            @dragstart="startDocumentDrag($event, {
-              kind: 'tab',
-              documentId,
-              paneId: pane.id,
-            })"
-            @dragover.prevent.stop="handleDocumentDragOver"
-            @drop.stop="handleTabDrop($event, pane.id, index)"
-            @pointerdown="beginTabPointerDrag($event, documentId, pane.id)"
+            :class="{ active: tab.isActive }"
+            :title="tab.title"
+            @pointerdown="beginTabPointerDrag($event, tab.document.id, pane.id)"
             @pointermove="handleTabPointerMove"
             @pointerup="finishTabPointerDrag"
-            @pointercancel="tabPointerDrag = null"
-            @auxclick.stop="closeTabOnAuxClick($event, pane, documentId)"
-            @click.stop="handleTabClick(pane, documentId)"
+            @pointercancel="cancelTabPointerDrag"
+            @lostpointercapture="tabPointerDrag = null"
+            @auxclick.stop="closeTabOnAuxClick($event, pane, tab.document.id)"
+            @click.stop="handleTabClick(pane, tab.document.id)"
           >
-            <span>{{ getDocument(documentId)?.name ?? 'Missing' }}</span>
-            <span v-if="getDocument(documentId) && isDirty(getDocument(documentId)!)" class="tab-dot" />
+            <span>{{ tab.document.name }}</span>
+            <span v-if="tab.isDirty" class="tab-dot" />
             <X
               class="tab-close"
               :size="uiIconSizes.tabClose"
               @pointerdown.stop
-              @click.stop="closeDocument(pane, documentId)"
+              @click.stop="closeDocument(pane, tab.document.id)"
             />
           </button>
           <span
             class="tab-drop-tail"
             :data-tab-drop-pane="pane.id"
-            :data-tab-drop-index="pane.documentIds.length"
+            :data-tab-drop-index="pane.tabs.length"
             @dragover.prevent.stop="handleDocumentDragOver"
-            @drop.stop="handleTabDrop($event, pane.id, pane.documentIds.length)"
+            @drop.stop="handleTabDrop($event, pane.id, pane.tabs.length)"
           />
         </div>
       </header>
 
-      <template v-if="pane.activeDocumentId && getDocument(pane.activeDocumentId)">
+      <template v-if="pane.activeDocument">
         <VisualMarkdownEditor
-          v-if="getDocumentMode(pane, getDocument(pane.activeDocumentId)!) === 'visual'"
-          :key="`${getViewSessionId(pane, getDocument(pane.activeDocumentId)!)}:${shouldLoadRemoteImages(getDocument(pane.activeDocumentId)! ) ? 'remote-on' : 'remote-off'}`"
+          v-if="pane.activeDocument.mode === 'visual'"
+          :key="`${pane.activeDocument.viewSessionId}:${pane.activeDocument.shouldLoadRemoteImages ? 'remote-on' : 'remote-off'}`"
           :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
-          :document-id="getDocument(pane.activeDocumentId)!.id"
-          :view-id="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
-          :model-value="getDocument(pane.activeDocumentId)!.content"
-          :revision="getDocument(pane.activeDocumentId)!.revision"
-          :document-path="getDocument(pane.activeDocumentId)!.path"
+          :document-id="pane.activeDocument.document.id"
+          :view-id="pane.activeDocument.viewSessionId"
+          :model-value="pane.activeDocument.document.content"
+          :revision="pane.activeDocument.document.revision"
+          :document-path="pane.activeDocument.document.path"
           :workspace-root-path="workspaceRootPath"
-          :allow-remote-images="shouldLoadRemoteImages(getDocument(pane.activeDocumentId)!)"
+          :allow-remote-images="pane.activeDocument.shouldLoadRemoteImages"
           @document-update="emit('documentUpdate', $event)"
         />
         <section v-else class="source-editor-frame">
           <SourceEditor
-            :key="`${getViewSessionId(pane, getDocument(pane.activeDocumentId)!)}:${appSettings.editor.wordWrap ? 'wrap' : 'nowrap'}`"
+            :key="`${pane.activeDocument.viewSessionId}:${sourceWordWrap ? 'wrap' : 'nowrap'}`"
             :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
-            :document-id="getDocument(pane.activeDocumentId)!.id"
-            :view-id="getViewSessionId(pane, getDocument(pane.activeDocumentId)!)"
-            :model-value="getDocument(pane.activeDocumentId)!.content"
-            :revision="getDocument(pane.activeDocumentId)!.revision"
-            :word-wrap="appSettings.editor.wordWrap"
+            :document-id="pane.activeDocument.document.id"
+            :view-id="pane.activeDocument.viewSessionId"
+            :model-value="pane.activeDocument.document.content"
+            :revision="pane.activeDocument.document.revision"
+            :word-wrap="sourceWordWrap"
             @document-update="emit('documentUpdate', $event)"
           />
         </section>
