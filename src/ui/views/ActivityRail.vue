@@ -9,11 +9,11 @@ import {
 } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import {
-  activityRailResizeThresholds,
   layoutSettingLimits,
   type ActivityRailMode,
   type ActivitySection,
 } from '../../application/settings'
+import { activityRailResizeThresholds } from './activityRailResizeThresholds'
 import { uiIconSizes } from '../uiConstants'
 
 const railKeyboardStepPx = 16

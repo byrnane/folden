@@ -1,6 +1,7 @@
 import {
   defaultApplicationSettings,
   defaultLayoutSettings,
+  layoutSettingLimits,
   normalizeApplicationSettings,
   normalizeLayoutSettings,
   type ApplicationSettings,
@@ -9,6 +10,28 @@ import {
 
 export const applicationSettingsStorageKey = 'folden:settings:v1'
 export const applicationLayoutStorageKey = 'folden:layout:v1'
+
+function migratePersistedLayoutSettings(value: unknown) {
+  if (typeof value !== 'object' || value === null) {
+    return value
+  }
+
+  const candidate = value as Record<string, unknown>
+  const legacyActivityWidth = candidate.activityWidth
+
+  if (typeof legacyActivityWidth !== 'number' || !Number.isFinite(legacyActivityWidth)) {
+    return value
+  }
+
+  return {
+    ...candidate,
+    activityRailMode: candidate.activityRailMode === 'compact' || candidate.activityRailMode === 'expanded'
+      ? candidate.activityRailMode
+      : legacyActivityWidth > layoutSettingLimits.activityCompactWidth.max ? 'expanded' : 'compact',
+    activityCompactWidth: candidate.activityCompactWidth ?? legacyActivityWidth,
+    activityExpandedWidth: candidate.activityExpandedWidth ?? legacyActivityWidth,
+  }
+}
 
 export function loadApplicationSettings(storage: Pick<Storage, 'getItem'> = window.localStorage) {
   const rawValue = storage.getItem(applicationSettingsStorageKey)
@@ -39,7 +62,8 @@ export function loadLayoutSettings(storage: Pick<Storage, 'getItem'> = window.lo
   }
 
   try {
-    return normalizeLayoutSettings(JSON.parse(rawValue))
+    const persistedLayout = JSON.parse(rawValue)
+    return normalizeLayoutSettings(migratePersistedLayoutSettings(persistedLayout))
   } catch {
     return structuredClone(defaultLayoutSettings)
   }

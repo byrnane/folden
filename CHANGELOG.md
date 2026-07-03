@@ -6,6 +6,12 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.6.9 - 2026-07-03
+
+* Меню заголовков в DocumentToolbar переведено на обычный disclosure/dropdown без неполной ARIA menu-семантики; Escape закрывает список и возвращает фокус на trigger.
+* Legacy `activityWidth` мигрирует только при загрузке persisted layout в infrastructure, а application settings нормализует только актуальную модель.
+* UI-пороги переключения Activity Rail вынесены из application settings, а EditorPaneGrid полностью очищает pending timeout и pointer drag при размонтировании.
+
 ## 0.6.8 - 2026-07-03
 
 * Pointer drag вкладок защищён от сбоя `setPointerCapture`, если браузер уже потерял активный pointer.

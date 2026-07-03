@@ -30,9 +30,23 @@ test('shows toolbar labels only in comfortable density', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Subtitle' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Headings' }).click()
-  await expect(page.getByRole('menu')).toBeVisible()
-  await page.getByTestId('visual-editor').click()
+  const headingsTrigger = page.getByRole('button', { name: 'Headings' })
+  const headingsListId = await headingsTrigger.getAttribute('aria-controls')
+
+  expect(headingsListId).toBeTruthy()
   await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(page.locator(`#${headingsListId}`)).toBeVisible()
+  await expect(page.locator(`#${headingsListId}`).getByRole('menuitem')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(headingsTrigger).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator(`#${headingsListId}`)).toBeHidden()
+  await expect(headingsTrigger).toBeFocused()
+  await headingsTrigger.click()
+  await page.getByTestId('visual-editor').click()
+  await expect(page.locator(`#${headingsListId}`)).toBeHidden()
+  await headingsTrigger.click()
+  await page.locator(`#${headingsListId}`).getByRole('button', { name: 'Heading 4' }).click()
+  await expect(page.locator(`#${headingsListId}`)).toBeHidden()
 })
 
 test('uses explicit activity rail modes and keeps sidebar labels fitted', async ({ page }) => {
