@@ -1,5 +1,10 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { applicationLayoutStorageKey, applicationSettingsStorageKey } from '../../src/infrastructure/settings/settings'
+import {
+  applicationLayoutStorageKey,
+  applicationSettingLimits,
+  applicationSettingsStorageKey,
+  layoutSettingLimits,
+} from '../../src/infrastructure/settings/settings'
 import { installTauriMock } from './tauriMock'
 
 type OpenAppOptions = {
@@ -338,7 +343,7 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
   await dragBy(page.getByTestId('activity-splitter'), 100)
   await expect.poll(async () => page.locator('.activity-bar').evaluate((element) => (
     Math.round(element.getBoundingClientRect().width)
-  ))).toBeGreaterThanOrEqual(120)
+  ))).toBeGreaterThanOrEqual(layoutSettingLimits.activityExpandedWidth.min)
   await expect(workspaceRailLabel).toBeVisible()
   await expect.poll(async () => page.evaluate((storageKey) => (
     window.localStorage.getItem(storageKey)
@@ -359,7 +364,7 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
   await expect(workspaceRailLabel).toBeHidden()
   await expect.poll(async () => page.locator('.activity-bar').evaluate((element) => (
     Math.round(element.getBoundingClientRect().width)
-  ))).toBeLessThanOrEqual(80)
+  ))).toBeLessThanOrEqual(layoutSettingLimits.activityCompactWidth.max)
 
   await dragBy(page.locator('.sidebar-splitter'), -160)
   await expect(scratchLabel).toBeHidden()
@@ -374,7 +379,7 @@ test('loads persisted settings before opening a workspace', async ({ page }) => 
       [applicationSettingsStorageKey]: JSON.stringify({
         autosave: {
           enabled: true,
-          debounceMs: 1200,
+          debounceMs: applicationSettingLimits.autosaveDebounceMs.fallback,
         },
         remoteImages: {
           policy: 'blocked',
@@ -415,11 +420,11 @@ test('keeps settings number input editable and stores autosave delay as millisec
   await sourceSize.fill('1')
   await expect(sourceSize).toHaveValue('1')
   await sourceSize.blur()
-  await expect(sourceSize).toHaveValue('10')
+  await expect(sourceSize).toHaveValue(String(applicationSettingLimits.sourceFontSize.min))
 
   await page.getByRole('button', { name: 'Files' }).click()
   const autosaveDelay = page.getByLabel('Autosave delay')
-  await expect(autosaveDelay).toHaveValue('1.2')
+  await expect(autosaveDelay).toHaveValue(String(applicationSettingLimits.autosaveDebounceMs.fallback / 1000))
   await autosaveDelay.fill('2.5')
   await autosaveDelay.blur()
 

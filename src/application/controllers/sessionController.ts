@@ -11,6 +11,8 @@ import {
   type SessionPaneId,
 } from '../sessionRecovery'
 
+const sessionPersistenceDebounceMs = 250
+
 export function createSessionController(hasNativeRuntime: boolean) {
   const pendingRecoveryEntries = ref<RecoverySnapshot[]>([])
   let restoreComplete = false
@@ -190,7 +192,7 @@ export function createSessionController(hasNativeRuntime: boolean) {
     persistTimeout = globalThis.setTimeout(() => {
       persistTimeout = null
       void persistSessionAndRecoveryState(persist)
-    }, 250)
+    }, sessionPersistenceDebounceMs)
   }
 
   function dispose() {

@@ -3,6 +3,8 @@ import { isDocumentDirty } from '../../domain/document'
 import type { OpenDocument } from '../../domain/documents/documentState'
 import type { NativeFsEvent } from '../../domain/native'
 
+export const externalFileEventDebounceMs = 180
+
 export function createExternalChangesController() {
   const watcherWarning = ref<string | null>(null)
   const pendingWorkspaceRefreshes = new Map<string, ReturnType<typeof globalThis.setTimeout>>()
@@ -22,7 +24,7 @@ export function createExternalChangesController() {
     const timeoutId = globalThis.setTimeout(() => {
       pendingWorkspaceRefreshes.delete(key)
       refresh()
-    }, 180)
+    }, externalFileEventDebounceMs)
 
     pendingWorkspaceRefreshes.set(key, timeoutId)
   }
@@ -37,7 +39,7 @@ export function createExternalChangesController() {
     const timeoutId = globalThis.setTimeout(() => {
       pendingDocumentReloads.delete(documentId)
       reload()
-    }, 180)
+    }, externalFileEventDebounceMs)
 
     pendingDocumentReloads.set(documentId, timeoutId)
   }

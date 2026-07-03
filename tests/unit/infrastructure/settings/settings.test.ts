@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applicationSettingLimits,
   applicationSettingsStorageKey,
   defaultApplicationSettings,
   defaultLayoutSettings,
+  layoutSettingLimits,
   loadApplicationSettings,
   normalizeLayoutSettings,
   normalizeApplicationSettings,
@@ -16,7 +18,7 @@ describe('application settings', () => {
     expect(normalizeApplicationSettings({
       autosave: {
         enabled: true,
-        debounceMs: 10,
+        debounceMs: applicationSettingLimits.autosaveDebounceMs.min - 1,
       },
       remoteImages: {
         policy: 'always-load',
@@ -54,10 +56,10 @@ describe('application settings', () => {
       ...defaultLayoutSettings,
       activeActivitySection: 'settings',
       activityRailMode: 'expanded',
-      activityCompactWidth: 80,
-      activityExpandedWidth: 280,
-      sidebarWidth: 520,
-      splitRatio: 0.25,
+      activityCompactWidth: layoutSettingLimits.activityCompactWidth.max,
+      activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.max,
+      sidebarWidth: layoutSettingLimits.sidebarWidth.max,
+      splitRatio: layoutSettingLimits.splitRatio.min,
       focusMode: true,
     })
   })
@@ -65,8 +67,8 @@ describe('application settings', () => {
   it('migrates missing activity rail widths to defaults', () => {
     expect(normalizeLayoutSettings({
       activeActivitySection: 'workspace',
-      sidebarWidth: 292,
-      splitRatio: 0.5,
+      sidebarWidth: layoutSettingLimits.sidebarWidth.fallback,
+      splitRatio: layoutSettingLimits.splitRatio.fallback,
       focusMode: false,
     })).toEqual(defaultLayoutSettings)
   })
@@ -74,13 +76,13 @@ describe('application settings', () => {
   it('migrates legacy activity rail width without persisting activityWidth', () => {
     expect(normalizeLayoutSettings({
       activityWidth: 132,
-      sidebarWidth: 292,
-      splitRatio: 0.5,
+      sidebarWidth: layoutSettingLimits.sidebarWidth.fallback,
+      splitRatio: layoutSettingLimits.splitRatio.fallback,
       focusMode: false,
     })).toEqual({
       ...defaultLayoutSettings,
       activityRailMode: 'expanded',
-      activityCompactWidth: 80,
+      activityCompactWidth: layoutSettingLimits.activityCompactWidth.max,
       activityExpandedWidth: 132,
     })
   })
@@ -88,12 +90,12 @@ describe('application settings', () => {
   it('keeps compact and expanded rail widths independent and clamped', () => {
     expect(normalizeLayoutSettings({
       activityRailMode: 'compact',
-      activityCompactWidth: 12,
-      activityExpandedWidth: 400,
+      activityCompactWidth: layoutSettingLimits.activityCompactWidth.min - 1,
+      activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.max + 1,
     })).toEqual({
       ...defaultLayoutSettings,
-      activityCompactWidth: 36,
-      activityExpandedWidth: 280,
+      activityCompactWidth: layoutSettingLimits.activityCompactWidth.min,
+      activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.max,
     })
   })
 
@@ -131,7 +133,7 @@ describe('application settings', () => {
       autosave: {
         ...defaultApplicationSettings.autosave,
         enabled: true,
-        debounceMs: 1500,
+        debounceMs: applicationSettingLimits.autosaveDebounceMs.fallback + applicationSettingLimits.autosaveDebounceMs.step,
         saveOnWindowBlur: true,
       },
     }, storage)
