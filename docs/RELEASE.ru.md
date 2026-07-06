@@ -7,7 +7,7 @@
 ## Синхронизация версии
 
 * Выполнить `npm run version:check`.
-* Подтвердить одинаковую версию в `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `README.md`, `README.ru.md` и верхней записи `CHANGELOG.md`.
+* Подтвердить одинаковую версию в `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock` и верхней записи `CHANGELOG.md`.
 * Проверить, что документация не описывает удалённые или переименованные модули.
 
 ## Автоматические проверки

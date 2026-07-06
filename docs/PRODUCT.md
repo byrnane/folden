@@ -51,7 +51,7 @@ Supporting data must not become the canonical copy of a saved document.
 
 ## Current Product Surface
 
-Folden `0.6.9` supports:
+Folden currently supports:
 
 * native text file open/save;
 * workspace folder browsing, lazy tree loading, recent workspaces, ignored names, and workspace file operations;

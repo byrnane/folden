@@ -1,6 +1,6 @@
 # Folden Architecture
 
-This document describes the current `0.6.9` codebase. It is the main reference for changing the application structure.
+This document describes the current codebase. It is the main reference for changing the application structure.
 
 ## Dependency Flow
 

@@ -1,6 +1,6 @@
-# Folden 0.6.9 Dogfooding
+# Folden Dogfooding
 
-Use this file to record real 0.6.9 usage before starting 0.7 feature work.
+Use this file to record real daily usage before starting the next feature cycle.
 
 ## Sessions
 
@@ -16,7 +16,7 @@ Scenarios used:
 Notes:
 ```
 
-Required coverage before 0.7:
+Required coverage:
 
 * several full work sessions;
 * real Markdown project;
@@ -37,7 +37,7 @@ Required coverage before 0.7:
 
 ## Issue Backlog
 
-Add only reproducible bugs or items with clear user value. Do not mix 0.6 bugs with 0.7 feature ideas.
+Add only reproducible bugs or items with clear user value. Keep bug reports separate from future feature ideas.
 
 ### Template
 

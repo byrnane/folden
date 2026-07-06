@@ -5,7 +5,7 @@ Use this checklist before tagging or publishing a Folden release. Keep evidence 
 ## Version Sync
 
 * Run `npm run version:check`.
-* Confirm the same version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `README.md`, and the top `CHANGELOG.md` entry.
+* Confirm the same version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and the top `CHANGELOG.md` entry.
 * Confirm docs do not describe removed or renamed modules.
 
 ## Automated Checks
