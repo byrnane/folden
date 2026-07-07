@@ -35,6 +35,12 @@ Required coverage:
 * several hours of use;
 * memory use and visible slowdown check.
 
+## 0.7 Automated Closeout
+
+The 0.7 release gate covered the editor regression checklist with automated E2E tests: Visual/Source no-dirty switching, instant Visual edits before Source, kitchen-sink save/reopen, raw HTML/frontmatter Source preservation, Source link/image dialogs, table/task-list editing, scroll/selection preservation, and tab/workspace/external drag/drop payloads.
+
+This does not replace real dogfooding or installer smoke testing. Record those sessions separately below.
+
 ## Issue Backlog
 
 Add only reproducible bugs or items with clear user value. Keep bug reports separate from future feature ideas.

@@ -175,6 +175,10 @@ export function createPaneController(initialDocument: OpenDocument) {
       return null
     }
 
+    if (pane.id === 'right') {
+      splitEnabled.value = true
+    }
+
     if (!pane.documentIds.includes(document.id)) {
       pane.documentIds.push(document.id)
     }

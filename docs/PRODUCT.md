@@ -85,7 +85,7 @@ Future features should keep the same product contract: user documents stay file-
 
 ## Role of Markdown and Plain Text
 
-Markdown files can open in Visual mode and Source mode. Source mode is a first-class editing surface, not a fallback. Visual mode should help users write common Markdown without taking ownership away from the source file.
+Markdown files can open in Visual mode and Source mode. Source mode is a first-class editing surface, not a fallback. Visual mode should help users write supported CommonMark/GFM without taking ownership away from the source file. Raw HTML, HTML comments, frontmatter, footnotes, and custom directives stay safety-gated for Visual editing until Folden can preserve those raw blocks without rewriting them.
 
 Plain text files remain plain text files. Folden should not force arbitrary text into a Markdown or block-document model just because the application has a visual editor.
 

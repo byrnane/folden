@@ -2,14 +2,17 @@
 
 ## Closeout status — 2026-07-07
 
-0.7.0 закрыл базовый общий toolbar, Source commands, Markdown safety baseline, GFM tables/task lists, Source theme и drag/drop. 0.7.1 closeout закрывает оставшиеся P0-регрессии:
+0.7.0 закрыл базовый общий toolbar, Source commands, Markdown safety baseline, GFM tables/task lists, Source theme и drag/drop. 0.7.1/0.7.2 closeout закрывает оставшиеся P0-регрессии:
 
 - Scratch Markdown-документы считаются Markdown по `path ?? name`, поэтому `Untitled.md` получает Visual mode и toolbar до сохранения.
 - Source link/image используют dialog + validation flow, как Visual; hardcoded placeholder insertion убран.
 - Table UX добавлен в общий toolbar: Visual выполняет insert/row/column/delete actions через Tiptap, Source поддерживает только insert Markdown table snippet.
 - Visual/Source view state проходит через явный adapter-конвертер selection state между Source offsets и Visual positions.
 - Raw HTML, HTML comments, frontmatter, footnotes и custom directives остаются protected/safety-gated для Visual в 0.7; Source должен сохранять их без переписывания.
-- Regression coverage: scratch toolbar, kitchen sink safety gate, supported Markdown 10x mode switch без dirty, Source dialogs, Visual table/task-list edit round-trip, selection conversion.
+- Regression coverage: scratch toolbar, kitchen sink safety gate, supported Markdown 10x mode switch без dirty, kitchen-sink save/reopen, raw HTML/frontmatter Source preservation, Source dialogs insert/edit/cancel/validation, Visual table/task-list edit/delete round-trip, approximate selection/scroll preservation, workspace/external drag payload drop zones.
+- Visual table-команды отключаются вне таблицы; toolbar-команды Visual применяют изменения даже после фокуса на toolbar-кнопке.
+- Drop в right split открывает правую панель для workspace/external payloads.
+- Release gate пройден: `npm run quality`, `npm run test:e2e`, `npm run app:build`.
 
 ## 0.7-P0-01 — Бесшовное переключение Visual / Source
 
@@ -65,7 +68,7 @@
 
 **Результат:** Документ после round-trip остаётся эквивалентным исходнику; неподдержанные Visual-фичи не теряются и не ломаются.
 
-**Статус:** закрыто regression tests; unsupported Visual features protected by safety gate.
+**Статус:** закрыто regression tests; unsupported Visual features protected by safety gate. Kitchen-sink save/reopen покрыт E2E.
 
 ## 0.7-P0-08 — Таблицы
 
@@ -73,7 +76,7 @@
 
 **Результат:** Markdown-файлы с таблицами открываются без ошибок, таблицы сохраняются без потери структуры, Visual-режим не портит исходник.
 
-**Статус:** закрыто для Visual table editing + Source insert snippet; Source row/column structural editing outside 0.7.
+**Статус:** закрыто для Visual table editing/delete + Source insert snippet; Source row/column structural editing outside 0.7. Structural Visual table commands disabled outside a table.
 
 ## 0.7-P0-09 — HTML, comments и frontmatter
 
@@ -145,7 +148,7 @@
 
 **Результат:** Проверены mode switch без dirty, Markdown round-trip, Source toolbar commands, таблицы/HTML/task lists, tab drag&drop, file drag&drop и external drag&drop.
 
-**Статус:** закрыто с 0.7.1 closeout regression coverage.
+**Статус:** закрыто с 0.7.1/0.7.2 closeout regression coverage.
 
 ## 0.7-P0-18 — Release quality gate
 
@@ -153,4 +156,4 @@
 
 **Результат:** Перед релизом проходят typecheck, lint, unit tests, e2e smoke tests и desktop build.
 
-**Статус:** pending до финального запуска `npm run quality`, `npm run test:e2e`, `npm run app:build`.
+**Статус:** закрыто 2026-07-07: `npm run quality`, `npm run test:e2e`, `npm run app:build`.

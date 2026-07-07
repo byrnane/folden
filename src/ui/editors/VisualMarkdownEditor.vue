@@ -37,6 +37,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'document-update': [update: DocumentUpdate]
+  'toolbar-state': [state: { disabledCommands: EditorCommand[] }]
 }>()
 
 const scrollHost = ref<HTMLDivElement | null>(null)
@@ -46,7 +47,18 @@ const inputDialog = ref<EditorInputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
 let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
+let isRunningEditorCommand = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
+
+const structuralTableCommands: EditorCommand[] = [
+  'add-row-before',
+  'add-row-after',
+  'delete-row',
+  'add-column-before',
+  'add-column-after',
+  'delete-column',
+  'delete-table',
+]
 
 function normalizeVisualMarkdownForComparison(value: string) {
   return value.replace(/\r\n?/g, '\n').trimEnd()
@@ -222,13 +234,17 @@ function createEditor(element: HTMLDivElement) {
     ],
     onCreate: () => {
       lastAppliedRevision = props.revision
+      emitToolbarState()
     },
+    onSelectionUpdate: () => emitToolbarState(),
     onUpdate: ({ editor }) => {
+      emitToolbarState()
+
       if (isApplyingExternalContent) {
         return
       }
 
-      if (!editor.isFocused) {
+      if (!editor.isFocused && !isRunningEditorCommand) {
         lastAppliedRevision = props.revision
         return
       }
@@ -249,6 +265,12 @@ function createEditor(element: HTMLDivElement) {
       })
       lastAppliedRevision += 1
     },
+  })
+}
+
+function emitToolbarState() {
+  emit('toolbar-state', {
+    disabledCommands: editor.value?.isActive('table') ? [] : structuralTableCommands,
   })
 }
 
@@ -371,8 +393,13 @@ function runCommand(command: () => void) {
     return
   }
 
-  command()
-  editor.value.commands.focus()
+  isRunningEditorCommand = true
+  try {
+    command()
+    editor.value.commands.focus()
+  } finally {
+    isRunningEditorCommand = false
+  }
 }
 
 function openInputDialog(options: EditorInputDialogState) {

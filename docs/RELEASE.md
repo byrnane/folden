@@ -27,6 +27,22 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
+## Markdown Closeout Checks
+
+For editor releases, confirm the automated E2E coverage includes:
+
+* Visual/Source switching without dirty state when content is unchanged.
+* Visual edits immediately followed by Source mode.
+* Large kitchen-sink Markdown through Visual, Source, save, close, and reopen.
+* Source preservation for raw HTML, HTML comments, and frontmatter.
+* Visual safety gates for Markdown constructs that Tiptap cannot preserve as raw source.
+* Table cell edits, row/column commands, table deletion, and task-list checkbox persistence.
+* Source link/image dialogs for insert, edit, cancel, and validation.
+* Scratch `Untitled.md` toolbar behavior before save.
+* Tab, workspace-file, and external-path drag/drop into editor panes and right split.
+
+Do not describe Visual mode as supporting every Markdown construct. The 0.7 contract is supported CommonMark/GFM editing plus safety-gated raw blocks; Source remains the preservation path for raw Markdown.
+
 ## Desktop Build
 
 Build the installer bundle, not only the `--no-bundle` executable:

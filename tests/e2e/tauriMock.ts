@@ -70,6 +70,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     let modifiedAtMs = 1_800_000_000_000
     let windowDestroyed = false
     let diagnosticExportCount = 0
+    const nativeDocumentPaths = new Map<string, string>()
 
     function fingerprint(content: string) {
       modifiedAtMs += 1
@@ -92,8 +93,11 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         }
       }
 
+      const id = `native-doc-${nextDocumentId++}`
+      nativeDocumentPaths.set(id, relativePath)
+
       return {
-        id: `native-doc-${nextDocumentId++}`,
+        id,
         path: `${workspace.rootPath}\\${relativePath}`,
         content,
         workspaceId: workspace.id,
@@ -222,12 +226,16 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         case 'save_text_file': {
           const content = String(args?.content ?? '')
           const documentId = typeof args?.documentId === 'string' ? args.documentId : null
-          const relativePath = documentId ? 'README.md' : String(args?.suggestedFileName ?? 'Untitled.md')
+          const relativePath = documentId
+            ? nativeDocumentPaths.get(documentId) ?? 'README.md'
+            : String(args?.suggestedFileName ?? 'Untitled.md')
 
           files.set(relativePath, content)
+          const nextDocumentIdValue = documentId ?? `native-doc-${nextDocumentId++}`
+          nativeDocumentPaths.set(nextDocumentIdValue, relativePath)
 
           return {
-            id: documentId ?? `native-doc-${nextDocumentId++}`,
+            id: nextDocumentIdValue,
             path: `${workspace.rootPath}\\${relativePath}`,
             content,
             workspaceId: workspace.id,

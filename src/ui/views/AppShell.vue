@@ -124,6 +124,7 @@ const {
 
 const openEditorsCollapsed = ref(false)
 const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
+const paneToolbarDisabledCommands = ref<Partial<Record<'left' | 'right', EditorCommand[]>>>({})
 const sidebarResizeStart = ref<{ x: number, width: number } | null>(null)
 const splitResizeStart = ref<{ x: number, ratio: number, width: number } | null>(null)
 const sourceFontSizeInput = ref(String(appSettings.value.editor.sourceFontSize))
@@ -214,8 +215,11 @@ const sourceDisabledToolbarCommands: EditorCommand[] = [
   'delete-column',
   'delete-table',
 ]
+const visualDefaultDisabledToolbarCommands: EditorCommand[] = sourceDisabledToolbarCommands
 const disabledToolbarCommands = computed(() =>
-  activeDocumentMode.value === 'source' ? sourceDisabledToolbarCommands : [],
+  activeDocumentMode.value === 'source'
+    ? sourceDisabledToolbarCommands
+    : paneToolbarDisabledCommands.value[activePaneId.value] ?? visualDefaultDisabledToolbarCommands,
 )
 const showSettingsView = computed(() =>
   layoutSettings.value.activeActivitySection === 'settings' && !layoutSettings.value.focusMode,
@@ -354,6 +358,13 @@ function resizeSplitWithKeyboard(event: KeyboardEvent) {
   const direction = event.key === 'ArrowRight' ? 1 : -1
   const step = event.shiftKey ? splitKeyboardLargeStep : splitKeyboardStep
   setSplitRatio(layoutSettings.value.splitRatio + direction * step)
+}
+
+function updatePaneToolbarState(paneId: 'left' | 'right', state: { disabledCommands: EditorCommand[] }) {
+  paneToolbarDisabledCommands.value = {
+    ...paneToolbarDisabledCommands.value,
+    [paneId]: state.disabledCommands,
+  }
 }
 
 watch(() => appSettings.value.editor.sourceFontSize, (value) => {
@@ -930,6 +941,7 @@ onBeforeUnmount(() => {
         @begin-split-resize="beginSplitResize"
         @keyboard-split-resize="resizeSplitWithKeyboard"
         @document-update="handleDocumentUpdate"
+        @toolbar-state="updatePaneToolbarState"
         @move-document-between-panes="moveDocumentIdBetweenPanes"
         @reorder-document-in-pane="reorderDocumentInPane"
         @reset-layout="resetLayoutSettings"

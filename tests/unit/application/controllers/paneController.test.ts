@@ -86,6 +86,18 @@ describe('pane controller', () => {
     expect(controller.activePaneId.value).toBe('right')
   })
 
+  it('enables split when a document is opened directly in the right pane', () => {
+    const first = createDocument('first')
+    const second = createDocument('second')
+    const controller = createPaneController(first)
+
+    controller.addDocumentToPane(second, 'right')
+
+    expect(controller.splitEnabled.value).toBe(true)
+    expect(controller.getPane('right')?.documentIds).toEqual(['second'])
+    expect(controller.activePaneId.value).toBe('right')
+  })
+
   it('restores layout, modes, split state, and editor sessions from a snapshot', () => {
     const first = createDocument('first')
     const second = createDocument('second')

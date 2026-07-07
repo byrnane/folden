@@ -3,7 +3,7 @@ import { X } from 'lucide-vue-next'
 import { onBeforeUnmount, ref } from 'vue'
 import type { WorkspaceEntry } from '../../domain/native'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
-import type { EditorAdapter, EditorPane, EditorPaneView } from '../../application/types/shell'
+import type { EditorAdapter, EditorCommand, EditorPane, EditorPaneView } from '../../application/types/shell'
 import SourceEditor from '../editors/SourceEditor.vue'
 import VisualMarkdownEditor from '../editors/VisualMarkdownEditor.vue'
 import {
@@ -38,6 +38,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   beginSplitResize: [event: MouseEvent]
   documentUpdate: [update: DocumentUpdate]
+  toolbarState: [paneId: EditorPane['id'], state: { disabledCommands: EditorCommand[] }]
   moveDocumentBetweenPanes: [
     documentId: string,
     sourcePaneId: EditorPane['id'],
@@ -419,6 +420,7 @@ onBeforeUnmount(() => {
           :allow-remote-images="pane.activeDocument.shouldLoadRemoteImages"
           :view-state="pane.activeDocument.viewSession"
           @document-update="emit('documentUpdate', $event)"
+          @toolbar-state="emit('toolbarState', pane.id, $event)"
         />
         <section v-else class="source-editor-frame">
           <SourceEditor

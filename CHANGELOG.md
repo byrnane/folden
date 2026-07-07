@@ -9,6 +9,10 @@
 ## 0.7.2 - 2026-07-07
 
 * Расширено unit-покрытие критических контроллеров, path helpers и drag/drop payload.
+* Visual table-команды теперь отключены вне таблицы и корректно применяют toolbar-изменения, даже когда фокус находится на кнопке.
+* Drop в right split включает split-pane для файлов из workspace и внешних путей.
+* E2E closeout расширен проверками Visual/Source save/reopen, raw HTML/frontmatter Source preservation, Source dialog cancel/validation, scroll/selection и table/task-list flows.
+* Подтверждён release gate: `npm run quality`, `npm run test:e2e`, `npm run app:build`.
 
 ## 0.7.1 - 2026-07-07
 

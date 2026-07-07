@@ -4,6 +4,8 @@
 
 Folden 0.7 focuses on polishing the existing editor core: seamless Visual/Source switching, shared formatting commands, safer Markdown round-trip, better Source UX, and predictable drag and drop.
 
+Closeout status on 2026-07-07: implemented and verified for `0.7.2`.
+
 ## Key Changes
 
 - Replace Visual-only editor commands with a shared `EditorCommand` adapter contract used by both Visual and Source editors.
@@ -23,6 +25,8 @@ Folden 0.7 focuses on polishing the existing editor core: seamless Visual/Source
 5. Add workspace-file drag support, drop-zone highlighting, tab insertion markers, and right-split drop affordance.
 6. Run quality checks and desktop build before release.
 
+Status: complete.
+
 ## Test Plan
 
 - `npm run test:unit`
@@ -30,6 +34,7 @@ Folden 0.7 focuses on polishing the existing editor core: seamless Visual/Source
 - `npm run quality`
 - `npm run app:build`
 - Manual smoke: open Markdown with tables/task lists/raw HTML/frontmatter, switch modes, save, and verify unchanged/dirty behavior.
+- Release gate: `npm run quality`, `npm run test:e2e`, `npm run app:build`.
 
 ## Notes
 

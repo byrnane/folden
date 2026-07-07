@@ -37,6 +37,12 @@
 * несколько часов непрерывной работы;
 * проверка потребления памяти и заметного замедления.
 
+## Automated closeout 0.7
+
+Release gate 0.7 покрыл регрессионный чек-лист редактора автоматическими E2E-тестами: переключение Visual/Source без dirty-state, мгновенную правку Visual перед Source, kitchen-sink save/reopen, сохранение raw HTML/frontmatter в Source, Source link/image dialogs, редактирование tables/task lists, сохранение scroll/selection и drag/drop payloads для вкладок, workspace-файлов и external paths.
+
+Это не заменяет реальный dogfooding и smoke test установщика. Такие сессии фиксируются отдельно ниже.
+
 ## Backlog проблем
 
 Добавляйте только воспроизводимые ошибки или задачи с понятной пользовательской ценностью. Держите баги отдельно от идей будущих функций.

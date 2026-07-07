@@ -29,6 +29,22 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
+## Closeout-проверки Markdown
+
+Для релизов редактора подтвердить, что автоматическое E2E-покрытие включает:
+
+* переключение Visual/Source без dirty-state, если пользователь не менял содержимое;
+* правку в Visual с мгновенным переходом в Source;
+* большой kitchen-sink Markdown через Visual, Source, save, close и reopen;
+* сохранение raw HTML, HTML comments и frontmatter в Source без переписывания;
+* Visual safety gates для Markdown-конструкций, которые Tiptap не может сохранить как raw source;
+* редактирование ячеек таблицы, row/column commands, удаление таблицы и сохранение task-list checkbox state;
+* Source link/image dialogs: insert, edit, cancel и validation;
+* toolbar для scratch `Untitled.md` до сохранения;
+* drag/drop вкладок, файлов из workspace и external paths в editor panes и right split.
+
+Не описывайте Visual mode как поддержку любого Markdown. Контракт 0.7: редактирование supported CommonMark/GFM плюс safety-gated raw blocks; Source остаётся режимом сохранения raw Markdown.
+
 ## Desktop-сборка
 
 Собрать установочный пакет, а не только executable с `--no-bundle`:
