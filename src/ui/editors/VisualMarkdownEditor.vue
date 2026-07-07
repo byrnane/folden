@@ -14,9 +14,15 @@ import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import PromptDialog from '../dialogs/PromptDialog.vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
+import { toVisualSelectionState } from '../../domain/documents/editorViewState'
 import { resolveVisualImageSource } from '../../domain/markdown/imageRendering'
-import { validateImageTarget, validateLinkTarget } from '../../domain/markdown/markdownSafety'
+import { validateLinkTarget } from '../../domain/markdown/markdownSafety'
 import type { EditorCommand } from '../../application/types/shell'
+import {
+  createImageInputDialog,
+  createLinkInputDialog,
+  type EditorInputDialogState,
+} from './editorInputDialogs'
 
 const props = defineProps<{
   documentId: string
@@ -33,21 +39,10 @@ const emit = defineEmits<{
   'document-update': [update: DocumentUpdate]
 }>()
 
-type InputDialogState = {
-  title: string
-  message: string
-  initialValue: string
-  placeholder: string
-  confirmLabel: string
-  inputLabel: string
-  validate?: (value: string) => string | null
-  normalize?: (value: string) => string
-}
-
 const scrollHost = ref<HTMLDivElement | null>(null)
 const editorHost = ref<HTMLDivElement | null>(null)
 const editor = shallowRef<Editor | null>(null)
-const inputDialog = ref<InputDialogState | null>(null)
+const inputDialog = ref<EditorInputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
 let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
@@ -380,7 +375,7 @@ function runCommand(command: () => void) {
   editor.value.commands.focus()
 }
 
-function openInputDialog(options: InputDialogState) {
+function openInputDialog(options: EditorInputDialogState) {
   inputDialogError.value = null
   inputDialog.value = options
 
@@ -424,16 +419,7 @@ async function setLink() {
   }
 
   const previousUrl = editor.value.getAttributes('link').href as string | undefined
-  const url = await openInputDialog({
-    title: 'Edit link',
-    message: 'Enter a URL for the selected link. Leave it empty to remove the link.',
-    initialValue: previousUrl ?? '',
-    placeholder: 'https://example.com',
-    confirmLabel: 'Apply',
-    inputLabel: 'Link URL',
-    validate: (value) => validateLinkTarget(value),
-    normalize: (value) => value.trim(),
-  })
+  const url = await openInputDialog(createLinkInputDialog(previousUrl ?? ''))
 
   if (url === null) {
     return
@@ -459,16 +445,7 @@ async function setImage() {
     return
   }
 
-  const url = await openInputDialog({
-    title: 'Insert image',
-    message: 'Enter a relative, asset:, data:, http:, or https: image URL to insert into the document.',
-    initialValue: '',
-    placeholder: './image.png',
-    confirmLabel: 'Insert',
-    inputLabel: 'Image URL',
-    validate: (value) => validateImageTarget(value),
-    normalize: (value) => value.trim(),
-  })
+  const url = await openInputDialog(createImageInputDialog())
 
   if (!url) {
     return
@@ -484,6 +461,7 @@ function captureViewState() {
     scrollTop: scrollHost.value?.scrollTop ?? props.viewState.scrollTop,
     selectionState: selection
       ? {
+          kind: 'visual',
           from: selection.from,
           to: selection.to,
         }
@@ -493,19 +471,13 @@ function captureViewState() {
 }
 
 function restoreViewState(viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>) {
-  const selection = viewState.selectionState
-
-  if (
-    editor.value
-    && typeof selection === 'object'
-    && selection !== null
-    && typeof (selection as { from?: unknown }).from === 'number'
-    && typeof (selection as { to?: unknown }).to === 'number'
-  ) {
+  if (editor.value) {
     const nextMaxPosition = editor.value.state.doc.content.size
-    const from = Math.max(1, Math.min((selection as { from: number }).from, nextMaxPosition))
-    const to = Math.max(1, Math.min((selection as { to: number }).to, nextMaxPosition))
-    editor.value.commands.setTextSelection({ from, to })
+    const selection = toVisualSelectionState(viewState.selectionState, nextMaxPosition)
+
+    if (selection) {
+      editor.value.commands.setTextSelection({ from: selection.from, to: selection.to })
+    }
   }
 
   requestAnimationFrame(() => {
@@ -542,9 +514,38 @@ function runEditorCommand(command: EditorCommand) {
     link: () => setLink(),
     image: () => setImage(),
     'horizontal-rule': () => runCommand(() => editor.value?.chain().focus().setHorizontalRule().run()),
+    'insert-table': () => runTableCommand((chain) => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()),
+    'add-row-before': () => runTableCommand((chain) => chain.addRowBefore().run()),
+    'add-row-after': () => runTableCommand((chain) => chain.addRowAfter().run()),
+    'delete-row': () => runTableCommand((chain) => chain.deleteRow().run()),
+    'add-column-before': () => runTableCommand((chain) => chain.addColumnBefore().run()),
+    'add-column-after': () => runTableCommand((chain) => chain.addColumnAfter().run()),
+    'delete-column': () => runTableCommand((chain) => chain.deleteColumn().run()),
+    'delete-table': () => runTableCommand((chain) => chain.deleteTable().run()),
   }
 
   void commands[command]()
+}
+
+type TableCommandChain = {
+  insertTable: (options: { rows: number, cols: number, withHeaderRow: boolean }) => { run: () => boolean }
+  addRowBefore: () => { run: () => boolean }
+  addRowAfter: () => { run: () => boolean }
+  deleteRow: () => { run: () => boolean }
+  addColumnBefore: () => { run: () => boolean }
+  addColumnAfter: () => { run: () => boolean }
+  deleteColumn: () => { run: () => boolean }
+  deleteTable: () => { run: () => boolean }
+}
+
+function runTableCommand(command: (chain: TableCommandChain) => boolean) {
+  runCommand(() => {
+    const chain = editor.value?.chain().focus() as unknown as TableCommandChain | undefined
+
+    if (chain) {
+      command(chain)
+    }
+  })
 }
 
 onBeforeUnmount(() => {

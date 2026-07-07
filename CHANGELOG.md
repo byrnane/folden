@@ -6,6 +6,14 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.7.1 - 2026-07-07
+
+* Scratch Markdown-документы теперь получают Visual mode и общий Markdown toolbar по имени `Untitled.md`, даже до первого сохранения.
+* Source link/image команды переведены на тот же dialog и validation flow, что Visual; фиктивные URL больше не вставляются без подтверждения.
+* Toolbar расширен table UX: Visual поддерживает вставку таблицы и row/column/delete actions через Tiptap, Source вставляет Markdown table snippet.
+* Добавлены regression tests для scratch toolbar, mode-switch без dirty, Source dialogs, Visual table/task-list edit round-trip и raw HTML/frontmatter safety gate.
+* Raw HTML/frontmatter остаются safety-gated для Visual в 0.7; Source сохраняет эти блоки без переписывания.
+
 ## 0.7.0 - 2026-07-07
 
 * Visual и Source режимы Markdown получили общий контракт editor commands и один DocumentToolbar для применимых Markdown-документов.

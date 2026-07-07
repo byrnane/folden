@@ -26,6 +26,7 @@ import EditorPaneGrid from './EditorPaneGrid.vue'
 import OpenEditors from './OpenEditors.vue'
 import WorkspaceTree from '../workspace/WorkspaceTree.vue'
 import { useApplicationShell } from '../../applicationShell'
+import type { EditorCommand } from '../../application/types/shell'
 import {
   applicationSettingLimits,
   layoutSettingLimits,
@@ -67,7 +68,7 @@ const {
   getViewSessionId,
   handleDocumentUpdate,
   isDirty,
-  isMarkdownPath,
+  isMarkdownDocument,
   allowRemoteImagesForDocument,
   documentHasRemoteImages,
   loadWorkspace,
@@ -202,7 +203,19 @@ const moveActiveTabIcon = computed(() => activePaneIsRight.value ? PanelRightOpe
 const showDocumentToolbar = computed(() =>
   (layoutSettings.value.activeActivitySection !== 'settings' || layoutSettings.value.focusMode)
   && activeDocument.value !== null
-  && isMarkdownPath(activeDocument.value.path),
+  && isMarkdownDocument(activeDocument.value),
+)
+const sourceDisabledToolbarCommands: EditorCommand[] = [
+  'add-row-before',
+  'add-row-after',
+  'delete-row',
+  'add-column-before',
+  'add-column-after',
+  'delete-column',
+  'delete-table',
+]
+const disabledToolbarCommands = computed(() =>
+  activeDocumentMode.value === 'source' ? sourceDisabledToolbarCommands : [],
 )
 const showSettingsView = computed(() =>
   layoutSettings.value.activeActivitySection === 'settings' && !layoutSettings.value.focusMode,
@@ -596,7 +609,7 @@ onBeforeUnmount(() => {
               title="Visual"
               aria-label="Visual"
               :class="{ active: activeDocument && activeDocumentMode === 'visual' }"
-              :disabled="!activeDocument || !isMarkdownPath(activeDocument.path)"
+              :disabled="!activeDocument || !isMarkdownDocument(activeDocument)"
               @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'visual')"
             >
               <Eye :size="uiIconSizes.toolbar" />
@@ -897,6 +910,7 @@ onBeforeUnmount(() => {
 
       <DocumentToolbar
         v-if="showDocumentToolbar"
+        :disabled-commands="disabledToolbarCommands"
         @run-command="runActiveEditorCommand"
       />
 

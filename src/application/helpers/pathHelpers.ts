@@ -24,6 +24,10 @@ export function isMarkdownPath(path: string | null) {
   return /\.(md|markdown)$/i.test(path)
 }
 
+export function isMarkdownDocument(document: { path: string | null, name: string }) {
+  return isMarkdownPath(document.path ?? document.name)
+}
+
 export function cleanDisplayPath(path: string) {
   if (path.startsWith('\\\\?\\UNC\\')) {
     return `\\\\${path.slice('\\\\?\\UNC\\'.length)}`

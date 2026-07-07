@@ -7,7 +7,14 @@ import { basicSetup, EditorView } from 'codemirror'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
+import { toSourceSelectionState } from '../../domain/documents/editorViewState'
 import type { EditorCommand } from '../../application/types/shell'
+import PromptDialog from '../dialogs/PromptDialog.vue'
+import {
+  createImageInputDialog,
+  createLinkInputDialog,
+  type EditorInputDialogState,
+} from './editorInputDialogs'
 
 const props = defineProps<{
   documentId: string
@@ -23,14 +30,12 @@ const emit = defineEmits<{
 }>()
 
 const editorHost = ref<HTMLDivElement | null>(null)
+const inputDialog = ref<EditorInputDialogState | null>(null)
+const inputDialogError = ref<string | null>(null)
 let editorView: EditorView | null = null
 let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
-
-type SourceSelectionState = {
-  anchor: number
-  head: number
-}
+let resolveInputDialog: ((value: string | null) => void) | null = null
 
 const sourceTheme = EditorView.theme({
   '&': {
@@ -70,19 +75,6 @@ const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.monospace, color: '#8dd7c0' },
   { tag: tags.quote, color: '#aeb7c5', fontStyle: 'italic' },
 ])
-
-function normalizeSelectionState(value: unknown): SourceSelectionState | null {
-  if (
-    typeof value === 'object'
-    && value !== null
-    && typeof (value as SourceSelectionState).anchor === 'number'
-    && typeof (value as SourceSelectionState).head === 'number'
-  ) {
-    return value as SourceSelectionState
-  }
-
-  return null
-}
 
 function clampPosition(position: number) {
   return Math.min(Math.max(position, 0), editorView?.state.doc.length ?? 0)
@@ -159,8 +151,193 @@ function setHeading(level: number) {
   replaceSelectedLines((line) => `${'#'.repeat(level)} ${normalizeBlockLine(line) || 'Heading'}`)
 }
 
+type MarkdownLinkMatch = {
+  from: number
+  to: number
+  text: string
+  url: string
+}
+
+function isEscaped(value: string, index: number) {
+  let slashCount = 0
+
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+    slashCount += 1
+  }
+
+  return slashCount % 2 === 1
+}
+
+function findClosingBracket(value: string, start: number) {
+  for (let index = start + 1; index < value.length; index += 1) {
+    if (value[index] === ']' && !isEscaped(value, index)) {
+      return index
+    }
+  }
+
+  return -1
+}
+
+function findClosingParen(value: string, start: number) {
+  let depth = 1
+
+  for (let index = start + 1; index < value.length; index += 1) {
+    if (isEscaped(value, index)) {
+      continue
+    }
+
+    if (value[index] === '(') {
+      depth += 1
+      continue
+    }
+
+    if (value[index] === ')') {
+      depth -= 1
+
+      if (depth === 0) {
+        return index
+      }
+    }
+  }
+
+  return -1
+}
+
+function findCurrentMarkdownLink(): MarkdownLinkMatch | null {
+  if (!editorView) {
+    return null
+  }
+
+  const selection = editorView.state.selection.main
+  const line = editorView.state.doc.lineAt(selection.from)
+  const lineText = editorView.state.doc.sliceString(line.from, line.to)
+  let index = 0
+
+  while (index < lineText.length) {
+    const linkStart = lineText.indexOf('[', index)
+
+    if (linkStart === -1) {
+      return null
+    }
+
+    if (isEscaped(lineText, linkStart)) {
+      index = linkStart + 1
+      continue
+    }
+
+    const textEnd = findClosingBracket(lineText, linkStart)
+
+    if (textEnd === -1 || lineText[textEnd + 1] !== '(') {
+      index = linkStart + 1
+      continue
+    }
+
+    const urlEnd = findClosingParen(lineText, textEnd + 1)
+
+    if (urlEnd === -1) {
+      index = linkStart + 1
+      continue
+    }
+
+    const from = line.from + linkStart
+    const to = line.from + urlEnd + 1
+
+    if (selection.from <= to && selection.to >= from) {
+      return {
+        from,
+        to,
+        text: lineText.slice(linkStart + 1, textEnd),
+        url: lineText.slice(textEnd + 2, urlEnd),
+      }
+    }
+
+    index = urlEnd + 1
+  }
+
+  return null
+}
+
+function openInputDialog(options: EditorInputDialogState) {
+  inputDialogError.value = null
+  inputDialog.value = options
+
+  return new Promise<string | null>((resolve) => {
+    resolveInputDialog = resolve
+  })
+}
+
+function submitInputDialog(value: string) {
+  const currentDialog = inputDialog.value
+
+  if (!currentDialog) {
+    return
+  }
+
+  const validationError = currentDialog.validate?.(value) ?? null
+
+  if (validationError) {
+    inputDialogError.value = validationError
+    return
+  }
+
+  const resolve = resolveInputDialog
+  inputDialogError.value = null
+  inputDialog.value = null
+  resolveInputDialog = null
+  resolve?.(currentDialog.normalize ? currentDialog.normalize(value) : value)
+}
+
+function cancelInputDialog() {
+  const resolve = resolveInputDialog
+  inputDialogError.value = null
+  inputDialog.value = null
+  resolveInputDialog = null
+  resolve?.(null)
+}
+
+async function setLink() {
+  if (!editorView) {
+    return
+  }
+
+  const existingLink = findCurrentMarkdownLink()
+  const url = await openInputDialog(createLinkInputDialog(existingLink?.url ?? ''))
+
+  if (url === null) {
+    return
+  }
+
+  if (existingLink) {
+    const insert = url ? `[${existingLink.text}](${url})` : existingLink.text
+    dispatchReplacement(existingLink.from, existingLink.to, insert, existingLink.from, existingLink.from + insert.length)
+    return
+  }
+
+  if (!url) {
+    return
+  }
+
+  const text = selectedText() || 'link'
+  replaceCurrentSelection(`[${text}](${url})`, 1, 1 + text.length)
+}
+
+async function setImage() {
+  const url = await openInputDialog(createImageInputDialog())
+
+  if (!url) {
+    return
+  }
+
+  const alt = selectedText() || 'image'
+  replaceCurrentSelection(`![${alt}](${url})`, 2, 2 + alt.length)
+}
+
+function insertMarkdownTable() {
+  replaceCurrentSelection('| Column 1 | Column 2 |\n| --- | --- |\n| Cell | Cell |\n', 2, 10)
+}
+
 function runCommand(command: EditorCommand) {
-  const commands: Record<EditorCommand, () => void> = {
+  const commands: Record<EditorCommand, () => void | Promise<void>> = {
     'heading-1': () => setHeading(1),
     'heading-2': () => setHeading(2),
     'heading-3': () => setHeading(3),
@@ -184,15 +361,20 @@ function runCommand(command: EditorCommand) {
       const text = selectedText() || 'code'
       replaceCurrentSelection(`\`\`\`\n${text}\n\`\`\``, 4, 4 + text.length)
     },
-    link: () => {
-      const text = selectedText() || 'link'
-      replaceCurrentSelection(`[${text}](https://example.com)`, 1, 1 + text.length)
-    },
-    image: () => replaceCurrentSelection('![image](./image.png)', 9, 20),
+    link: () => setLink(),
+    image: () => setImage(),
     'horizontal-rule': () => replaceCurrentSelection('\n---\n', 5),
+    'insert-table': () => insertMarkdownTable(),
+    'add-row-before': () => undefined,
+    'add-row-after': () => undefined,
+    'delete-row': () => undefined,
+    'add-column-before': () => undefined,
+    'add-column-after': () => undefined,
+    'delete-column': () => undefined,
+    'delete-table': () => undefined,
   }
 
-  commands[command]()
+  void commands[command]()
 }
 
 onMounted(() => {
@@ -279,6 +461,7 @@ function captureViewState() {
     scrollTop: editorView?.scrollDOM.scrollTop ?? props.viewState.scrollTop,
     selectionState: selection
       ? {
+          kind: 'source',
           anchor: selection.anchor,
           head: selection.head,
         }
@@ -292,7 +475,7 @@ function restoreViewState(viewState: Pick<EditorViewSession, 'scrollTop' | 'sele
     return
   }
 
-  const selection = normalizeSelectionState(viewState.selectionState)
+  const selection = toSourceSelectionState(viewState.selectionState, editorView.state.doc.length)
 
   if (selection) {
     editorView.dispatch({
@@ -324,9 +507,23 @@ defineExpose({
 onBeforeUnmount(() => {
   editorView?.destroy()
   editorView = null
+  resolveInputDialog?.(null)
+  resolveInputDialog = null
 })
 </script>
 
 <template>
   <div ref="editorHost" class="source-editor" data-testid="source-editor" />
+  <PromptDialog
+    :open="!!inputDialog"
+    :title="inputDialog?.title ?? ''"
+    :message="inputDialog?.message ?? ''"
+    :initial-value="inputDialog?.initialValue ?? ''"
+    :placeholder="inputDialog?.placeholder ?? ''"
+    :confirm-label="inputDialog?.confirmLabel ?? 'Save'"
+    :input-label="inputDialog?.inputLabel ?? 'Value'"
+    :error="inputDialogError"
+    @submit="submitInputDialog"
+    @cancel="cancelInputDialog"
+  />
 </template>

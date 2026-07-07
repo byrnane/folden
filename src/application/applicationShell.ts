@@ -18,6 +18,7 @@ import {
 } from './settings'
 import {
   cleanDisplayPath,
+  isMarkdownDocument,
   isMarkdownPath,
   normalizePath,
   parentPath,
@@ -240,7 +241,7 @@ export function useApplicationShell() {
   let workspaceWorkflowController: ReturnType<typeof createWorkspaceWorkflowController>
 
   function applyDefaultMarkdownMode(document: OpenDocument) {
-    if (isMarkdownPath(document.path ?? document.name)) {
+    if (isMarkdownDocument(document)) {
       setOpenDocumentMode(document.id, appSettings.value.editor.defaultMarkdownMode)
     }
 
@@ -479,7 +480,7 @@ export function useApplicationShell() {
   }
 
   async function setPaneDocumentMode(pane: EditorPane, document: OpenDocument, mode: EditorMode) {
-    if (mode === 'visual' && !isMarkdownPath(document.path)) {
+    if (mode === 'visual' && !isMarkdownDocument(document)) {
       return
     }
 
@@ -870,6 +871,7 @@ export function useApplicationShell() {
     hasNativeRuntimeOnStartup,
     isDirty,
     isFileBusy,
+    isMarkdownDocument,
     isMarkdownPath,
     allowRemoteImagesForDocument,
     documentHasRemoteImages,

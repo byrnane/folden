@@ -63,5 +63,13 @@ export type EditorCommand =
   | 'link'
   | 'image'
   | 'horizontal-rule'
+  | 'insert-table'
+  | 'add-row-before'
+  | 'add-row-after'
+  | 'delete-row'
+  | 'add-column-before'
+  | 'add-column-after'
+  | 'delete-column'
+  | 'delete-table'
 
 export type WindowCloseDecision = 'clean' | 'save' | 'discard' | 'cancel'

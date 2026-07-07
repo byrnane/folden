@@ -15,8 +15,12 @@ import {
   Minus,
   Quote,
   RemoveFormatting,
+  Rows3,
   SquareCode,
   Strikethrough,
+  Table2,
+  Trash2,
+  Columns3,
 } from 'lucide-vue-next'
 import { onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import type { EditorCommand } from '../../application/types/shell'
@@ -28,6 +32,12 @@ type ToolbarItem = {
   label: string
   icon?: Component
 }
+
+const props = withDefaults(defineProps<{
+  disabledCommands?: EditorCommand[]
+}>(), {
+  disabledCommands: () => [],
+})
 
 const emit = defineEmits<{
   runCommand: [command: EditorCommand]
@@ -83,6 +93,19 @@ const visualToolbarGroups: Array<{
     items: [
       { command: 'link', title: 'Link', label: 'Link', icon: LinkIcon },
       { command: 'image', title: 'Image', label: 'Image', icon: ImageIcon },
+      { command: 'insert-table', title: 'Insert table', label: 'Table', icon: Table2 },
+    ],
+  },
+  {
+    name: 'Table',
+    items: [
+      { command: 'add-row-before', title: 'Add row before', label: 'Row before', icon: Rows3 },
+      { command: 'add-row-after', title: 'Add row after', label: 'Row after', icon: Rows3 },
+      { command: 'delete-row', title: 'Delete row', label: 'Delete row', icon: Trash2 },
+      { command: 'add-column-before', title: 'Add column before', label: 'Column before', icon: Columns3 },
+      { command: 'add-column-after', title: 'Add column after', label: 'Column after', icon: Columns3 },
+      { command: 'delete-column', title: 'Delete column', label: 'Delete column', icon: Trash2 },
+      { command: 'delete-table', title: 'Delete table', label: 'Delete table', icon: Trash2 },
     ],
   },
 ]
@@ -120,8 +143,16 @@ function handleDocumentKeyDown(event: KeyboardEvent) {
 }
 
 function runToolbarMenuCommand(command: EditorCommand) {
+  if (commandDisabled(command)) {
+    return
+  }
+
   emit('runCommand', command)
   closeHeadingsMenu()
+}
+
+function commandDisabled(command: EditorCommand) {
+  return props.disabledCommands.includes(command)
 }
 
 onMounted(() => {
@@ -146,7 +177,8 @@ onBeforeUnmount(() => {
           class="toolbar-button"
           :title="item.title"
           :aria-label="item.title"
-          @click="emit('runCommand', item.command)"
+          :disabled="commandDisabled(item.command)"
+          @click="runToolbarMenuCommand(item.command)"
         >
           <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbar" />
           <span>{{ item.label }}</span>
@@ -177,6 +209,7 @@ onBeforeUnmount(() => {
               class="toolbar-menu-item"
               :title="item.title"
               :aria-label="item.title"
+              :disabled="commandDisabled(item.command)"
               @click="runToolbarMenuCommand(item.command)"
             >
               <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbarMenuItem" />
@@ -196,7 +229,8 @@ onBeforeUnmount(() => {
             class="toolbar-button"
             :title="item.title"
             :aria-label="item.title"
-            @click="emit('runCommand', item.command)"
+            :disabled="commandDisabled(item.command)"
+            @click="runToolbarMenuCommand(item.command)"
           >
             <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbar" />
             <span>{{ item.label }}</span>

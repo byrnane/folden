@@ -4,7 +4,7 @@ import {
   analyzeMarkdownSafety,
   type MarkdownSafetyReport,
 } from '../../domain/markdown/markdownSafety'
-import { isMarkdownPath } from '../helpers/pathHelpers'
+import { isMarkdownDocument } from '../helpers/pathHelpers'
 
 type VisualSafetyDeps = {
   setOpenDocumentMode: (documentId: string, mode: OpenDocument['defaultMode']) => void
@@ -21,10 +21,6 @@ export function createVisualSafetyController(deps: VisualSafetyDeps) {
 
   function markdownSafetyCacheKey(document: Pick<OpenDocument, 'id' | 'revision'>) {
     return `${document.id}:${document.revision}`
-  }
-
-  function isMarkdownDocument(document: Pick<OpenDocument, 'path'>) {
-    return isMarkdownPath(document.path)
   }
 
   function getMarkdownSafetyReport(document: OpenDocument) {

@@ -20,6 +20,7 @@ type RecoverySnapshotMock = {
 }
 
 type TauriMockOptions = {
+  initialFiles?: Record<string, string>
   recoveryEntries?: RecoverySnapshotMock[]
 }
 
@@ -56,6 +57,10 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     const files = new Map<string, string>([
       ['README.md', '# E2E Note\r\n\r\nOriginal content.\r\n'],
       ['notes\\daily.md', '# Daily\n\nNested note.\n'],
+      ...Object.entries(mockOptions.initialFiles ?? {}).map(([path, content]) => [
+        path.replaceAll('/', '\\'),
+        content,
+      ] as const),
     ])
     let recoveryEntries = [...(mockOptions.recoveryEntries ?? [])]
     const callbacks = new Map<number, (data: unknown) => unknown>()
@@ -102,6 +107,16 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     }
 
     function listRoot(): WorkspaceEntry[] {
+      const dynamicRootFiles = Array.from(files.keys())
+        .filter((path) => !path.includes('\\') && path !== 'README.md')
+        .sort((a, b) => a.localeCompare(b))
+        .map((path) => ({
+          name: path,
+          path,
+          kind: 'file' as const,
+          children: [],
+        }))
+
       return [
         {
           name: '.cache',
@@ -122,6 +137,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           kind: 'file',
           children: [],
         },
+        ...dynamicRootFiles,
         {
           name: 'notes',
           path: 'notes',
