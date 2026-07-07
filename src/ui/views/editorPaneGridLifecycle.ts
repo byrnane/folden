@@ -2,11 +2,14 @@ import type { EditorPane } from '../../application/types/shell'
 
 export type TabPointerDrag = {
   documentId: string
+  label: string
   sourcePaneId: EditorPane['id']
   pointerId: number
   sourceElement: Pick<HTMLElement, 'hasPointerCapture' | 'releasePointerCapture'>
   startX: number
   startY: number
+  currentX: number
+  currentY: number
   dragging: boolean
 }
 

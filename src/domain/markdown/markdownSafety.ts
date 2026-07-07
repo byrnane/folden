@@ -132,26 +132,6 @@ export function analyzeMarkdownSafety(source: string): MarkdownSafetyReport {
     }
   }
 
-  const lines = source.split(/\r?\n/)
-
-  for (let index = 0; index < lines.length - 1; index += 1) {
-    const currentLine = lines[index]
-    const nextLine = lines[index + 1]
-
-    if (
-      /^\s*\|.+\|\s*$/u.test(currentLine)
-      && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/u.test(nextLine)
-    ) {
-      addFeature(unsupportedFeatures, 'table', index + 1, 'Tables are not supported in Visual mode.')
-    }
-  }
-  findLineMatches(
-    source,
-    /^\s*[-*+]\s+\[[ xX]\]\s+/u,
-    'task-list',
-    'Task lists are not supported in Visual mode.',
-    unsupportedFeatures,
-  )
   findLineMatches(
     source,
     /^\[\^[^\]]+\]:/u,

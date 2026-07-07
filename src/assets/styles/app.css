@@ -500,6 +500,14 @@ h1 {
   color: var(--strong-text);
 }
 
+.tree-row[draggable="true"] {
+  cursor: grab;
+}
+
+.tree-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .tree-row.active {
   border-color: rgba(90, 169, 167, 0.45);
   background: var(--accent-soft);
@@ -898,6 +906,22 @@ h1 {
     inset 0 0 0 1px rgba(90, 169, 167, 0.18);
 }
 
+.editor-pane.drop-target-active {
+  box-shadow:
+    inset 0 0 0 2px rgba(122, 208, 202, 0.62),
+    inset 0 0 34px rgba(90, 169, 167, 0.12);
+}
+
+.pane-grid.drag-active .editor-pane {
+  box-shadow: inset 0 0 0 1px rgba(122, 208, 202, 0.24);
+}
+
+.pane-grid.drag-active .editor-pane.drop-target-active {
+  box-shadow:
+    inset 0 0 0 2px rgba(122, 208, 202, 0.72),
+    inset 0 0 34px rgba(90, 169, 167, 0.16);
+}
+
 .pane-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -922,6 +946,18 @@ h1 {
   align-items: stretch;
   min-width: 0;
   overflow-x: auto;
+}
+
+.pane-tabs.drop-target-active {
+  background: rgba(90, 169, 167, 0.08);
+}
+
+.pane-grid.drag-active .pane-tabs {
+  background: rgba(90, 169, 167, 0.045);
+}
+
+.pane-grid.drag-active .pane-tabs.drop-target-active {
+  background: rgba(90, 169, 167, 0.13);
 }
 
 .tab-button {
@@ -960,6 +996,7 @@ h1 {
 }
 
 .tab-drop-tail {
+  position: relative;
   flex: 0 0 28px;
   min-height: 34px;
   border-bottom: 2px solid transparent;
@@ -968,6 +1005,82 @@ h1 {
 .tab-drop-tail:hover {
   border-bottom-color: rgba(122, 208, 202, 0.45);
   background: rgba(90, 169, 167, 0.08);
+}
+
+.pane-grid.drag-active .tab-drop-tail,
+.pane-grid.drag-active .tab-button {
+  border-bottom-color: rgba(122, 208, 202, 0.22);
+}
+
+.tab-button.tab-drop-active::before,
+.tab-drop-tail.tab-drop-active::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent-strong);
+  box-shadow: 0 0 12px rgba(122, 208, 202, 0.75);
+}
+
+.drag-preview {
+  z-index: 10000;
+  max-width: 260px;
+  overflow: hidden;
+  border: 1px solid rgba(122, 208, 202, 0.55);
+  border-radius: 7px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  background: #20242b;
+  color: var(--strong-text);
+  font: 12px/1.2 var(--app-font, system-ui);
+  padding: 7px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-pointer-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.right-split-drop-zone {
+  position: absolute;
+  z-index: 30;
+  top: 48px;
+  right: 14px;
+  bottom: 14px;
+  display: grid;
+  place-items: center;
+  width: min(180px, 28vw);
+  border: 1px dashed rgba(122, 208, 202, 0.5);
+  border-radius: 8px;
+  background: rgba(21, 24, 29, 0.78);
+  color: var(--soft-text);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--motion-fast) ease,
+    background var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
+}
+
+.pane-grid.drag-active .right-split-drop-zone,
+.pane-grid:has(.editor-pane.drop-target-active) .right-split-drop-zone,
+.right-split-drop-zone.drop-target-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.right-split-drop-zone.drop-target-active {
+  border-color: var(--accent-strong);
+  background: rgba(90, 169, 167, 0.16);
+  color: var(--strong-text);
 }
 
 .tab-dot {
@@ -1198,6 +1311,51 @@ h1 {
 
 .visual-editor-content .tiptap li {
   margin: 0.25em 0;
+}
+
+.visual-editor-content .tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.visual-editor-content .tiptap ul[data-type="taskList"] li {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+}
+
+.visual-editor-content .tiptap ul[data-type="taskList"] label {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  padding-top: 0.25em;
+}
+
+.visual-editor-content .tiptap ul[data-type="taskList"] input {
+  accent-color: var(--accent-strong);
+}
+
+.visual-editor-content .tiptap table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2em 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.visual-editor-content .tiptap th,
+.visual-editor-content .tiptap td {
+  min-width: 96px;
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  vertical-align: top;
+}
+
+.visual-editor-content .tiptap th {
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--strong-text);
+  font-weight: 680;
 }
 
 .visual-editor-content .tiptap code {

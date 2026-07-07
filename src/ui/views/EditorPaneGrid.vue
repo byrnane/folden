@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { X } from 'lucide-vue-next'
 import { onBeforeUnmount, ref } from 'vue'
+import type { WorkspaceEntry } from '../../domain/native'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import type { EditorAdapter, EditorPane, EditorPaneView } from '../../application/types/shell'
 import SourceEditor from '../editors/SourceEditor.vue'
@@ -29,6 +30,7 @@ const props = defineProps<{
   workspaceRootPath: string | null
   closeDocument: (pane: EditorPane, documentId: string) => void | Promise<void>
   openDroppedPath: (path: string, paneId: EditorPane['id']) => void | Promise<void>
+  openWorkspaceFile: (entry: Pick<WorkspaceEntry, 'path' | 'kind'>, paneId: EditorPane['id']) => void | Promise<void>
   setActiveDocument: (pane: EditorPane, documentId: string) => void | Promise<void>
   setPaneEditorAdapter: (paneId: EditorPane['id'], adapter: EditorAdapter | null) => void
 }>()
@@ -50,6 +52,8 @@ const emit = defineEmits<{
 
 const tabPointerDrag = ref<TabPointerDrag | null>(null)
 const suppressNextTabClick = ref(false)
+const activeDropTarget = ref<string | null>(null)
+const nativeDragActive = ref(false)
 let editorPaneGridUnmounted = false
 const interactionState: EditorPaneGridInteractionState = {
   tabPointerDrag,
@@ -58,9 +62,28 @@ const interactionState: EditorPaneGridInteractionState = {
 }
 
 function handleDocumentDragOver(event: DragEvent) {
+  nativeDragActive.value = true
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'move'
   }
+}
+
+function setDropTarget(kind: string, paneId: EditorPane['id']) {
+  nativeDragActive.value = true
+  activeDropTarget.value = `${kind}:${paneId}`
+}
+
+function clearDropTarget() {
+  activeDropTarget.value = null
+  nativeDragActive.value = false
+}
+
+function isDropTarget(kind: string, paneId: EditorPane['id']) {
+  return activeDropTarget.value === `${kind}:${paneId}`
+}
+
+function dragActive() {
+  return nativeDragActive.value || tabPointerDrag.value?.dragging === true
 }
 
 function getDroppedPath(event: DragEvent) {
@@ -76,6 +99,16 @@ function moveDroppedDocument(
   targetPaneId: EditorPane['id'],
   targetIndex?: number,
 ) {
+  if (payload.kind === 'workspace-file') {
+    void props.openWorkspaceFile({ kind: 'file', path: payload.path }, targetPaneId)
+    return
+  }
+
+  if (payload.kind === 'external-path') {
+    void props.openDroppedPath(payload.path, targetPaneId)
+    return
+  }
+
   if (payload.kind === 'tab' && payload.paneId === targetPaneId && targetIndex !== undefined) {
     emit('reorderDocumentInPane', targetPaneId, payload.documentId, targetIndex)
     return
@@ -92,6 +125,7 @@ function openDroppedFile(event: DragEvent, targetPaneId: EditorPane['id']) {
   }
 
   event.preventDefault()
+  clearDropTarget()
   void props.openDroppedPath(droppedPath, targetPaneId)
 }
 
@@ -105,6 +139,7 @@ function handlePaneDrop(event: DragEvent, targetPaneId: EditorPane['id']) {
 
   event.preventDefault()
   event.stopPropagation()
+  clearDropTarget()
   moveDroppedDocument(payload, targetPaneId)
 }
 
@@ -118,6 +153,7 @@ function handleTabDrop(event: DragEvent, targetPaneId: EditorPane['id'], targetI
 
   event.preventDefault()
   event.stopPropagation()
+  clearDropTarget()
   moveDroppedDocument(payload, targetPaneId, targetIndex)
 }
 
@@ -126,7 +162,12 @@ function handleTabListDrop(event: DragEvent, targetPaneId: EditorPane['id']) {
   handleTabDrop(event, targetPaneId, pane?.tabs.length ?? 0)
 }
 
-function beginTabPointerDrag(event: PointerEvent, documentId: string, sourcePaneId: EditorPane['id']) {
+function beginTabPointerDrag(
+  event: PointerEvent,
+  documentId: string,
+  label: string,
+  sourcePaneId: EditorPane['id'],
+) {
   if (event.button !== 0) {
     return
   }
@@ -140,17 +181,31 @@ function beginTabPointerDrag(event: PointerEvent, documentId: string, sourcePane
 
   tabPointerDrag.value = {
     documentId,
+    label,
     sourcePaneId,
     pointerId: event.pointerId,
     sourceElement,
     startX: event.clientX,
     startY: event.clientY,
+    currentX: event.clientX,
+    currentY: event.clientY,
     dragging: false,
   }
 }
 
 function getTabDropTarget(event: PointerEvent) {
   const target = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null
+  const rightSplitTarget = target?.closest<HTMLElement>('[data-right-split-drop-zone]')
+
+  if (rightSplitTarget) {
+    const rightPane = props.visiblePanes.find((candidate) => candidate.id === 'right')
+    return {
+      paneId: 'right' as const,
+      targetIndex: rightPane?.tabs.length ?? 0,
+      dropKind: 'right-split',
+    }
+  }
+
   const tabTarget = target?.closest<HTMLElement>('[data-tab-drop-pane]')
   const paneTarget = target?.closest<HTMLElement>('[data-pane-id]')
   const paneId = (tabTarget?.dataset.tabDropPane ?? paneTarget?.dataset.paneId) as EditorPane['id'] | undefined
@@ -167,6 +222,7 @@ function getTabDropTarget(event: PointerEvent) {
   return {
     paneId,
     targetIndex: Number.isFinite(targetIndex) ? targetIndex : fallbackIndex,
+    dropKind: undefined,
   }
 }
 
@@ -185,12 +241,25 @@ function handleTabPointerMove(event: PointerEvent) {
   }
 
   drag.dragging = true
+  drag.currentX = event.clientX
+  drag.currentY = event.clientY
+  const target = getTabDropTarget(event)
+  if (target) {
+    const pane = props.visiblePanes.find((candidate) => candidate.id === target.paneId)
+    const kind = target.dropKind ?? (target.targetIndex >= (pane?.tabs.length ?? 0)
+      ? 'tab-tail'
+      : `tab-${target.targetIndex}`)
+    activeDropTarget.value = `${kind}:${target.paneId}`
+  } else {
+    activeDropTarget.value = null
+  }
   event.preventDefault()
 }
 
 function cancelTabPointerDrag() {
   const drag = tabPointerDrag.value
   tabPointerDrag.value = null
+  activeDropTarget.value = null
 
   if (drag) {
     releaseTabPointerCapture(drag)
@@ -200,6 +269,7 @@ function cancelTabPointerDrag() {
 function finishTabPointerDrag(event: PointerEvent) {
   const drag = tabPointerDrag.value
   tabPointerDrag.value = null
+  activeDropTarget.value = null
 
   if (!drag?.dragging) {
     if (drag) {
@@ -233,6 +303,20 @@ function finishTabPointerDrag(event: PointerEvent) {
   }, target.paneId, target.targetIndex)
 }
 
+function openRightSplitDrop(event: DragEvent) {
+  const payload = readDocumentDragPayload(event)
+  event.preventDefault()
+  event.stopPropagation()
+  clearDropTarget()
+
+  if (payload) {
+    moveDroppedDocument(payload, 'right')
+    return
+  }
+
+  openDroppedFile(event, 'right')
+}
+
 function handleTabClick(pane: EditorPane, documentId: string) {
   if (suppressNextTabClick.value) {
     clearPendingTabClickSuppression(interactionState)
@@ -257,21 +341,28 @@ onBeforeUnmount(() => {
 <template>
   <section
     class="pane-grid"
-    :class="{ split: splitEnabled }"
+    :class="{ split: splitEnabled, 'drag-active': dragActive() }"
+    @dragenter="nativeDragActive = true"
+    @dragend="clearDropTarget"
+    @dragleave.self="clearDropTarget"
   >
     <section
       v-for="pane in visiblePanes"
       :key="pane.id"
       class="editor-pane"
       :data-pane-id="pane.id"
-      :class="{ active: activePaneId === pane.id }"
+      :class="{ active: activePaneId === pane.id, 'drop-target-active': isDropTarget('pane', pane.id) }"
       @click="emit('setActivePane', pane.id)"
+      @dragenter="setDropTarget('pane', pane.id)"
       @dragover.prevent="handleDocumentDragOver"
+      @dragleave.self="clearDropTarget"
       @drop="handlePaneDrop($event, pane.id)"
     >
       <header class="pane-header">
         <div
           class="pane-tabs"
+          :class="{ 'drop-target-active': isDropTarget('tabs', pane.id) }"
+          @dragenter.stop="setDropTarget('tabs', pane.id)"
           @dragover.prevent.stop="handleDocumentDragOver"
           @drop.stop="handleTabListDrop($event, pane.id)"
         >
@@ -282,9 +373,10 @@ onBeforeUnmount(() => {
             class="tab-button"
             :data-tab-drop-pane="pane.id"
             :data-tab-drop-index="index"
-            :class="{ active: tab.isActive }"
+            :class="{ active: tab.isActive, 'tab-drop-active': isDropTarget(`tab-${index}`, pane.id) }"
             :title="tab.title"
-            @pointerdown="beginTabPointerDrag($event, tab.document.id, pane.id)"
+            @dragenter.stop="setDropTarget(`tab-${index}`, pane.id)"
+            @pointerdown="beginTabPointerDrag($event, tab.document.id, tab.document.name, pane.id)"
             @pointermove="handleTabPointerMove"
             @pointerup="finishTabPointerDrag"
             @pointercancel="cancelTabPointerDrag"
@@ -303,8 +395,10 @@ onBeforeUnmount(() => {
           </button>
           <span
             class="tab-drop-tail"
+            :class="{ 'tab-drop-active': isDropTarget('tab-tail', pane.id) }"
             :data-tab-drop-pane="pane.id"
             :data-tab-drop-index="pane.tabs.length"
+            @dragenter.stop="setDropTarget('tab-tail', pane.id)"
             @dragover.prevent.stop="handleDocumentDragOver"
             @drop.stop="handleTabDrop($event, pane.id, pane.tabs.length)"
           />
@@ -323,6 +417,7 @@ onBeforeUnmount(() => {
           :document-path="pane.activeDocument.document.path"
           :workspace-root-path="workspaceRootPath"
           :allow-remote-images="pane.activeDocument.shouldLoadRemoteImages"
+          :view-state="pane.activeDocument.viewSession"
           @document-update="emit('documentUpdate', $event)"
         />
         <section v-else class="source-editor-frame">
@@ -334,6 +429,7 @@ onBeforeUnmount(() => {
             :model-value="pane.activeDocument.document.content"
             :revision="pane.activeDocument.document.revision"
             :word-wrap="sourceWordWrap"
+            :view-state="pane.activeDocument.viewSession"
             @document-update="emit('documentUpdate', $event)"
           />
         </section>
@@ -357,5 +453,26 @@ onBeforeUnmount(() => {
       @keydown="emit('keyboardSplitResize', $event)"
       @dblclick="emit('resetLayout')"
     />
+    <aside
+      v-else
+      class="right-split-drop-zone"
+      data-right-split-drop-zone="true"
+      :class="{ 'drop-target-active': isDropTarget('right-split', 'right') }"
+      @dragenter="setDropTarget('right-split', 'right')"
+      @dragover.prevent="handleDocumentDragOver"
+      @dragleave.self="clearDropTarget"
+      @drop="openRightSplitDrop"
+    >
+      Drop to split right
+    </aside>
+    <div
+      v-if="tabPointerDrag?.dragging"
+      class="drag-preview tab-pointer-preview"
+      :style="{
+        transform: `translate3d(${tabPointerDrag.currentX + 12}px, ${tabPointerDrag.currentY + 12}px, 0)`,
+      }"
+    >
+      {{ tabPointerDrag.label }}
+    </div>
   </section>
 </template>

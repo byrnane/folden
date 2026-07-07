@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-vue-next'
 import type { WorkspaceEntry } from '../../domain/native'
+import { startDocumentDrag } from '../documentDrag'
 import { uiIconSizes } from '../uiConstants'
 
 defineOptions({
@@ -75,6 +76,19 @@ function selectEntry(entry: WorkspaceTreeEntry) {
 
   emit('openFile', entry)
 }
+
+function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
+  if (isDirectory(entry)) {
+    event.preventDefault()
+    return
+  }
+
+  startDocumentDrag(event, {
+    kind: 'workspace-file',
+    path: entry.path,
+    label: entry.name,
+  })
+}
 </script>
 
 <template>
@@ -93,6 +107,8 @@ function selectEntry(entry: WorkspaceTreeEntry) {
           selected: pathMatches(selectedPath, entry.path),
         }"
         :title="entry.path"
+        :draggable="!isDirectory(entry)"
+        @dragstart="startWorkspaceFileDrag($event, entry)"
         @click="selectEntry(entry)"
       >
         <button
@@ -116,11 +132,12 @@ function selectEntry(entry: WorkspaceTreeEntry) {
           Error
         </span>
 
-        <span class="tree-actions">
+        <span class="tree-actions" @pointerdown.stop @dragstart.stop.prevent>
           <button
             v-if="isDirectory(entry)"
             type="button"
             class="tree-action icon-button"
+            draggable="false"
             title="New file"
             @click.stop="emit('createFile', entry)"
           >
@@ -130,6 +147,7 @@ function selectEntry(entry: WorkspaceTreeEntry) {
             v-if="isDirectory(entry)"
             type="button"
             class="tree-action icon-button"
+            draggable="false"
             title="New folder"
             @click.stop="emit('createDirectory', entry)"
           >
@@ -138,6 +156,7 @@ function selectEntry(entry: WorkspaceTreeEntry) {
           <button
             type="button"
             class="tree-action icon-button"
+            draggable="false"
             title="Rename"
             @click.stop="emit('renamePath', entry)"
           >
@@ -146,6 +165,7 @@ function selectEntry(entry: WorkspaceTreeEntry) {
           <button
             type="button"
             class="tree-action icon-button danger"
+            draggable="false"
             title="Move to trash"
             @click.stop="emit('trashPath', entry)"
           >

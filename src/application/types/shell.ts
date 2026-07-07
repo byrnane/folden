@@ -1,4 +1,5 @@
 import type { WorkspaceEntry } from '../../domain/native'
+import type { EditorViewSession } from '../../domain/documents/editorSync'
 import type { EditorMode, OpenDocument } from '../../domain/documents/documentState'
 
 export type Workspace = {
@@ -26,6 +27,7 @@ export type EditorPaneActiveDocumentView = {
   document: OpenDocument
   mode: EditorMode
   viewSessionId: string
+  viewSession: EditorViewSession
   shouldLoadRemoteImages: boolean
 }
 
@@ -36,10 +38,12 @@ export type EditorPaneView = EditorPane & {
 
 export type EditorAdapter = {
   flushContent: () => string
-  runVisualCommand?: (command: VisualEditorCommand) => void
+  captureViewState?: () => Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>
+  restoreViewState?: (viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>) => void
+  runCommand?: (command: EditorCommand) => void
 }
 
-export type VisualEditorCommand =
+export type EditorCommand =
   | 'heading-1'
   | 'heading-2'
   | 'heading-3'
@@ -53,6 +57,7 @@ export type VisualEditorCommand =
   | 'clear-formatting'
   | 'bullet-list'
   | 'ordered-list'
+  | 'task-list'
   | 'quote'
   | 'code-block'
   | 'link'

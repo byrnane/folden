@@ -39,6 +39,38 @@ test('opens a mocked workspace and saves an edited Markdown document', async ({ 
   await expect(page.getByTestId('status-path')).toContainText('C:\\FoldenE2E\\README.md')
 })
 
+test('switches visual and source without marking an unchanged document dirty', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+
+  await expect(page.getByTestId('open-documents-status')).toHaveText('2 open')
+
+  await page.getByRole('button', { name: 'Source' }).click()
+  await page.getByRole('button', { name: 'Visual' }).click()
+  await page.getByRole('button', { name: 'Source' }).click()
+  await page.getByRole('button', { name: 'Visual' }).click()
+
+  await expect(page.getByTestId('open-documents-status')).toHaveText('2 open')
+  await expect(page.getByRole('dialog', { name: /Close README\.md/ })).toHaveCount(0)
+})
+
+test('runs toolbar formatting commands in source mode', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+  await page.getByRole('button', { name: 'Source' }).click()
+
+  const editor = sourceEditor(page)
+  await editor.click()
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
+  await page.keyboard.type('\nsource toolbar')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Alt+Shift+ArrowLeft' : 'Control+Shift+ArrowLeft')
+  await page.getByRole('button', { name: 'Bold' }).click()
+
+  await expect(page.getByTestId('source-editor')).toContainText('**toolbar**')
+})
+
 test('closes the window after saving dirty documents from the close prompt', async ({ page }) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()

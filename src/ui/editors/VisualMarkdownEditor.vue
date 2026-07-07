@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
+import { Table } from '@tiptap/extension-table'
+import TableCell from '@tiptap/extension-table-cell'
+import TableHeader from '@tiptap/extension-table-header'
+import TableRow from '@tiptap/extension-table-row'
+import TaskItem from '@tiptap/extension-task-item'
+import TaskList from '@tiptap/extension-task-list'
 import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
 import { Editor } from '@tiptap/vue-3'
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import PromptDialog from '../dialogs/PromptDialog.vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
+import type { EditorViewSession } from '../../domain/documents/editorSync'
 import { resolveVisualImageSource } from '../../domain/markdown/imageRendering'
 import { validateImageTarget, validateLinkTarget } from '../../domain/markdown/markdownSafety'
-import type { VisualEditorCommand } from '../../application/types/shell'
+import type { EditorCommand } from '../../application/types/shell'
 
 const props = defineProps<{
   documentId: string
@@ -19,6 +26,7 @@ const props = defineProps<{
   documentPath: string | null
   workspaceRootPath: string | null
   allowRemoteImages: boolean
+  viewState: EditorViewSession
 }>()
 
 const emit = defineEmits<{
@@ -205,6 +213,16 @@ function createEditor(element: HTMLDivElement) {
         inline: false,
         allowBase64: false,
       }),
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      TaskList,
+      TaskItem.configure({
+        nested: true,
+      }),
       Markdown,
     ],
     onCreate: () => {
@@ -212,6 +230,11 @@ function createEditor(element: HTMLDivElement) {
     },
     onUpdate: ({ editor }) => {
       if (isApplyingExternalContent) {
+        return
+      }
+
+      if (!editor.isFocused) {
+        lastAppliedRevision = props.revision
         return
       }
 
@@ -328,6 +351,7 @@ onMounted(() => {
   }
 
   editor.value = createEditor(editorHost.value)
+  restoreViewState(props.viewState)
 })
 
 function flushContent() {
@@ -341,8 +365,10 @@ function flushContent() {
 }
 
 defineExpose({
+  captureViewState,
   flushContent,
-  runVisualCommand,
+  restoreViewState,
+  runCommand: runEditorCommand,
 })
 
 function runCommand(command: () => void) {
@@ -451,8 +477,50 @@ async function setImage() {
   runCommand(() => editor.value?.chain().focus().setImage({ src: url }).run())
 }
 
-function runVisualCommand(command: VisualEditorCommand) {
-  const commands: Record<VisualEditorCommand, () => void | Promise<void>> = {
+function captureViewState() {
+  const selection = editor.value?.state.selection
+
+  return {
+    scrollTop: scrollHost.value?.scrollTop ?? props.viewState.scrollTop,
+    selectionState: selection
+      ? {
+          from: selection.from,
+          to: selection.to,
+        }
+      : props.viewState.selectionState,
+    isFocused: editor.value?.isFocused ?? false,
+  }
+}
+
+function restoreViewState(viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>) {
+  const selection = viewState.selectionState
+
+  if (
+    editor.value
+    && typeof selection === 'object'
+    && selection !== null
+    && typeof (selection as { from?: unknown }).from === 'number'
+    && typeof (selection as { to?: unknown }).to === 'number'
+  ) {
+    const nextMaxPosition = editor.value.state.doc.content.size
+    const from = Math.max(1, Math.min((selection as { from: number }).from, nextMaxPosition))
+    const to = Math.max(1, Math.min((selection as { to: number }).to, nextMaxPosition))
+    editor.value.commands.setTextSelection({ from, to })
+  }
+
+  requestAnimationFrame(() => {
+    if (scrollHost.value) {
+      scrollHost.value.scrollTop = viewState.scrollTop
+    }
+
+    if (viewState.isFocused) {
+      editor.value?.commands.focus()
+    }
+  })
+}
+
+function runEditorCommand(command: EditorCommand) {
+  const commands: Record<EditorCommand, () => void | Promise<void>> = {
     'heading-1': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 1 }).run()),
     'heading-2': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 2 }).run()),
     'heading-3': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 3 }).run()),
@@ -466,6 +534,9 @@ function runVisualCommand(command: VisualEditorCommand) {
     'clear-formatting': () => runCommand(() => editor.value?.chain().focus().unsetAllMarks().clearNodes().run()),
     'bullet-list': () => runCommand(() => editor.value?.chain().focus().toggleBulletList().run()),
     'ordered-list': () => runCommand(() => editor.value?.chain().focus().toggleOrderedList().run()),
+    'task-list': () => runCommand(() => (editor.value?.chain().focus() as unknown as {
+      toggleTaskList: () => { run: () => boolean }
+    }).toggleTaskList().run()),
     quote: () => runCommand(() => editor.value?.chain().focus().toggleBlockquote().run()),
     'code-block': () => runCommand(() => editor.value?.chain().focus().toggleCodeBlock().run()),
     link: () => setLink(),

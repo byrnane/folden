@@ -10,6 +10,7 @@ import {
   Italic,
   Link as LinkIcon,
   List,
+  ListChecks,
   ListOrdered,
   Minus,
   Quote,
@@ -18,18 +19,18 @@ import {
   Strikethrough,
 } from 'lucide-vue-next'
 import { onBeforeUnmount, onMounted, ref, type Component } from 'vue'
-import type { VisualEditorCommand } from '../../application/types/shell'
+import type { EditorCommand } from '../../application/types/shell'
 import { uiIconSizes } from '../uiConstants'
 
-type VisualToolbarItem = {
-  command: VisualEditorCommand
+type ToolbarItem = {
+  command: EditorCommand
   title: string
   label: string
   icon?: Component
 }
 
 const emit = defineEmits<{
-  runCommand: [command: VisualEditorCommand]
+  runCommand: [command: EditorCommand]
 }>()
 
 const headingsMenuOpen = ref(false)
@@ -37,7 +38,7 @@ const headingsMenuElement = ref<HTMLElement | null>(null)
 const headingsMenuTriggerElement = ref<HTMLButtonElement | null>(null)
 const headingsMenuId = 'document-toolbar-headings-menu'
 
-const headingToolbarCommands: VisualToolbarItem[] = [
+const headingToolbarCommands: ToolbarItem[] = [
   { command: 'heading-1', title: 'Heading 1', label: 'Heading 1', icon: Heading1 },
   { command: 'heading-2', title: 'Heading 2', label: 'Heading 2', icon: Heading2 },
   { command: 'heading-3', title: 'Subtitle', label: 'Subtitle', icon: Heading3 },
@@ -46,7 +47,7 @@ const headingToolbarCommands: VisualToolbarItem[] = [
   { command: 'heading-6', title: 'Heading 6', label: 'Heading 6', icon: Heading3 },
 ]
 
-const primaryHeadingToolbarCommands: VisualToolbarItem[] = [
+const primaryHeadingToolbarCommands: ToolbarItem[] = [
   { command: 'heading-1', title: 'Heading 1', label: 'H1', icon: Heading1 },
   { command: 'heading-2', title: 'Heading 2', label: 'H2', icon: Heading2 },
   { command: 'heading-3', title: 'Subtitle', label: 'Subtitle', icon: Heading3 },
@@ -54,7 +55,7 @@ const primaryHeadingToolbarCommands: VisualToolbarItem[] = [
 
 const visualToolbarGroups: Array<{
   name: string
-  items: VisualToolbarItem[]
+  items: ToolbarItem[]
 }> = [
   {
     name: 'Text',
@@ -71,6 +72,7 @@ const visualToolbarGroups: Array<{
     items: [
       { command: 'bullet-list', title: 'Bullet list', label: 'Bullets', icon: List },
       { command: 'ordered-list', title: 'Numbered list', label: 'Numbers', icon: ListOrdered },
+      { command: 'task-list', title: 'Task list', label: 'Tasks', icon: ListChecks },
       { command: 'quote', title: 'Quote block', label: 'Quote', icon: Quote },
       { command: 'code-block', title: 'Code block', label: 'Code block', icon: SquareCode },
       { command: 'horizontal-rule', title: 'Divider', label: 'Divider', icon: Minus },
@@ -117,7 +119,7 @@ function handleDocumentKeyDown(event: KeyboardEvent) {
   }
 }
 
-function runToolbarMenuCommand(command: VisualEditorCommand) {
+function runToolbarMenuCommand(command: EditorCommand) {
   emit('runCommand', command)
   closeHeadingsMenu()
 }

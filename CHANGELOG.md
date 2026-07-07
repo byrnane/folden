@@ -6,6 +6,16 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.7.0 - 2026-07-07
+
+* Visual и Source режимы Markdown получили общий контракт editor commands и один DocumentToolbar для применимых Markdown-документов.
+* Source-редактор поддерживает команды форматирования через CodeMirror transactions: emphasis, заголовки, списки, цитаты, code block, ссылки, изображения и divider.
+* Переключение Visual/Source сохраняет scroll, selection и focus через view sessions и больше не помечает документ dirty из-за технической нормализации строк.
+* Visual Markdown расширен поддержкой таблиц и task lists на Tiptap extensions, а Markdown safety gate больше не блокирует эти GFM-конструкции.
+* Source-режим получил тёмную тему Folden с подсветкой Markdown/GFM-синтаксиса и стабильной раскладкой.
+* Drag and drop расширен для вкладок, open editors, файлов из workspace tree и внешних путей с preview, drop zones, insertion marker и right split target.
+* Добавлены regression tests для command parity, GFM round-trip, Markdown safety, pane state и drag/drop payload/drop behavior.
+
 ## 0.6.9 - 2026-07-03
 
 * Меню заголовков в DocumentToolbar переведено на обычный disclosure/dropdown без неполной ARIA menu-семантики; Escape закрывает список и возвращает фокус на trigger.

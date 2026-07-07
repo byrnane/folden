@@ -91,6 +91,31 @@ export function createPaneController(initialDocument: OpenDocument) {
       ?? paneDocumentModeKey(pane.id, document.id)
   }
 
+  function getViewSession(pane: EditorPane, document: OpenDocument) {
+    return ensureViewSession(pane, document)
+  }
+
+  function updateEditorViewSession(
+    paneId: EditorPane['id'],
+    documentId: string,
+    viewState: Partial<Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>>,
+  ) {
+    const sessionId = paneDocumentModeKey(paneId, documentId)
+    const session = viewSessions.value[sessionId]
+
+    if (!session) {
+      return
+    }
+
+    viewSessions.value = {
+      ...viewSessions.value,
+      [sessionId]: {
+        ...session,
+        ...viewState,
+      },
+    }
+  }
+
   function setActiveDocument(pane: EditorPane, documentId: string) {
     setActiveDocumentInPane(pane.id, documentId)
   }
@@ -520,7 +545,9 @@ export function createPaneController(initialDocument: OpenDocument) {
     paneDocumentModeKey,
     getDocumentMode,
     ensureViewSession,
+    getViewSession,
     getViewSessionId,
+    updateEditorViewSession,
     setActiveDocument,
     setActiveDocumentInPane,
     setPaneEditorAdapter,

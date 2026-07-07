@@ -34,9 +34,12 @@ import { createWorkspaceWorkflowController } from './controllers/workspaceWorkfl
 import { createVisualSafetyController } from './controllers/visualSafetyController'
 import { createApplicationCommandController } from './controllers/applicationCommandController'
 import { createTauriNativePorts } from '../infrastructure/tauri/nativePorts'
-import type { EditorPane } from './types/shell'
-import type { VisualEditorCommand } from './types/shell'
-export type { EditorAdapter, VisualEditorCommand } from './types/shell'
+import type { EditorCommand, EditorPane } from './types/shell'
+export type { EditorAdapter, EditorCommand } from './types/shell'
+
+function normalizeEditorLineEndings(value: string) {
+  return value.replace(/\r\n?/g, '\n')
+}
 
 export function useApplicationShell() {
   const initialText = '# Untitled\n\nStart writing in Folden.\n'
@@ -108,7 +111,9 @@ export function useApplicationShell() {
     paneDocumentModeKey,
     getDocumentMode,
     ensureViewSession,
+    getViewSession,
     getViewSessionId,
+    updateEditorViewSession,
     setActiveDocument: setActiveDocumentInPaneState,
     setPaneEditorAdapter,
     setDocumentMode,
@@ -462,6 +467,17 @@ export function useApplicationShell() {
     scheduleSessionPersistenceDebounced(writeSessionAndRecoveryState)
   }
 
+  function capturePaneEditorViewState(paneId: EditorPane['id']) {
+    const adapter = paneEditors.value[paneId]
+    const pane = getPane(paneId)
+
+    if (!adapter?.captureViewState || !pane?.activeDocumentId) {
+      return
+    }
+
+    updateEditorViewSession(paneId, pane.activeDocumentId, adapter.captureViewState())
+  }
+
   async function setPaneDocumentMode(pane: EditorPane, document: OpenDocument, mode: EditorMode) {
     if (mode === 'visual' && !isMarkdownPath(document.path)) {
       return
@@ -471,7 +487,16 @@ export function useApplicationShell() {
       return
     }
 
-    flushPaneEditorContent(pane.id)
+    const activeContent = paneEditors.value[pane.id]?.flushContent()
+    const hasOnlyLineEndingChanges = activeContent !== undefined &&
+      activeContent !== document.content &&
+      normalizeEditorLineEndings(activeContent) === normalizeEditorLineEndings(document.content)
+
+    if (getDocumentMode(pane, document) === 'source' && !hasOnlyLineEndingChanges) {
+      flushPaneEditorContent(pane.id)
+    }
+
+    capturePaneEditorViewState(pane.id)
     setDocumentMode(pane.id, document, mode)
   }
 
@@ -548,8 +573,8 @@ export function useApplicationShell() {
     layoutSettings.value.focusMode = !layoutSettings.value.focusMode
   }
 
-  function runActiveVisualCommand(command: VisualEditorCommand) {
-    activeEditorAdapter.value?.runVisualCommand?.(command)
+  function runActiveEditorCommand(command: EditorCommand) {
+    activeEditorAdapter.value?.runCommand?.(command)
   }
 
   function moveDocumentIdBetweenPanes(
@@ -839,6 +864,7 @@ export function useApplicationShell() {
     expandedWorkspacePaths,
     getDocument,
     getDocumentMode,
+    getViewSession,
     getViewSessionId,
     handleDocumentUpdate,
     hasNativeRuntimeOnStartup,
@@ -884,7 +910,7 @@ export function useApplicationShell() {
     setSplitEnabled,
     reorderDocumentInPane,
     resetLayoutSettings,
-    runActiveVisualCommand,
+    runActiveEditorCommand,
     setActivitySection,
     setActivityRailMode,
     setActivityRailWidth,

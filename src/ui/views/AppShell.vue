@@ -63,6 +63,7 @@ const {
   expandedWorkspacePaths,
   getDocument,
   getDocumentMode,
+  getViewSession,
   getViewSessionId,
   handleDocumentUpdate,
   isDirty,
@@ -100,7 +101,7 @@ const {
   reorderDocumentInPane,
   resetLayoutSettings,
   resetActivityRailWidth,
-  runActiveVisualCommand,
+  runActiveEditorCommand,
   setActivitySection,
   setActivityRailMode,
   setActivityRailWidth,
@@ -189,6 +190,7 @@ const editorPaneViews = computed(() => visiblePanes.value.map((pane) => {
           document: activeDocumentInPane,
           mode: getDocumentMode(pane, activeDocumentInPane),
           viewSessionId: getViewSessionId(pane, activeDocumentInPane),
+          viewSession: getViewSession(pane, activeDocumentInPane),
           shouldLoadRemoteImages: shouldLoadRemoteImages(activeDocumentInPane),
         }
       : null,
@@ -199,8 +201,8 @@ const moveActiveTabTitle = computed(() => activePaneIsRight.value ? 'Move active
 const moveActiveTabIcon = computed(() => activePaneIsRight.value ? PanelRightOpen : PanelLeftOpen)
 const showDocumentToolbar = computed(() =>
   (layoutSettings.value.activeActivitySection !== 'settings' || layoutSettings.value.focusMode)
-  && activeDocumentMode.value === 'visual'
-  && activeDocument.value !== null,
+  && activeDocument.value !== null
+  && isMarkdownPath(activeDocument.value.path),
 )
 const showSettingsView = computed(() =>
   layoutSettings.value.activeActivitySection === 'settings' && !layoutSettings.value.focusMode,
@@ -895,7 +897,7 @@ onBeforeUnmount(() => {
 
       <DocumentToolbar
         v-if="showDocumentToolbar"
-        @run-command="runActiveVisualCommand"
+        @run-command="runActiveEditorCommand"
       />
 
       <EditorPaneGrid
@@ -908,6 +910,7 @@ onBeforeUnmount(() => {
         :workspace-root-path="workspace?.rootPath ?? null"
         :close-document="closeDocument"
         :open-dropped-path="openDroppedPath"
+        :open-workspace-file="openWorkspaceFile"
         :set-active-document="setActiveDocument"
         :set-pane-editor-adapter="setPaneEditorAdapter"
         @begin-split-resize="beginSplitResize"

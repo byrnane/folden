@@ -1,5 +1,5 @@
 export {
   useApplicationShell,
   type EditorAdapter,
-  type VisualEditorCommand,
+  type EditorCommand,
 } from './application/applicationShell'

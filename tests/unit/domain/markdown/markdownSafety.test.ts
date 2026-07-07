@@ -13,16 +13,6 @@ const unsafeFixtures = [
     expectedKinds: ['frontmatter'],
   },
   {
-    name: 'table',
-    source: ['| a | b |', '| - | - |', '| 1 | 2 |'].join('\n'),
-    expectedKinds: ['table'],
-  },
-  {
-    name: 'task list',
-    source: '- [x] done',
-    expectedKinds: ['task-list'],
-  },
-  {
     name: 'footnote',
     source: ['Text[^1]', '', '[^1]: note'].join('\n'),
     expectedKinds: ['footnote'],
@@ -59,6 +49,13 @@ describe('markdown safety', () => {
       '',
       '[link](https://example.com)',
       '![image](./image.png)',
+      '',
+      '| a | b |',
+      '| - | - |',
+      '| 1 | 2 |',
+      '',
+      '- [x] done',
+      '- [ ] todo',
       '',
       '---',
     ].join('\n'))

@@ -89,6 +89,7 @@ function selectDocument(documentId: string) {
         kind: 'open-editor',
         documentId: document.id,
         paneId: getPrimaryDocumentPane(document.id)?.id ?? activePaneId,
+        label: document.name,
       })"
       @click="selectDocument(document.id)"
     >

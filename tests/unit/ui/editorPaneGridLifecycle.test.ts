@@ -9,11 +9,14 @@ import {
 function createDrag(sourceElement: TabPointerDrag['sourceElement']): TabPointerDrag {
   return {
     documentId: 'document-a',
+    label: 'document-a.md',
     sourcePaneId: 'left',
     pointerId: 12,
     sourceElement,
     startX: 0,
     startY: 0,
+    currentX: 0,
+    currentY: 0,
     dragging: true,
   }
 }

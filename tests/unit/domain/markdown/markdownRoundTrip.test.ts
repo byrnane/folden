@@ -1,6 +1,12 @@
 import { Editor } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
+import { Table } from '@tiptap/extension-table'
+import TableCell from '@tiptap/extension-table-cell'
+import TableHeader from '@tiptap/extension-table-header'
+import TableRow from '@tiptap/extension-table-row'
+import TaskItem from '@tiptap/extension-task-item'
+import TaskList from '@tiptap/extension-task-list'
 import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
 import { Lexer, type Token, type Tokens } from 'marked'
@@ -60,6 +66,14 @@ const supportedFixtures = [
     source: '***',
   },
   {
+    name: 'table',
+    source: '| A | B |\n| - | - |\n| 1 | 2 |',
+  },
+  {
+    name: 'task list',
+    source: '- [x] Done\n- [ ] Todo',
+  },
+  {
     name: 'hard break',
     source: 'Line one  \nLine two',
   },
@@ -106,9 +120,14 @@ type BlockSemanticNode =
   | { type: 'paragraph'; content: InlineSemanticNode[] }
   | { type: 'heading'; depth: number; content: InlineSemanticNode[] }
   | { type: 'blockquote'; content: BlockSemanticNode[] }
-  | { type: 'list'; ordered: boolean; start: number | null; items: { content: BlockSemanticNode[] }[] }
+  | { type: 'list'; ordered: boolean; start: number | null; items: { checked: boolean | null; content: BlockSemanticNode[] }[] }
+  | { type: 'table'; header: InlineSemanticNode[][]; rows: InlineSemanticNode[][][] }
   | { type: 'code'; lang: string | null; text: string }
   | { type: 'hr' }
+
+type TableCellToken = {
+  tokens?: Token[]
+}
 
 function createMarkdownEditor(content = '') {
   return new Editor({
@@ -125,6 +144,16 @@ function createMarkdownEditor(content = '') {
       Image.configure({
         inline: false,
         allowBase64: false,
+      }),
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      TaskList,
+      TaskItem.configure({
+        nested: true,
       }),
       Markdown,
     ],
@@ -180,13 +209,24 @@ function normalizeBlockTokens(tokens: Token[]): BlockSemanticNode[] {
         })
         break
       case 'list':
+      case 'taskList':
         nodes.push({
           type: 'list',
-          ordered: token.ordered,
-          start: token.ordered ? (token.start === '' ? 1 : token.start) : null,
+          ordered: token.type === 'list' ? token.ordered : false,
+          start: token.type === 'list' && token.ordered ? (token.start === '' ? 1 : token.start) : null,
           items: token.items.map((item: Tokens.ListItem) => ({
+            checked: typeof item.checked === 'boolean' ? item.checked : null,
             content: normalizeBlockTokens(item.tokens ?? []),
           })),
+        })
+        break
+      case 'table':
+        nodes.push({
+          type: 'table',
+          header: (token.header as TableCellToken[]).map((cell) => normalizeInlineTokens(cell.tokens ?? [])),
+          rows: (token.rows as TableCellToken[][]).map((row) =>
+            row.map((cell) => normalizeInlineTokens(cell.tokens ?? [])),
+          ),
         })
         break
       case 'code':

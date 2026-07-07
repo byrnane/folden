@@ -14,6 +14,18 @@ describe('document drag payload', () => {
     })
   })
 
+  it('accepts a valid workspace file drag payload', () => {
+    expect(parseDocumentDragPayload(JSON.stringify({
+      kind: 'workspace-file',
+      path: 'notes\\daily.md',
+      label: 'daily.md',
+    }))).toEqual({
+      kind: 'workspace-file',
+      path: 'notes\\daily.md',
+      label: 'daily.md',
+    })
+  })
+
   it('rejects malformed payload JSON', () => {
     expect(parseDocumentDragPayload('{')).toBeNull()
   })
@@ -28,8 +40,8 @@ describe('document drag payload', () => {
   it('rejects unknown drag kinds', () => {
     expect(parseDocumentDragPayload(JSON.stringify({
       kind: 'workspace-entry',
-      documentId: 'document-1',
-      paneId: 'left',
+      path: 'README.md',
+      label: 'README.md',
     }))).toBeNull()
   })
 
