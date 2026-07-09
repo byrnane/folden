@@ -589,6 +589,14 @@ export function useApplicationShell() {
     )
   }
 
+  function toggleDocumentOutline() {
+    layoutSettings.value.showDocumentOutline = !layoutSettings.value.showDocumentOutline
+  }
+
+  function toggleDocumentMap() {
+    layoutSettings.value.showDocumentMap = !layoutSettings.value.showDocumentMap
+  }
+
   function toggleFocusMode() {
     layoutSettings.value.focusMode = !layoutSettings.value.focusMode
   }
@@ -941,6 +949,8 @@ export function useApplicationShell() {
     setSplitRatio,
     setOutlineWidth,
     setDocumentMapWidth,
+    toggleDocumentOutline,
+    toggleDocumentMap,
     splitEnabled,
     shouldLoadRemoteImages,
     submitPromptDialog,

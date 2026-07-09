@@ -4,7 +4,7 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorSelection } from '@codemirror/state'
 import { tags } from '@lezer/highlight'
 import { basicSetup, EditorView } from 'codemirror'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
 import { toSourceSelectionState } from '../../domain/documents/editorViewState'
@@ -26,6 +26,8 @@ const props = defineProps<{
   isMarkdown: boolean
   outlineWidth: number
   documentMapWidth: number
+  showDocumentOutline: boolean
+  showDocumentMap: boolean
   viewState: EditorViewSession
 }>()
 
@@ -36,12 +38,15 @@ const emit = defineEmits<{
 }>()
 
 const editorHost = ref<HTMLDivElement | null>(null)
+const mapHost = ref<HTMLElement | null>(null)
+const mapViewport = ref({ top: 0, height: 100 })
 const outlineResizeStart = ref<{ x: number, width: number } | null>(null)
 const mapResizeStart = ref<{ x: number, width: number } | null>(null)
 const mapDragActive = ref(false)
 const inputDialog = ref<EditorInputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
 let editorView: EditorView | null = null
+let mapResizeObserver: ResizeObserver | null = null
 let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
@@ -86,7 +91,7 @@ const markdownHighlightStyle = HighlightStyle.define([
 ])
 
 const headings = computed(() => props.isMarkdown ? extractMarkdownHeadings(props.modelValue) : [])
-const showOutline = computed(() => headings.value.length > 0)
+const showOutline = computed(() => props.showDocumentOutline && headings.value.length > 0)
 const mapLines = computed(() => {
   if (!props.isMarkdown) {
     return []
@@ -97,14 +102,26 @@ const mapLines = computed(() => {
     return []
   }
 
-  return lines.map((line, index) => ({
-    index,
-    kind: /^(#{1,6})\s+/u.test(line)
+  return lines.map((line, index) => {
+    const trimmedLine = line.trim()
+    const leadingSpaces = line.match(/^\s*/u)?.[0].length ?? 0
+    const kind = /^(#{1,6})\s+/u.test(line)
       ? 'heading'
-      : /^\s*(?:[-*+]|\d+[.)])\s+/u.test(line) ? 'list' : line.trim() ? 'text' : 'empty',
-  }))
+      : /^\s*(?:[-*+]|\d+[.)])\s+/u.test(line) ? 'list' : trimmedLine ? 'text' : 'empty'
+
+    return {
+      index,
+      kind,
+      width: kind === 'heading' ? 92 : Math.min(Math.max(trimmedLine.length * 2.2, 18), kind === 'list' ? 72 : 88),
+      indent: Math.min(leadingSpaces * 3, 24),
+    }
+  })
 })
-const showDocumentMap = computed(() => mapLines.value.length > 0)
+const showDocumentMap = computed(() => props.showDocumentMap && mapLines.value.length > 0)
+const mapViewportStyle = computed(() => ({
+  top: `${mapViewport.value.top}%`,
+  height: `${mapViewport.value.height}%`,
+}))
 
 function clampPosition(position: number) {
   return Math.min(Math.max(position, 0), editorView?.state.doc.length ?? 0)
@@ -194,14 +211,36 @@ function scrollToLine(lineNumber: number) {
   editorView.focus()
 }
 
-function scrollMapToClientY(clientY: number) {
-  if (!editorView) {
+function updateMapViewport() {
+  const scrollElement = editorView?.scrollDOM
+
+  if (!scrollElement) {
     return
   }
 
-  const rect = editorView.scrollDOM.getBoundingClientRect()
+  const scrollHeight = scrollElement.scrollHeight
+  const clientHeight = scrollElement.clientHeight
+
+  if (scrollHeight <= 0 || clientHeight <= 0 || scrollHeight <= clientHeight) {
+    mapViewport.value = { top: 0, height: 100 }
+    return
+  }
+
+  const height = Math.max((clientHeight / scrollHeight) * 100, 8)
+  const maxTop = 100 - height
+  const top = Math.min((scrollElement.scrollTop / (scrollHeight - clientHeight)) * maxTop, maxTop)
+  mapViewport.value = { top, height }
+}
+
+function scrollMapToClientY(clientY: number) {
+  if (!editorView || !mapHost.value) {
+    return
+  }
+
+  const rect = mapHost.value.getBoundingClientRect()
   const ratio = Math.min(Math.max((clientY - rect.top) / rect.height, 0), 1)
   editorView.scrollDOM.scrollTop = ratio * (editorView.scrollDOM.scrollHeight - editorView.scrollDOM.clientHeight)
+  updateMapViewport()
 }
 
 function beginMapDrag(event: PointerEvent) {
@@ -511,6 +550,10 @@ onMounted(() => {
     ],
   })
   restoreViewState(props.viewState)
+  editorView.scrollDOM.addEventListener('scroll', updateMapViewport)
+  mapResizeObserver = new ResizeObserver(updateMapViewport)
+  mapResizeObserver.observe(editorView.scrollDOM)
+  nextTick(updateMapViewport)
 })
 
 watch(
@@ -549,9 +592,12 @@ watch(
       requestAnimationFrame(() => {
         if (editorView) {
           editorView.scrollDOM.scrollTop = scrollTop
+          updateMapViewport()
         }
       })
     }
+
+    nextTick(updateMapViewport)
   },
 )
 
@@ -595,6 +641,7 @@ function restoreViewState(viewState: Pick<EditorViewSession, 'scrollTop' | 'sele
     }
 
     editorView.scrollDOM.scrollTop = viewState.scrollTop
+    updateMapViewport()
 
     if (viewState.isFocused) {
       editorView.focus()
@@ -612,6 +659,9 @@ defineExpose({
 onBeforeUnmount(() => {
   stopOutlineResize()
   stopMapResize()
+  editorView?.scrollDOM.removeEventListener('scroll', updateMapViewport)
+  mapResizeObserver?.disconnect()
+  mapResizeObserver = null
   editorView?.destroy()
   editorView = null
   resolveInputDialog?.(null)
@@ -643,6 +693,7 @@ onBeforeUnmount(() => {
     <div ref="editorHost" class="source-editor" data-testid="source-editor" />
     <aside
       v-if="showDocumentMap"
+      ref="mapHost"
       class="document-map"
       aria-label="Document map"
       @pointerdown="beginMapDrag"
@@ -655,7 +706,9 @@ onBeforeUnmount(() => {
         :key="line.index"
         class="document-map-line"
         :class="line.kind"
+        :style="{ '--map-line-width': `${line.width}%`, '--map-line-indent': `${line.indent}%` }"
       />
+      <span class="document-map-viewport" :style="mapViewportStyle" />
       <span class="document-map-resize-handle" role="separator" aria-label="Resize document map" @pointerdown.stop="beginMapResize" />
     </aside>
   </div>

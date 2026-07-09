@@ -68,6 +68,22 @@ describe('application settings', () => {
     })
   })
 
+  it('defaults document navigation visibility when persisted layout is older', () => {
+    expect(normalizeLayoutSettings({
+      showDocumentOutline: false,
+      showDocumentMap: false,
+    })).toEqual({
+      ...defaultLayoutSettings,
+      showDocumentOutline: false,
+      showDocumentMap: false,
+    })
+
+    expect(normalizeLayoutSettings({
+      showDocumentOutline: 'yes',
+      showDocumentMap: null,
+    })).toEqual(defaultLayoutSettings)
+  })
+
   it('migrates missing activity rail widths to defaults', () => {
     expect(normalizeLayoutSettings({
       activeActivitySection: 'workspace',

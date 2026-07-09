@@ -6,6 +6,14 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.8.1 - 2026-07-09
+
+* Outline и document map получили отдельные toggle-кнопки рядом с Visual/Source.
+* Outline больше не даёт горизонтальный scroll на длинных заголовках.
+* Document map показывает структурный preview Markdown и явный viewport текущей области прокрутки.
+* Дефолтное desktop-окно стало крупнее, а shell ужимает sidebar и topbar на узкой ширине.
+* Добавлены regression checks для toggle-кнопок, viewport marker и plain text состояния.
+
 ## 0.8.0 - 2026-07-09
 
 * Вкладки и Open Editors теперь показывают короткие уникальные labels для одноимённых документов.

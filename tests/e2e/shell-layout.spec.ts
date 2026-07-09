@@ -106,6 +106,27 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
   await expect(scratchLabel).toBeVisible()
 })
 
+test('keeps sidebar resize limits honest while compacting narrow windows', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await openApp(page, {
+    storageEntries: {
+      [applicationLayoutStorageKey]: JSON.stringify({
+        sidebarWidth: layoutSettingLimits.sidebarWidth.max,
+      }),
+    },
+  })
+
+  await expect.poll(async () => page.locator('.workspace-sidebar').evaluate((element) => (
+    Math.round(element.getBoundingClientRect().width)
+  ))).toBe(layoutSettingLimits.sidebarWidth.max)
+
+  await page.setViewportSize({ width: 900, height: 620 })
+  await expect.poll(async () => page.locator('.workspace-sidebar').evaluate((element) => (
+    Math.round(element.getBoundingClientRect().width)
+  ))).toBeLessThanOrEqual(Math.round(900 * 0.3))
+  await expect(page.locator('.topbar .labelled-icon-button span').first()).toBeHidden()
+})
+
 test('resizes layout separators with keyboard and exposes values to assistive tech', async ({ page }) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()

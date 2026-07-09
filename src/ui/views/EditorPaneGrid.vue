@@ -29,6 +29,8 @@ const props = defineProps<{
   sourceWordWrap: boolean
   outlineWidth: number
   documentMapWidth: number
+  showDocumentOutline: boolean
+  showDocumentMap: boolean
   workspaceRootPath: string | null
   closeDocument: (pane: EditorPane, documentId: string) => void | Promise<void>
   openDroppedPath: (path: string, paneId: EditorPane['id']) => void | Promise<void>
@@ -423,6 +425,8 @@ onBeforeUnmount(() => {
           :workspace-root-path="workspaceRootPath"
           :outline-width="outlineWidth"
           :document-map-width="documentMapWidth"
+          :show-document-outline="showDocumentOutline"
+          :show-document-map="showDocumentMap"
           :allow-remote-images="pane.activeDocument.shouldLoadRemoteImages"
           :view-state="pane.activeDocument.viewSession"
           @document-update="emit('documentUpdate', $event)"
@@ -442,6 +446,8 @@ onBeforeUnmount(() => {
             :is-markdown="pane.activeDocument.isMarkdown"
             :outline-width="outlineWidth"
             :document-map-width="documentMapWidth"
+            :show-document-outline="showDocumentOutline"
+            :show-document-map="showDocumentMap"
             :view-state="pane.activeDocument.viewSession"
             @document-update="emit('documentUpdate', $event)"
             @set-outline-width="emit('setOutlineWidth', $event)"

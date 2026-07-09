@@ -9,6 +9,8 @@ import {
   FolderPlus,
   Focus,
   Image as ImageIcon,
+  ListTree,
+  Map,
   PanelLeftOpen,
   PanelRightOpen,
   Save,
@@ -115,6 +117,8 @@ const {
   shouldLoadRemoteImages,
   submitPromptDialog,
   cancelPromptDialog,
+  toggleDocumentOutline,
+  toggleDocumentMap,
   toggleFocusMode,
   toggleWorkspaceDirectory,
   trashWorkspacePath,
@@ -651,6 +655,30 @@ onBeforeUnmount(() => {
               <FileCode2 :size="uiIconSizes.toolbar" />
               <span>Source</span>
             </button>
+            <button
+              type="button"
+              class="icon-button labelled-icon-button"
+              title="Outline"
+              aria-label="Outline"
+              :class="{ active: layoutSettings.showDocumentOutline }"
+              :disabled="!activeDocument || !isMarkdownDocument(activeDocument)"
+              @click="toggleDocumentOutline"
+            >
+              <ListTree :size="uiIconSizes.toolbar" />
+              <span>Outline</span>
+            </button>
+            <button
+              type="button"
+              class="icon-button labelled-icon-button"
+              title="Document map"
+              aria-label="Document map"
+              :class="{ active: layoutSettings.showDocumentMap }"
+              :disabled="!activeDocument || !isMarkdownDocument(activeDocument)"
+              @click="toggleDocumentMap"
+            >
+              <Map :size="uiIconSizes.toolbar" />
+              <span>Map</span>
+            </button>
           </div>
           <button
             v-if="
@@ -947,6 +975,8 @@ onBeforeUnmount(() => {
         :source-word-wrap="appSettings.editor.wordWrap"
         :outline-width="layoutSettings.outlineWidth"
         :document-map-width="layoutSettings.documentMapWidth"
+        :show-document-outline="layoutSettings.showDocumentOutline"
+        :show-document-map="layoutSettings.showDocumentMap"
         :workspace-root-path="workspace?.rootPath ?? null"
         :close-document="closeDocument"
         :open-dropped-path="openDroppedPath"

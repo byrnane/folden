@@ -153,7 +153,7 @@ textarea:focus-visible {
   grid-template-columns:
     var(--activity-width, 44px)
     6px
-    var(--sidebar-width, 292px)
+    var(--sidebar-width, 260px)
     6px
     minmax(0, 1fr);
   height: 100vh;
@@ -171,7 +171,7 @@ textarea:focus-visible {
 
 .app-shell.activity-hidden {
   grid-template-columns:
-    var(--sidebar-width, 292px)
+    var(--sidebar-width, 260px)
     6px
     minmax(0, 1fr);
 }
@@ -495,6 +495,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   min-height: 28px;
   border: 1px solid transparent;
   border-radius: 5px;
@@ -576,8 +577,8 @@ h1 {
   gap: 2px;
 }
 
-.tree-row:hover .tree-actions,
-.tree-row.selected .tree-actions {
+.tree-row.selected .tree-actions,
+.tree-row.active .tree-actions {
   display: inline-flex;
 }
 
@@ -1476,7 +1477,8 @@ h1 {
   width: var(--outline-width, 220px);
   min-width: 160px;
   max-width: 360px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   border-right: 1px solid var(--border);
   background: #15181d;
   padding: 10px 7px 10px 8px;
@@ -1486,6 +1488,7 @@ h1 {
   justify-content: flex-start;
   width: 100%;
   min-width: 0;
+  max-width: 100%;
   height: 26px;
   overflow: hidden;
   border: 0;
@@ -1515,7 +1518,7 @@ h1 {
 }
 
 .outline-resize-handle {
-  right: -3px;
+  right: 0;
 }
 
 .document-map {
@@ -1528,32 +1531,56 @@ h1 {
   max-width: 96px;
   overflow: hidden;
   border-left: 1px solid var(--border);
-  background: #111419;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent 28%),
+    #111419;
   padding: 8px 6px;
   cursor: pointer;
   user-select: none;
+  touch-action: none;
 }
 
 .document-map-line {
+  width: calc(var(--map-line-width, 100%) - var(--map-line-indent, 0%));
+  min-width: 5px;
   min-height: 2px;
+  margin-left: var(--map-line-indent, 0%);
   border-radius: 999px;
-  background: rgba(174, 183, 197, 0.18);
+  background: rgba(174, 183, 197, 0.22);
 }
 
 .document-map-line.heading {
-  background: rgba(242, 197, 114, 0.72);
+  min-height: 3px;
+  background: rgba(242, 197, 114, 0.78);
 }
 
 .document-map-line.list {
-  background: rgba(90, 169, 167, 0.45);
+  background: rgba(90, 169, 167, 0.5);
 }
 
 .document-map-line.empty {
   background: transparent;
 }
 
+.document-map-viewport {
+  position: absolute;
+  z-index: 1;
+  right: 2px;
+  left: 2px;
+  top: 0;
+  min-height: 18px;
+  border: 1px solid rgba(174, 183, 197, 0.28);
+  border-radius: 3px;
+  background: rgba(174, 183, 197, 0.16);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+    0 0 0 1px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
 .document-map-resize-handle {
   left: -3px;
+  z-index: 2;
 }
 
 .source-editor {
@@ -1942,11 +1969,42 @@ button.danger:hover:not(:disabled) {
 
 @media (max-width: 900px) {
   .app-shell {
-    --sidebar-width: min(260px, 36vw);
+    grid-template-columns:
+      var(--activity-width, 44px)
+      6px
+      clamp(180px, var(--sidebar-width, 260px), 30vw)
+      6px
+      minmax(0, 1fr);
+  }
+
+  .app-shell.activity-hidden {
+    grid-template-columns:
+      clamp(180px, var(--sidebar-width, 260px), 30vw)
+      6px
+      minmax(0, 1fr);
   }
 
   .pane-grid.split {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .topbar {
+    gap: 10px;
+    padding: 8px 10px;
+  }
+
+  .topbar-title,
+  .topbar-actions {
+    gap: 6px;
+  }
+
+  .topbar .labelled-icon-button {
+    width: var(--control-height);
+    padding-inline: 0;
+  }
+
+  .topbar .labelled-icon-button span {
+    display: none;
   }
 
   .pane-grid.split .pane-splitter {

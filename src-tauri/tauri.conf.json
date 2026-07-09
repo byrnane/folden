@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Folden",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "identifier": "com.folden.editor",
   "build": {
     "frontendDist": "../dist",
@@ -13,8 +13,10 @@
     "windows": [
       {
         "title": "Folden",
-        "width": 800,
-        "height": 600,
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 620,
         "resizable": true,
         "fullscreen": false
       }

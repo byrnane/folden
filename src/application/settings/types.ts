@@ -51,6 +51,8 @@ export type LayoutSettings = {
   splitRatio: number
   outlineWidth: number
   documentMapWidth: number
+  showDocumentOutline: boolean
+  showDocumentMap: boolean
   focusMode: boolean
 }
 

@@ -48,9 +48,9 @@ export const layoutSettingLimits = {
     fallback: 168,
   },
   sidebarWidth: {
-    min: 220,
+    min: 180,
     max: 520,
-    fallback: 292,
+    fallback: 260,
   },
   splitRatio: {
     min: 0.25,

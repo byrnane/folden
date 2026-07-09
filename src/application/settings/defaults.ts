@@ -44,5 +44,7 @@ export const defaultLayoutSettings: LayoutSettings = {
   splitRatio: layoutSettingLimits.splitRatio.fallback,
   outlineWidth: layoutSettingLimits.outlineWidth.fallback,
   documentMapWidth: layoutSettingLimits.documentMapWidth.fallback,
+  showDocumentOutline: true,
+  showDocumentMap: true,
   focusMode: false,
 }

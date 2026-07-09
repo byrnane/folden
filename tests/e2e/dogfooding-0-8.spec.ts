@@ -7,6 +7,8 @@ import {
 const longMarkdown = [
   '# Start',
   '',
+  '###### Long heading that should stay clipped inside the outline navigation without horizontal scrolling',
+  '',
   ...Array.from({ length: 36 }, (_, index) => `Paragraph ${index + 1}. Enough text for scrolling.`),
   '## Deep Target',
   '',
@@ -100,9 +102,16 @@ test('outline navigates visual and source editors', async ({ page }) => {
   await openWorkspace(page)
   await page.getByTestId('workspace-entry-outline.md').click()
 
-  await expect(page.getByRole('complementary', { name: 'Document outline' })).toBeVisible()
+  const outline = page.getByRole('complementary', { name: 'Document outline' })
+  await expect(outline).toBeVisible()
+  await expect.poll(async () => outline.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
   await page.getByRole('button', { name: 'Deep Target' }).click()
   await expect.poll(async () => page.locator('.visual-editor-scroll').evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+
+  await page.getByRole('button', { name: 'Outline', exact: true }).click()
+  await expect(outline).toHaveCount(0)
+  await page.getByRole('button', { name: 'Outline', exact: true }).click()
+  await expect(outline).toBeVisible()
 
   await page.getByRole('button', { name: 'Source' }).click()
   await page.locator('.source-editor .cm-scroller').evaluate((element) => {
@@ -125,14 +134,21 @@ test('document map scrolls long markdown in visual and source modes', async ({ p
 
   const visualMap = page.getByRole('complementary', { name: 'Document map' })
   await expect(visualMap).toBeVisible()
+  await expect(visualMap.locator('.document-map-viewport')).toBeVisible()
   const visualMapBox = await visualMap.boundingBox()
   expect(visualMapBox).not.toBeNull()
   await page.mouse.click(visualMapBox!.x + visualMapBox!.width / 2, visualMapBox!.y + visualMapBox!.height - 8)
   await expect.poll(async () => page.locator('.visual-editor-scroll').evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
 
+  await page.getByRole('button', { name: 'Document map' }).click()
+  await expect(visualMap).toHaveCount(0)
+  await page.getByRole('button', { name: 'Document map' }).click()
+  await expect(visualMap).toBeVisible()
+
   await page.getByRole('button', { name: 'Source' }).click()
   const sourceMap = page.getByRole('complementary', { name: 'Document map' })
   await expect(sourceMap).toBeVisible()
+  await expect(sourceMap.locator('.document-map-viewport')).toBeVisible()
   const sourceMapBox = await sourceMap.boundingBox()
   expect(sourceMapBox).not.toBeNull()
   await page.mouse.move(sourceMapBox!.x + sourceMapBox!.width / 2, sourceMapBox!.y + 8)
@@ -162,4 +178,6 @@ test('plain text source documents do not show markdown outline or map', async ({
   await expect(page.getByTestId('source-editor')).toBeVisible()
   await expect(page.getByRole('complementary', { name: 'Document outline' })).toHaveCount(0)
   await expect(page.getByRole('complementary', { name: 'Document map' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Outline', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Document map' })).toBeDisabled()
 })

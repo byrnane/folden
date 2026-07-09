@@ -185,6 +185,12 @@ export function normalizeLayoutSettings(value: unknown): LayoutSettings {
       layoutSettingLimits.documentMapWidth.max,
       defaultLayoutSettings.documentMapWidth,
     ),
+    showDocumentOutline: typeof candidate.showDocumentOutline === 'boolean'
+      ? candidate.showDocumentOutline
+      : defaultLayoutSettings.showDocumentOutline,
+    showDocumentMap: typeof candidate.showDocumentMap === 'boolean'
+      ? candidate.showDocumentMap
+      : defaultLayoutSettings.showDocumentMap,
     focusMode: typeof candidate.focusMode === 'boolean'
       ? candidate.focusMode
       : defaultLayoutSettings.focusMode,
