@@ -121,10 +121,12 @@ function createHarness() {
       createDirectory: vi.fn(),
       createFile: vi.fn(),
       listDirectory: vi.fn(),
+      loadWorkspaceSettings: vi.fn(),
       openTextFileByPath,
       openWorkspaceDirectory: vi.fn(),
       renamePath: vi.fn(),
       restoreWorkspaceByPath,
+      saveWorkspaceSettings: vi.fn(),
       trashPath: vi.fn(),
     },
     sessionStorage: {

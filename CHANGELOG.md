@@ -6,6 +6,14 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.8.0 - 2026-07-09
+
+* Вкладки и Open Editors теперь показывают короткие уникальные labels для одноимённых документов.
+* Workspace tree поддерживает workspace-level ignore через `.folden/workspace.json`, action `Hide from workspace` и muted folders без поддерживаемых файлов.
+* Compact activity/sidebar mode принудительно держит workspace actions icon-only, сохраняя tooltip и accessible names.
+* Markdown editor получил outline sidebar и document map в Visual и Source режимах с persisted шириной.
+* Native workspace contract расширен `hasOpenableDescendants` и workspace settings командами; добавлены unit/Rust test cases и обновлены E2E mocks.
+
 ## 0.7.2 - 2026-07-07
 
 * Расширено unit-покрытие критических контроллеров, path helpers и drag/drop payload.

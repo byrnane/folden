@@ -103,6 +103,8 @@ pub fn run() {
             open_logs_folder,
             export_diagnostics,
             list_directory,
+            load_workspace_settings,
+            save_workspace_settings,
             open_text_file_by_path,
             create_file,
             create_directory,
@@ -205,6 +207,56 @@ mod tests {
     }
 
     #[test]
+    fn workspace_entries_mark_openable_descendants_and_hide_folden_folder() {
+        let temp = TempWorkspace::new();
+        fs::create_dir_all(temp.path.join("assets")).expect("failed to create assets");
+        fs::write(temp.path.join("assets").join("image.png"), "not text")
+            .expect("failed to write unsupported file");
+        fs::create_dir_all(temp.path.join("notes").join("nested"))
+            .expect("failed to create notes");
+        fs::write(temp.path.join("notes").join("nested").join("draft.md"), "# Draft")
+            .expect("failed to write markdown");
+        fs::create_dir_all(temp.path.join(".folden")).expect("failed to create service folder");
+        fs::write(temp.path.join(".folden").join("workspace.json"), "{}")
+            .expect("failed to write service file");
+
+        let entries = read_workspace_entries(&temp.path, &temp.path, "test")
+            .expect("expected workspace entries");
+
+        assert!(entries.iter().all(|entry| entry.name != ".folden"));
+        assert_eq!(
+            entries
+                .iter()
+                .find(|entry| entry.name == "assets")
+                .map(|entry| entry.has_openable_descendants),
+            Some(false)
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .find(|entry| entry.name == "notes")
+                .map(|entry| entry.has_openable_descendants),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn workspace_settings_load_validates_shape() {
+        let temp = TempWorkspace::new();
+        let path = temp.path.join("workspace.json");
+        fs::write(&path, r#"{"ignoredPaths":["notes\\drafts"]}"#)
+            .expect("failed to write settings");
+
+        let settings = load_workspace_settings_from_path(&path).expect("settings should load");
+
+        assert_eq!(settings.ignored_paths, vec!["notes\\drafts".to_string()]);
+
+        fs::write(&path, r#"{"ignoredPaths":["..\\secret"]}"#)
+            .expect("failed to write invalid settings");
+        assert!(load_workspace_settings_from_path(&path).is_err());
+    }
+
+    #[test]
     fn native_error_serializes_with_stable_shape() {
         let error = native_error(
             FileErrorCode::InvalidName,
@@ -281,8 +333,10 @@ mod tests {
                 name: "hello.md".to_string(),
                 path: "notes\\hello.md".to_string(),
                 kind: "file".to_string(),
+                has_openable_descendants: false,
                 children: Vec::new(),
             }],
+            has_openable_descendants: true,
         };
         assert_eq!(
             serde_json::to_value(workspace_entry).expect("workspace entry should serialize"),

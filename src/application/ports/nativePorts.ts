@@ -4,6 +4,7 @@ import type {
   SaveDocumentResult,
   WorkspaceDescriptor,
   WorkspaceEntry,
+  WorkspaceSettings,
 } from '../../domain/native'
 import type {
   PersistedSessionState,
@@ -33,6 +34,8 @@ export type WorkspaceFilePort = {
   openWorkspaceDirectory: () => Promise<WorkspaceDescriptor | null>
   restoreWorkspaceByPath: (rootPath: string) => Promise<WorkspaceDescriptor>
   listDirectory: (workspaceId: string, path: string) => Promise<WorkspaceEntry[]>
+  loadWorkspaceSettings: (workspaceId: string) => Promise<WorkspaceSettings>
+  saveWorkspaceSettings: (workspaceId: string, settings: WorkspaceSettings) => Promise<void>
   openTextFileByPath: (workspaceId: string, path: string) => Promise<OpenedDocument>
   createFile: (workspaceId: string, parentPath: string, name: string) => Promise<string>
   createDirectory: (workspaceId: string, parentPath: string, name: string) => Promise<string>

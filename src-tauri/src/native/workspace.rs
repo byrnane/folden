@@ -25,8 +25,30 @@ pub(crate) fn should_skip_directory(path: &Path) -> bool {
     };
     matches!(
         name,
-        ".git" | "node_modules" | "dist" | "build" | "target" | ".cache"
+        ".git" | ".folden" | "node_modules" | "dist" | "build" | "target" | ".cache"
     )
+}
+fn has_openable_descendants(path: &Path, operation: &str) -> NativeResult<bool> {
+    for entry in fs::read_dir(path).map_err(|error| io_error(operation, error))? {
+        let entry = entry.map_err(|error| io_error(operation, error))?;
+        let entry_path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|error| io_error(operation, error))?;
+
+        if file_type.is_file() && is_text_file(&entry_path) {
+            return Ok(true);
+        }
+
+        if file_type.is_dir()
+            && !should_skip_directory(&entry_path)
+            && has_openable_descendants(&entry_path, operation)?
+        {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }
 pub(crate) fn get_workspace<'a>(
     state: &'a NativeAppState,
@@ -163,6 +185,7 @@ pub(crate) fn read_workspace_entries(
                 name,
                 path: relative_path,
                 kind: "directory".to_string(),
+                has_openable_descendants: has_openable_descendants(&entry_path, operation)?,
                 children: Vec::new(),
             });
         } else if file_type.is_file() && is_text_file(&entry_path) {
@@ -170,6 +193,7 @@ pub(crate) fn read_workspace_entries(
                 name,
                 path: relative_path,
                 kind: "file".to_string(),
+                has_openable_descendants: false,
                 children: Vec::new(),
             });
         }
@@ -259,6 +283,79 @@ pub(crate) fn list_directory(
         resolve_workspace_path(workspace, &path, "list_directory")?
     };
     read_workspace_entries(&workspace.root_path, &canonical_path, "list_directory")
+}
+fn workspace_settings_path(workspace: &AuthorizedWorkspace) -> PathBuf {
+    workspace.root_path.join(".folden").join("workspace.json")
+}
+pub(crate) fn load_workspace_settings_from_path(
+    path: &Path,
+) -> Result<WorkspaceSettings, String> {
+    if !path.exists() {
+        return Ok(WorkspaceSettings {
+            ignored_paths: Vec::new(),
+        });
+    }
+
+    let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let settings: WorkspaceSettings = serde_json::from_str(&content)
+        .map_err(|error| format!("Workspace settings must be valid JSON: {error}"))?;
+
+    if settings
+        .ignored_paths
+        .iter()
+        .any(|value| {
+            value.trim().is_empty()
+                || ensure_relative_path(value, "load_workspace_settings").is_err()
+        })
+    {
+        return Err("Workspace ignored paths must be relative paths.".to_string());
+    }
+
+    Ok(settings)
+}
+#[tauri::command]
+pub(crate) fn load_workspace_settings(
+    state: tauri::State<'_, Mutex<NativeAppState>>,
+    workspace_id: String,
+) -> NativeResult<WorkspaceSettings> {
+    let state = state.lock().unwrap();
+    let workspace = get_workspace(&state, &workspace_id, "load_workspace_settings")?;
+    load_workspace_settings_from_path(&workspace_settings_path(workspace)).map_err(|message| {
+        native_error(
+            FileErrorCode::Unknown,
+            "load_workspace_settings",
+            "Workspace settings are invalid; Folden used empty workspace settings.",
+            Some(message),
+            false,
+        )
+    })
+}
+#[tauri::command]
+pub(crate) fn save_workspace_settings(
+    state: tauri::State<'_, Mutex<NativeAppState>>,
+    workspace_id: String,
+    settings: WorkspaceSettings,
+) -> NativeResult<()> {
+    let state = state.lock().unwrap();
+    let workspace = get_workspace(&state, &workspace_id, "save_workspace_settings")?;
+    let settings_dir = workspace.root_path.join(".folden");
+    fs::create_dir_all(&settings_dir).map_err(|error| io_error("save_workspace_settings", error))?;
+
+    for path in &settings.ignored_paths {
+        ensure_relative_path(path, "save_workspace_settings")?;
+    }
+
+    let content = serde_json::to_vec_pretty(&settings).map_err(|error| {
+        native_error(
+            FileErrorCode::Unknown,
+            "save_workspace_settings",
+            "Could not serialize workspace settings.",
+            Some(error.to_string()),
+            false,
+        )
+    })?;
+    fs::write(settings_dir.join("workspace.json"), content)
+        .map_err(|error| io_error("save_workspace_settings", error))
 }
 #[tauri::command]
 pub(crate) fn open_text_file_by_path(

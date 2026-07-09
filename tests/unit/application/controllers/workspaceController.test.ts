@@ -24,6 +24,7 @@ function file(path: string): WorkspaceEntry {
     name: path.split('\\').at(-1) ?? path,
     path,
     kind: 'file',
+    hasOpenableDescendants: false,
     children: [],
   }
 }
@@ -33,6 +34,7 @@ function directory(path: string, children: WorkspaceEntry[] = []): WorkspaceEntr
     name: path.split('\\').at(-1) ?? path,
     path,
     kind: 'directory',
+    hasOpenableDescendants: children.some((entry) => entry.kind === 'file' || entry.hasOpenableDescendants),
     children,
   }
 }

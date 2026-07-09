@@ -1,7 +1,7 @@
 import { readonly, ref, type Ref } from 'vue'
-import { filterWorkspaceEntriesByIgnoredNames } from '../../domain/workspace/workspaceFilters'
+import { filterWorkspaceEntries } from '../../domain/workspace/workspaceFilters'
 import type { ApplicationSettings } from '../settings'
-import type { WorkspaceEntry } from '../../domain/native'
+import type { WorkspaceEntry, WorkspaceSettings } from '../../domain/native'
 import { normalizePath } from '../helpers/pathHelpers'
 import type { Workspace } from '../types/shell'
 
@@ -15,6 +15,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
   const workspaceLoadErrors = ref<Record<string, string>>({})
   const selectedPath = ref<string | null>(null)
   const recentWorkspaces = ref(loadRecentWorkspaces())
+  const workspaceSettings = ref<WorkspaceSettings>({ ignoredPaths: [] })
 
   function recentWorkspaceStorage() {
     return typeof globalThis.localStorage === 'undefined' ? null : globalThis.localStorage
@@ -84,7 +85,22 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     selectedPath.value = path
   }
 
-  function setWatcherVisibleWorkspace(descriptor: { id: string, rootPath: string, name: string }, entries: WorkspaceEntry[]) {
+  function setWorkspaceSettings(settings: WorkspaceSettings) {
+    workspaceSettings.value = {
+      ignoredPaths: [...new Set(settings.ignoredPaths.map(normalizeWorkspaceSettingsPath).filter(Boolean))],
+    }
+
+    if (workspace.value) {
+      workspace.value.entries = applyWorkspaceEntryFilters(workspace.value.entries)
+    }
+  }
+
+  function setWatcherVisibleWorkspace(
+    descriptor: { id: string, rootPath: string, name: string },
+    entries: WorkspaceEntry[],
+    settings: WorkspaceSettings = workspaceSettings.value,
+  ) {
+    workspaceSettings.value = settings
     workspace.value = {
       id: descriptor.id,
       rootPath: descriptor.rootPath,
@@ -100,10 +116,27 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
   }
 
   function applyWorkspaceEntryFilters(entries: WorkspaceEntry[]) {
-    return filterWorkspaceEntriesByIgnoredNames(
+    return filterWorkspaceEntries(
       entries,
       appSettings.value.workspace.ignoredNames,
+      workspaceSettings.value.ignoredPaths,
     )
+  }
+
+  function normalizeWorkspaceSettingsPath(path: string) {
+    return normalizePath(path).replace(/^\\|\\$/g, '')
+  }
+
+  function addIgnoredWorkspacePath(path: string) {
+    const normalizedPath = normalizeWorkspaceSettingsPath(path)
+
+    if (!normalizedPath) {
+      return workspaceSettings.value
+    }
+
+    const ignoredPaths = [...new Set([...workspaceSettings.value.ignoredPaths, normalizedPath])]
+    workspaceSettings.value = { ignoredPaths }
+    return workspaceSettings.value
   }
 
   function clearWorkspaceLoadError(path: string) {
@@ -351,6 +384,9 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     workspaceLoadErrors: readonly(workspaceLoadErrors),
     selectedPath: readonly(selectedPath),
     recentWorkspaces: readonly(recentWorkspaces),
+    workspaceSettings: readonly(workspaceSettings),
+    setWorkspaceSettings,
+    addIgnoredWorkspacePath,
     saveRecentWorkspaces,
     setWorkspacePathLoaded,
     setWorkspacePathLoading,

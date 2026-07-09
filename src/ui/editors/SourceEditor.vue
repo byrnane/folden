@@ -4,11 +4,12 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorSelection } from '@codemirror/state'
 import { tags } from '@lezer/highlight'
 import { basicSetup, EditorView } from 'codemirror'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
 import { toSourceSelectionState } from '../../domain/documents/editorViewState'
 import type { EditorCommand } from '../../application/types/shell'
+import { extractMarkdownHeadings } from '../../domain/markdown/outline'
 import PromptDialog from '../dialogs/PromptDialog.vue'
 import {
   createImageInputDialog,
@@ -22,14 +23,22 @@ const props = defineProps<{
   modelValue: string
   revision: number
   wordWrap: boolean
+  isMarkdown: boolean
+  outlineWidth: number
+  documentMapWidth: number
   viewState: EditorViewSession
 }>()
 
 const emit = defineEmits<{
   'document-update': [update: DocumentUpdate]
+  'set-outline-width': [width: number]
+  'set-document-map-width': [width: number]
 }>()
 
 const editorHost = ref<HTMLDivElement | null>(null)
+const outlineResizeStart = ref<{ x: number, width: number } | null>(null)
+const mapResizeStart = ref<{ x: number, width: number } | null>(null)
+const mapDragActive = ref(false)
 const inputDialog = ref<EditorInputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
 let editorView: EditorView | null = null
@@ -75,6 +84,27 @@ const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.monospace, color: '#8dd7c0' },
   { tag: tags.quote, color: '#aeb7c5', fontStyle: 'italic' },
 ])
+
+const headings = computed(() => props.isMarkdown ? extractMarkdownHeadings(props.modelValue) : [])
+const showOutline = computed(() => headings.value.length > 0)
+const mapLines = computed(() => {
+  if (!props.isMarkdown) {
+    return []
+  }
+
+  const lines = props.modelValue.split(/\r?\n/u)
+  if (lines.length < 24) {
+    return []
+  }
+
+  return lines.map((line, index) => ({
+    index,
+    kind: /^(#{1,6})\s+/u.test(line)
+      ? 'heading'
+      : /^\s*(?:[-*+]|\d+[.)])\s+/u.test(line) ? 'list' : line.trim() ? 'text' : 'empty',
+  }))
+})
+const showDocumentMap = computed(() => mapLines.value.length > 0)
 
 function clampPosition(position: number) {
   return Math.min(Math.max(position, 0), editorView?.state.doc.length ?? 0)
@@ -149,6 +179,81 @@ function normalizeBlockLine(line: string) {
 
 function setHeading(level: number) {
   replaceSelectedLines((line) => `${'#'.repeat(level)} ${normalizeBlockLine(line) || 'Heading'}`)
+}
+
+function scrollToLine(lineNumber: number) {
+  if (!editorView) {
+    return
+  }
+
+  const line = editorView.state.doc.line(Math.min(Math.max(lineNumber, 1), editorView.state.doc.lines))
+  editorView.dispatch({
+    selection: EditorSelection.cursor(line.from),
+    scrollIntoView: true,
+  })
+  editorView.focus()
+}
+
+function scrollMapToClientY(clientY: number) {
+  if (!editorView) {
+    return
+  }
+
+  const rect = editorView.scrollDOM.getBoundingClientRect()
+  const ratio = Math.min(Math.max((clientY - rect.top) / rect.height, 0), 1)
+  editorView.scrollDOM.scrollTop = ratio * (editorView.scrollDOM.scrollHeight - editorView.scrollDOM.clientHeight)
+}
+
+function beginMapDrag(event: PointerEvent) {
+  mapDragActive.value = true
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  scrollMapToClientY(event.clientY)
+}
+
+function dragMap(event: PointerEvent) {
+  if (mapDragActive.value) {
+    scrollMapToClientY(event.clientY)
+  }
+}
+
+function endMapDrag() {
+  mapDragActive.value = false
+}
+
+function beginOutlineResize(event: PointerEvent) {
+  outlineResizeStart.value = { x: event.clientX, width: props.outlineWidth }
+  window.addEventListener('pointermove', resizeOutline)
+  window.addEventListener('pointerup', stopOutlineResize)
+}
+
+function resizeOutline(event: PointerEvent) {
+  if (outlineResizeStart.value) {
+    emit('set-outline-width', outlineResizeStart.value.width + event.clientX - outlineResizeStart.value.x)
+  }
+}
+
+function stopOutlineResize() {
+  outlineResizeStart.value = null
+  window.removeEventListener('pointermove', resizeOutline)
+  window.removeEventListener('pointerup', stopOutlineResize)
+}
+
+function beginMapResize(event: PointerEvent) {
+  mapResizeStart.value = { x: event.clientX, width: props.documentMapWidth }
+  window.addEventListener('pointermove', resizeMap)
+  window.addEventListener('pointerup', stopMapResize)
+}
+
+function resizeMap(event: PointerEvent) {
+  if (mapResizeStart.value) {
+    emit('set-document-map-width', mapResizeStart.value.width - event.clientX + mapResizeStart.value.x)
+  }
+}
+
+function stopMapResize() {
+  mapResizeStart.value = null
+  window.removeEventListener('pointermove', resizeMap)
+  window.removeEventListener('pointerup', stopMapResize)
 }
 
 type MarkdownLinkMatch = {
@@ -505,6 +610,8 @@ defineExpose({
 })
 
 onBeforeUnmount(() => {
+  stopOutlineResize()
+  stopMapResize()
   editorView?.destroy()
   editorView = null
   resolveInputDialog?.(null)
@@ -513,7 +620,45 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="editorHost" class="source-editor" data-testid="source-editor" />
+  <div
+    class="editor-navigation-frame"
+    :style="{
+      '--outline-width': `${outlineWidth}px`,
+      '--document-map-width': `${documentMapWidth}px`,
+    }"
+  >
+    <aside v-if="showOutline" class="document-outline" aria-label="Document outline">
+      <button
+        v-for="heading in headings"
+        :key="`${heading.line}:${heading.id}`"
+        type="button"
+        class="document-outline-item"
+        :style="{ '--heading-level': heading.level }"
+        @click="scrollToLine(heading.line)"
+      >
+        {{ heading.text }}
+      </button>
+      <span class="outline-resize-handle" role="separator" aria-label="Resize outline" @pointerdown="beginOutlineResize" />
+    </aside>
+    <div ref="editorHost" class="source-editor" data-testid="source-editor" />
+    <aside
+      v-if="showDocumentMap"
+      class="document-map"
+      aria-label="Document map"
+      @pointerdown="beginMapDrag"
+      @pointermove="dragMap"
+      @pointerup="endMapDrag"
+      @pointercancel="endMapDrag"
+    >
+      <span
+        v-for="line in mapLines"
+        :key="line.index"
+        class="document-map-line"
+        :class="line.kind"
+      />
+      <span class="document-map-resize-handle" role="separator" aria-label="Resize document map" @pointerdown.stop="beginMapResize" />
+    </aside>
+  </div>
   <PromptDialog
     :open="!!inputDialog"
     :title="inputDialog?.title ?? ''"

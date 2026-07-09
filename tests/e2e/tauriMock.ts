@@ -21,6 +21,7 @@ type RecoverySnapshotMock = {
 
 type TauriMockOptions = {
   initialFiles?: Record<string, string>
+  unsupportedFiles?: string[]
   recoveryEntries?: RecoverySnapshotMock[]
 }
 
@@ -30,6 +31,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       name: string
       path: string
       kind: 'directory' | 'file'
+      hasOpenableDescendants: boolean
       children: WorkspaceEntry[]
     }
 
@@ -71,6 +73,8 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     let windowDestroyed = false
     let diagnosticExportCount = 0
     const nativeDocumentPaths = new Map<string, string>()
+    let workspaceSettings = { ignoredPaths: [] as string[] }
+    const unsupportedFiles = new Set((mockOptions.unsupportedFiles ?? []).map((path) => path.replaceAll('/', '\\')))
 
     function fingerprint(content: string) {
       modifiedAtMs += 1
@@ -110,52 +114,104 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       }
     }
 
-    function listRoot(): WorkspaceEntry[] {
-      const dynamicRootFiles = Array.from(files.keys())
-        .filter((path) => !path.includes('\\') && path !== 'README.md')
-        .sort((a, b) => a.localeCompare(b))
-        .map((path) => ({
-          name: path,
-          path,
-          kind: 'file' as const,
-          children: [],
-        }))
+    function basename(path: string) {
+      return path.split('\\').at(-1) ?? path
+    }
 
-      return [
-        {
-          name: '.cache',
-          path: '.cache',
-          kind: 'directory',
-          children: [
-            {
-              name: 'hidden.md',
-              path: '.cache\\hidden.md',
-              kind: 'file',
-              children: [],
-            },
-          ],
-        },
-        {
-          name: 'README.md',
-          path: 'README.md',
-          kind: 'file',
-          children: [],
-        },
-        ...dynamicRootFiles,
-        {
-          name: 'notes',
-          path: 'notes',
-          kind: 'directory',
-          children: [
-            {
-              name: 'daily.md',
-              path: 'notes\\daily.md',
-              kind: 'file',
-              children: [],
-            },
-          ],
-        },
-      ]
+    function dirname(path: string) {
+      const index = path.lastIndexOf('\\')
+      return index === -1 ? '' : path.slice(0, index)
+    }
+
+    function directoryEntry(path: string): WorkspaceEntry {
+      return {
+        name: basename(path),
+        path,
+        kind: 'directory',
+        hasOpenableDescendants: false,
+        children: [],
+      }
+    }
+
+    function fileEntry(path: string): WorkspaceEntry {
+      return {
+        name: basename(path),
+        path,
+        kind: 'file',
+        hasOpenableDescendants: false,
+        children: [],
+      }
+    }
+
+    function sortEntries(entries: WorkspaceEntry[]) {
+      entries.sort((left, right) => {
+        if (left.kind !== right.kind) {
+          return left.kind === 'directory' ? -1 : 1
+        }
+
+        return left.name.localeCompare(right.name)
+      })
+
+      for (const entry of entries) {
+        sortEntries(entry.children)
+      }
+    }
+
+    function listRoot(): WorkspaceEntry[] {
+      const directories = new Map<string, WorkspaceEntry>()
+      const rootEntries: WorkspaceEntry[] = []
+
+      function ensureDirectory(path: string) {
+        if (!path) {
+          return null
+        }
+
+        const existing = directories.get(path)
+        if (existing) {
+          return existing
+        }
+
+        const entry = directoryEntry(path)
+        directories.set(path, entry)
+        const parent = ensureDirectory(dirname(path))
+        if (parent) {
+          parent.children.push(entry)
+        } else {
+          rootEntries.push(entry)
+        }
+        return entry
+      }
+
+      function addOpenableFile(path: string) {
+        const parent = ensureDirectory(dirname(path))
+        const entry = fileEntry(path)
+        if (parent) {
+          parent.children.push(entry)
+        } else {
+          rootEntries.push(entry)
+        }
+      }
+
+      for (const path of files.keys()) {
+        addOpenableFile(path)
+      }
+
+      for (const path of unsupportedFiles) {
+        ensureDirectory(dirname(path))
+      }
+
+      const markOpenable = (entry: WorkspaceEntry): boolean => {
+        entry.hasOpenableDescendants = entry.children.some((child) =>
+          child.kind === 'file' || markOpenable(child),
+        )
+        return entry.hasOpenableDescendants
+      }
+
+      for (const entry of rootEntries) {
+        markOpenable(entry)
+      }
+      sortEntries(rootEntries)
+      return rootEntries
     }
 
     function normalizeRelativePath(path: string) {
@@ -220,6 +276,15 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           return workspace
         case 'list_directory':
           return findDirectoryEntries(String(args?.path ?? ''))
+        case 'load_workspace_settings':
+          return structuredClone(workspaceSettings)
+        case 'save_workspace_settings':
+          workspaceSettings = {
+            ignoredPaths: Array.isArray((args?.settings as typeof workspaceSettings | undefined)?.ignoredPaths)
+              ? [...(args!.settings as typeof workspaceSettings).ignoredPaths]
+              : [],
+          }
+          return undefined
         case 'open_text_file_by_path':
         case 'open_text_file_at_path':
           return openedDocument(normalizeRelativePath(String(args?.path ?? 'README.md')))
@@ -336,6 +401,9 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         },
         readFile(relativePath: string) {
           return files.get(relativePath) ?? null
+        },
+        getWorkspaceSettings() {
+          return structuredClone(workspaceSettings)
         },
         setRecoveryEntries(entries: RecoverySnapshotMock[]) {
           recoveryEntries = [...entries]

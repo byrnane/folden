@@ -173,6 +173,18 @@ export function normalizeLayoutSettings(value: unknown): LayoutSettings {
       layoutSettingLimits.splitRatio.max,
       defaultLayoutSettings.splitRatio,
     ),
+    outlineWidth: clampNumber(
+      candidate.outlineWidth,
+      layoutSettingLimits.outlineWidth.min,
+      layoutSettingLimits.outlineWidth.max,
+      defaultLayoutSettings.outlineWidth,
+    ),
+    documentMapWidth: clampNumber(
+      candidate.documentMapWidth,
+      layoutSettingLimits.documentMapWidth.min,
+      layoutSettingLimits.documentMapWidth.max,
+      defaultLayoutSettings.documentMapWidth,
+    ),
     focusMode: typeof candidate.focusMode === 'boolean'
       ? candidate.focusMode
       : defaultLayoutSettings.focusMode,

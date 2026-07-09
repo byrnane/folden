@@ -49,6 +49,8 @@ export type LayoutSettings = {
   activityExpandedWidth: number
   sidebarWidth: number
   splitRatio: number
+  outlineWidth: number
+  documentMapWidth: number
   focusMode: boolean
 }
 

@@ -100,6 +100,9 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
   await expect(scratchLabel).toBeHidden()
 
   await dragBy(page.locator('.sidebar-splitter'), 320)
+  await expect(scratchLabel).toBeHidden()
+
+  await page.getByRole('button', { name: 'Expand rail' }).click()
   await expect(scratchLabel).toBeVisible()
 })
 

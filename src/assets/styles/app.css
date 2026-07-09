@@ -449,6 +449,15 @@ h1 {
   flex: 0 0 var(--control-height);
 }
 
+.workspace-tree-actions.compact-actions .fit-label-button {
+  flex: 0 0 var(--control-height);
+  padding: 0;
+}
+
+.workspace-tree-actions.compact-actions .fit-label-button span {
+  display: none;
+}
+
 .settings-nav {
   display: grid;
   align-content: start;
@@ -512,6 +521,15 @@ h1 {
   border-color: rgba(90, 169, 167, 0.45);
   background: var(--accent-soft);
   color: var(--strong-text);
+}
+
+.tree-row.muted {
+  color: color-mix(in srgb, var(--muted-text) 72%, transparent);
+}
+
+.tree-row.muted .tree-icon,
+.tree-row.muted .tree-toggle {
+  opacity: 0.55;
 }
 
 .tree-toggle,
@@ -1439,6 +1457,103 @@ h1 {
 
 .source-editor-frame {
   padding: 0;
+}
+
+.editor-navigation-frame {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--editor-bg);
+}
+
+.document-outline {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  width: var(--outline-width, 220px);
+  min-width: 160px;
+  max-width: 360px;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+  background: #15181d;
+  padding: 10px 7px 10px 8px;
+}
+
+.document-outline-item {
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--soft-text);
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 7px 0 calc(6px + (var(--heading-level, 1) - 1) * 12px);
+}
+
+.document-outline-item:hover,
+.document-outline-item:focus-visible {
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--strong-text);
+}
+
+.outline-resize-handle,
+.document-map-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+}
+
+.outline-resize-handle {
+  right: -3px;
+}
+
+.document-map {
+  position: relative;
+  display: grid;
+  align-content: stretch;
+  gap: 1px;
+  width: var(--document-map-width, 64px);
+  min-width: 48px;
+  max-width: 96px;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: #111419;
+  padding: 8px 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.document-map-line {
+  min-height: 2px;
+  border-radius: 999px;
+  background: rgba(174, 183, 197, 0.18);
+}
+
+.document-map-line.heading {
+  background: rgba(242, 197, 114, 0.72);
+}
+
+.document-map-line.list {
+  background: rgba(90, 169, 167, 0.45);
+}
+
+.document-map-line.empty {
+  background: transparent;
+}
+
+.document-map-resize-handle {
+  left: -3px;
 }
 
 .source-editor {

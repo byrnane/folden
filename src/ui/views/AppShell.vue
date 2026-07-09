@@ -27,6 +27,7 @@ import OpenEditors from './OpenEditors.vue'
 import WorkspaceTree from '../workspace/WorkspaceTree.vue'
 import { useApplicationShell } from '../../applicationShell'
 import type { EditorCommand } from '../../application/types/shell'
+import { buildDocumentDisplayLabels } from '../../domain/documents/documentLabels'
 import {
   applicationSettingLimits,
   layoutSettingLimits,
@@ -84,6 +85,7 @@ const {
   recoveryDialog,
   reloadDocumentFromDisk,
   renameWorkspacePath,
+  hideWorkspacePath,
   resolveConfirmDialog,
   resolveConflictDialog,
   resolveMarkdownSafetyDialog,
@@ -108,6 +110,8 @@ const {
   setActivityRailWidth,
   setSidebarWidth,
   setSplitRatio,
+  setOutlineWidth,
+  setDocumentMapWidth,
   shouldLoadRemoteImages,
   submitPromptDialog,
   cancelPromptDialog,
@@ -168,6 +172,7 @@ const activePane = computed(() =>
 const activePaneDocument = computed(() => activePane.value?.activeDocumentId
   ? getDocument(activePane.value.activeDocumentId)
   : null)
+const documentLabels = computed(() => buildDocumentDisplayLabels(documents.value, cleanDisplayPath))
 const editorPaneViews = computed(() => visiblePanes.value.map((pane) => {
   const activeDocumentInPane = pane.activeDocumentId
     ? getDocument(pane.activeDocumentId)
@@ -181,7 +186,8 @@ const editorPaneViews = computed(() => visiblePanes.value.map((pane) => {
       return document
         ? [{
             document,
-            title: document.path ? cleanDisplayPath(document.path) : 'Scratch document',
+            label: documentLabels.value[document.id]?.label ?? document.name,
+            title: documentLabels.value[document.id]?.title ?? (document.path ? cleanDisplayPath(document.path) : 'Scratch document'),
             isActive: pane.activeDocumentId === document.id,
             isDirty: isDirty(document),
           }]
@@ -191,6 +197,7 @@ const editorPaneViews = computed(() => visiblePanes.value.map((pane) => {
       ? {
           document: activeDocumentInPane,
           mode: getDocumentMode(pane, activeDocumentInPane),
+          isMarkdown: isMarkdownDocument(activeDocumentInPane),
           viewSessionId: getViewSessionId(pane, activeDocumentInPane),
           viewSession: getViewSession(pane, activeDocumentInPane),
           shouldLoadRemoteImages: shouldLoadRemoteImages(activeDocumentInPane),
@@ -490,6 +497,7 @@ onBeforeUnmount(() => {
             :visible-panes="visiblePanes"
             :active-pane="activePane"
             :active-pane-id="activePaneId"
+            :document-labels="documentLabels"
             :clean-display-path="cleanDisplayPath"
             :is-dirty="isDirty"
             @select-document="(pane, documentId) => setActiveDocument(pane, documentId)"
@@ -500,7 +508,11 @@ onBeforeUnmount(() => {
             class="workspace-tree-shell"
             @click.self="clearSidebarSelection"
           >
-            <div class="workspace-tree-actions" aria-label="Workspace file actions">
+            <div
+              class="workspace-tree-actions"
+              :class="{ 'compact-actions': layoutSettings.activityRailMode === 'compact' }"
+              aria-label="Workspace file actions"
+            >
               <button
                 v-fit-label
                 type="button"
@@ -552,6 +564,7 @@ onBeforeUnmount(() => {
               @create-directory="createWorkspaceDirectory($event.path)"
               @rename-path="renameWorkspacePath"
               @trash-path="trashWorkspacePath"
+              @hide-path="hideWorkspacePath"
               @toggle-directory="toggleWorkspaceDirectory"
             />
           </div>
@@ -932,6 +945,8 @@ onBeforeUnmount(() => {
         :split-enabled="splitEnabled"
         :split-ratio="layoutSettings.splitRatio"
         :source-word-wrap="appSettings.editor.wordWrap"
+        :outline-width="layoutSettings.outlineWidth"
+        :document-map-width="layoutSettings.documentMapWidth"
         :workspace-root-path="workspace?.rootPath ?? null"
         :close-document="closeDocument"
         :open-dropped-path="openDroppedPath"
@@ -940,6 +955,8 @@ onBeforeUnmount(() => {
         :set-pane-editor-adapter="setPaneEditorAdapter"
         @begin-split-resize="beginSplitResize"
         @keyboard-split-resize="resizeSplitWithKeyboard"
+        @set-outline-width="setOutlineWidth"
+        @set-document-map-width="setDocumentMapWidth"
         @document-update="handleDocumentUpdate"
         @toolbar-state="updatePaneToolbarState"
         @move-document-between-panes="moveDocumentIdBetweenPanes"

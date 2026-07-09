@@ -10,7 +10,12 @@ export type WorkspaceEntry = {
   name: string
   path: string
   kind: 'directory' | 'file'
+  hasOpenableDescendants: boolean
   children: WorkspaceEntry[]
+}
+
+export type WorkspaceSettings = {
+  ignoredPaths: string[]
 }
 
 export type OpenedDocument = {
@@ -122,8 +127,17 @@ export function isWorkspaceEntry(value: unknown): value is WorkspaceEntry {
     typeof value.name === 'string' &&
     typeof value.path === 'string' &&
     (value.kind === 'directory' || value.kind === 'file') &&
+    typeof value.hasOpenableDescendants === 'boolean' &&
     Array.isArray(value.children) &&
     value.children.every(isWorkspaceEntry)
+  )
+}
+
+export function isWorkspaceSettings(value: unknown): value is WorkspaceSettings {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.ignoredPaths) &&
+    value.ignoredPaths.every((path) => typeof path === 'string')
   )
 }
 

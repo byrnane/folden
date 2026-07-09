@@ -58,6 +58,8 @@ type WorkspaceWorkflowDeps = {
   }) => Promise<string | null>
   setWatcherWarning: (message: string | null) => void
   setWatcherVisibleWorkspace: (descriptor: WorkspaceDescriptor, entries: WorkspaceEntry[]) => void
+  setWorkspaceSettings: (settings: { ignoredPaths: string[] }) => void
+  addIgnoredWorkspacePath: (path: string) => { ignoredPaths: string[] }
   clearWorkspaceLoadError: (path: string) => void
   setWorkspaceLoadError: (path: string, message: string) => void
   setWorkspacePathLoading: (path: string, loading: boolean) => void
@@ -99,6 +101,15 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
   }
 
   async function loadWorkspace(descriptor: WorkspaceDescriptor) {
+    let settings = { ignoredPaths: [] as string[] }
+
+    try {
+      settings = await deps.workspaceFiles.loadWorkspaceSettings(descriptor.id)
+    } catch (error) {
+      deps.setWatcherWarning(formatError(error))
+    }
+
+    deps.setWorkspaceSettings(settings)
     deps.setWatcherVisibleWorkspace(descriptor, await deps.workspaceFiles.listDirectory(descriptor.id, ''))
   }
 
@@ -371,6 +382,20 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }, 'Could not move path to trash')
   }
 
+  async function hideWorkspacePath(entry: WorkspaceEntryRef) {
+    if (!deps.workspace.value) {
+      return
+    }
+
+    await deps.runFileTask(async () => {
+      const settings = deps.addIgnoredWorkspacePath(entry.path)
+      await deps.workspaceFiles.saveWorkspaceSettings(deps.workspace.value!.id, settings)
+      deps.removeWorkspacePathState(entry.path)
+      deps.setSelectedPath(null)
+      await refreshWorkspaceBranch(parentPath(entry.path) ?? '')
+    }, 'Could not hide path from workspace')
+  }
+
   function isSameOrChildPath(path: string, parent: string) {
     const normalizedPath = normalizePath(path)
     const normalizedParent = normalizePath(parent)
@@ -414,6 +439,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     refreshWorkspaceBranch,
     renameWorkspacePath,
     scheduleWorkspaceRefresh,
+    hideWorkspacePath,
     toggleWorkspaceDirectory,
     trashWorkspacePath,
   }

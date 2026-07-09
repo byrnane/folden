@@ -91,6 +91,8 @@ export function useApplicationShell() {
     clearSidebarSelection,
     setSelectedPath,
     setWatcherVisibleWorkspace,
+    setWorkspaceSettings,
+    addIgnoredWorkspacePath,
     selectedDirectoryPath: getSelectedDirectoryPath,
     applyWorkspaceBranch,
     loadedDescendantPaths,
@@ -392,6 +394,8 @@ export function useApplicationShell() {
     openPromptDialog,
     setWatcherWarning,
     setWatcherVisibleWorkspace,
+    setWorkspaceSettings,
+    addIgnoredWorkspacePath,
     clearWorkspaceLoadError,
     setWorkspaceLoadError,
     setWorkspacePathLoading,
@@ -423,6 +427,7 @@ export function useApplicationShell() {
     openWorkspace,
     refreshWorkspace,
     renameWorkspacePath,
+    hideWorkspacePath,
     scheduleWorkspaceRefresh,
     toggleWorkspaceDirectory,
     trashWorkspacePath,
@@ -567,6 +572,20 @@ export function useApplicationShell() {
     layoutSettings.value.splitRatio = Math.min(
       Math.max(ratio, layoutSettingLimits.splitRatio.min),
       layoutSettingLimits.splitRatio.max,
+    )
+  }
+
+  function setOutlineWidth(width: number) {
+    layoutSettings.value.outlineWidth = Math.min(
+      Math.max(width, layoutSettingLimits.outlineWidth.min),
+      layoutSettingLimits.outlineWidth.max,
+    )
+  }
+
+  function setDocumentMapWidth(width: number) {
+    layoutSettings.value.documentMapWidth = Math.min(
+      Math.max(width, layoutSettingLimits.documentMapWidth.min),
+      layoutSettingLimits.documentMapWidth.max,
     )
   }
 
@@ -894,6 +913,7 @@ export function useApplicationShell() {
     recoveryDialog,
     reloadDocumentFromDisk,
     renameWorkspacePath,
+    hideWorkspacePath,
     resolveConfirmDialog,
     resolveConflictDialog,
     resolveMarkdownSafetyDialog,
@@ -919,6 +939,8 @@ export function useApplicationShell() {
     resetActivityRailWidth,
     setSidebarWidth,
     setSplitRatio,
+    setOutlineWidth,
+    setDocumentMapWidth,
     splitEnabled,
     shouldLoadRemoteImages,
     submitPromptDialog,

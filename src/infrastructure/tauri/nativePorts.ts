@@ -7,6 +7,7 @@ import {
   createFile,
   exportDiagnostics,
   listDirectory,
+  loadWorkspaceSettings,
   loadRecoverySnapshots,
   loadSessionState,
   logFrontendEvent,
@@ -20,6 +21,7 @@ import {
   saveRecoverySnapshots,
   saveSessionState,
   saveTextFile,
+  saveWorkspaceSettings,
   trashPath,
 } from './files'
 
@@ -36,10 +38,12 @@ export function createTauriNativePorts(): NativePorts {
       createDirectory,
       createFile,
       listDirectory,
+      loadWorkspaceSettings,
       openTextFileByPath,
       openWorkspaceDirectory,
       renamePath,
       restoreWorkspaceByPath,
+      saveWorkspaceSettings,
       trashPath,
     },
     sessionStorage: {

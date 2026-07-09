@@ -93,5 +93,11 @@ pub(crate) struct WorkspaceEntry {
     pub(crate) name: String,
     pub(crate) path: String,
     pub(crate) kind: String,
+    pub(crate) has_openable_descendants: bool,
     pub(crate) children: Vec<WorkspaceEntry>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceSettings {
+    pub(crate) ignored_paths: Vec<String>,
 }

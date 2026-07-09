@@ -27,6 +27,8 @@ const props = defineProps<{
   splitEnabled: boolean
   splitRatio: number
   sourceWordWrap: boolean
+  outlineWidth: number
+  documentMapWidth: number
   workspaceRootPath: string | null
   closeDocument: (pane: EditorPane, documentId: string) => void | Promise<void>
   openDroppedPath: (path: string, paneId: EditorPane['id']) => void | Promise<void>
@@ -46,6 +48,8 @@ const emit = defineEmits<{
     targetIndex?: number,
   ]
   keyboardSplitResize: [event: KeyboardEvent]
+  setOutlineWidth: [width: number]
+  setDocumentMapWidth: [width: number]
   reorderDocumentInPane: [paneId: EditorPane['id'], documentId: string, targetIndex: number]
   resetLayout: []
   setActivePane: [paneId: EditorPane['id']]
@@ -377,7 +381,7 @@ onBeforeUnmount(() => {
             :class="{ active: tab.isActive, 'tab-drop-active': isDropTarget(`tab-${index}`, pane.id) }"
             :title="tab.title"
             @dragenter.stop="setDropTarget(`tab-${index}`, pane.id)"
-            @pointerdown="beginTabPointerDrag($event, tab.document.id, tab.document.name, pane.id)"
+            @pointerdown="beginTabPointerDrag($event, tab.document.id, tab.label, pane.id)"
             @pointermove="handleTabPointerMove"
             @pointerup="finishTabPointerDrag"
             @pointercancel="cancelTabPointerDrag"
@@ -385,7 +389,7 @@ onBeforeUnmount(() => {
             @auxclick.stop="closeTabOnAuxClick($event, pane, tab.document.id)"
             @click.stop="handleTabClick(pane, tab.document.id)"
           >
-            <span>{{ tab.document.name }}</span>
+            <span>{{ tab.label }}</span>
             <span v-if="tab.isDirty" class="tab-dot" />
             <X
               class="tab-close"
@@ -417,10 +421,14 @@ onBeforeUnmount(() => {
           :revision="pane.activeDocument.document.revision"
           :document-path="pane.activeDocument.document.path"
           :workspace-root-path="workspaceRootPath"
+          :outline-width="outlineWidth"
+          :document-map-width="documentMapWidth"
           :allow-remote-images="pane.activeDocument.shouldLoadRemoteImages"
           :view-state="pane.activeDocument.viewSession"
           @document-update="emit('documentUpdate', $event)"
           @toolbar-state="emit('toolbarState', pane.id, $event)"
+          @set-outline-width="emit('setOutlineWidth', $event)"
+          @set-document-map-width="emit('setDocumentMapWidth', $event)"
         />
         <section v-else class="source-editor-frame">
           <SourceEditor
@@ -431,8 +439,13 @@ onBeforeUnmount(() => {
             :model-value="pane.activeDocument.document.content"
             :revision="pane.activeDocument.document.revision"
             :word-wrap="sourceWordWrap"
+            :is-markdown="pane.activeDocument.isMarkdown"
+            :outline-width="outlineWidth"
+            :document-map-width="documentMapWidth"
             :view-state="pane.activeDocument.viewSession"
             @document-update="emit('documentUpdate', $event)"
+            @set-outline-width="emit('setOutlineWidth', $event)"
+            @set-document-map-width="emit('setDocumentMapWidth', $event)"
           />
         </section>
       </template>

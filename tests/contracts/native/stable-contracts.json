@@ -23,11 +23,13 @@
     "name": "notes",
     "path": "notes",
     "kind": "directory",
+    "hasOpenableDescendants": true,
     "children": [
       {
         "name": "hello.md",
         "path": "notes\\hello.md",
         "kind": "file",
+        "hasOpenableDescendants": false,
         "children": []
       }
     ]

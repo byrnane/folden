@@ -6,6 +6,7 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  EyeOff,
   Pencil,
   Trash2,
 } from 'lucide-vue-next'
@@ -35,6 +36,7 @@ const emit = defineEmits<{
   createDirectory: [entry: WorkspaceTreeEntry]
   renamePath: [entry: WorkspaceTreeEntry]
   trashPath: [entry: WorkspaceTreeEntry]
+  hidePath: [entry: WorkspaceTreeEntry]
   toggleDirectory: [entry: WorkspaceTreeEntry]
 }>()
 
@@ -60,6 +62,14 @@ function pathMatches(left: string | null, right: string) {
 
 function isLoading(entry: WorkspaceTreeEntry) {
   return props.loadingPaths.has(entry.path)
+}
+
+function rowTitle(entry: WorkspaceTreeEntry) {
+  if (isDirectory(entry) && !entry.hasOpenableDescendants) {
+    return `${entry.path} - No supported files`
+  }
+
+  return entry.path
 }
 
 function toggleDirectory(entry: WorkspaceTreeEntry) {
@@ -105,8 +115,9 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
         :class="{
           active: pathMatches(activePath, entry.path),
           selected: pathMatches(selectedPath, entry.path),
+          muted: isDirectory(entry) && !entry.hasOpenableDescendants,
         }"
-        :title="entry.path"
+        :title="rowTitle(entry)"
         :draggable="!isDirectory(entry)"
         @dragstart="startWorkspaceFileDrag($event, entry)"
         @click="selectEntry(entry)"
@@ -139,6 +150,7 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
             class="tree-action icon-button"
             draggable="false"
             title="New file"
+            aria-label="New file"
             @click.stop="emit('createFile', entry)"
           >
             <FilePlus :size="uiIconSizes.workspaceTreeAction" />
@@ -149,6 +161,7 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
             class="tree-action icon-button"
             draggable="false"
             title="New folder"
+            aria-label="New folder"
             @click.stop="emit('createDirectory', entry)"
           >
             <FolderPlus :size="uiIconSizes.workspaceTreeAction" />
@@ -158,15 +171,27 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
             class="tree-action icon-button"
             draggable="false"
             title="Rename"
+            aria-label="Rename"
             @click.stop="emit('renamePath', entry)"
           >
             <Pencil :size="uiIconSizes.workspaceTreeAction" />
           </button>
           <button
             type="button"
+            class="tree-action icon-button"
+            draggable="false"
+            title="Hide from workspace"
+            aria-label="Hide from workspace"
+            @click.stop="emit('hidePath', entry)"
+          >
+            <EyeOff :size="uiIconSizes.workspaceTreeAction" />
+          </button>
+          <button
+            type="button"
             class="tree-action icon-button danger"
             draggable="false"
             title="Move to trash"
+            aria-label="Move to trash"
             @click.stop="emit('trashPath', entry)"
           >
             <Trash2 :size="uiIconSizes.workspaceTreeAction" />
@@ -190,6 +215,7 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
         @create-directory="emit('createDirectory', $event)"
         @rename-path="emit('renamePath', $event)"
         @trash-path="emit('trashPath', $event)"
+        @hide-path="emit('hidePath', $event)"
         @toggle-directory="emit('toggleDirectory', $event)"
       />
     </li>

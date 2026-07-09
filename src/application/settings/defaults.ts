@@ -42,5 +42,7 @@ export const defaultLayoutSettings: LayoutSettings = {
   activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.fallback,
   sidebarWidth: layoutSettingLimits.sidebarWidth.fallback,
   splitRatio: layoutSettingLimits.splitRatio.fallback,
+  outlineWidth: layoutSettingLimits.outlineWidth.fallback,
+  documentMapWidth: layoutSettingLimits.documentMapWidth.fallback,
   focusMode: false,
 }

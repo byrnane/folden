@@ -8,6 +8,7 @@ import type {
   SaveDocumentResult,
   WorkspaceDescriptor,
   WorkspaceEntry,
+  WorkspaceSettings,
 } from '../../domain/native'
 import { createNativeError, isNativeError, type NativeError } from '../../domain/nativeError'
 
@@ -87,6 +88,19 @@ export async function listDirectory(workspaceId: string, path: string) {
   return invokeNative<WorkspaceEntry[]>('list_directory', {
     workspaceId,
     path,
+  })
+}
+
+export async function loadWorkspaceSettings(workspaceId: string) {
+  return invokeNative<WorkspaceSettings>('load_workspace_settings', {
+    workspaceId,
+  })
+}
+
+export async function saveWorkspaceSettings(workspaceId: string, settings: WorkspaceSettings) {
+  return invokeNative<void>('save_workspace_settings', {
+    workspaceId,
+    settings,
   })
 }
 

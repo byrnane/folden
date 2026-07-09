@@ -10,7 +10,7 @@ import TaskList from '@tiptap/extension-task-list'
 import { Markdown } from '@tiptap/markdown'
 import StarterKit from '@tiptap/starter-kit'
 import { Editor } from '@tiptap/vue-3'
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import PromptDialog from '../dialogs/PromptDialog.vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
@@ -18,6 +18,7 @@ import { toVisualSelectionState } from '../../domain/documents/editorViewState'
 import { resolveVisualImageSource } from '../../domain/markdown/imageRendering'
 import { validateLinkTarget } from '../../domain/markdown/markdownSafety'
 import type { EditorCommand } from '../../application/types/shell'
+import { extractMarkdownHeadings } from '../../domain/markdown/outline'
 import {
   createImageInputDialog,
   createLinkInputDialog,
@@ -31,6 +32,8 @@ const props = defineProps<{
   revision: number
   documentPath: string | null
   workspaceRootPath: string | null
+  outlineWidth: number
+  documentMapWidth: number
   allowRemoteImages: boolean
   viewState: EditorViewSession
 }>()
@@ -38,10 +41,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   'document-update': [update: DocumentUpdate]
   'toolbar-state': [state: { disabledCommands: EditorCommand[] }]
+  'set-outline-width': [width: number]
+  'set-document-map-width': [width: number]
 }>()
 
 const scrollHost = ref<HTMLDivElement | null>(null)
 const editorHost = ref<HTMLDivElement | null>(null)
+const outlineResizeStart = ref<{ x: number, width: number } | null>(null)
+const mapResizeStart = ref<{ x: number, width: number } | null>(null)
+const mapDragActive = ref(false)
 const editor = shallowRef<Editor | null>(null)
 const inputDialog = ref<EditorInputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
@@ -49,6 +57,23 @@ let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
 let isRunningEditorCommand = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
+
+const headings = computed(() => extractMarkdownHeadings(props.modelValue))
+const showOutline = computed(() => headings.value.length > 0)
+const mapBlocks = computed(() => {
+  const lines = props.modelValue.split(/\r?\n/u)
+  if (lines.length < 24) {
+    return []
+  }
+
+  return lines.map((line, index) => ({
+    index,
+    kind: /^(#{1,6})\s+/u.test(line)
+      ? 'heading'
+      : /^\s*(?:[-*+]|\d+[.)])\s+/u.test(line) ? 'list' : line.trim() ? 'text' : 'empty',
+  }))
+})
+const showDocumentMap = computed(() => mapBlocks.value.length > 0)
 
 const structuralTableCommands: EditorCommand[] = [
   'add-row-before',
@@ -326,6 +351,72 @@ function openVisualLink(href: string) {
   }
 }
 
+function scrollToHeading(id: string) {
+  findAnchorTarget(`#${encodeURIComponent(id)}`)?.scrollIntoView({ block: 'start' })
+}
+
+function scrollMapToClientY(clientY: number) {
+  if (!scrollHost.value) {
+    return
+  }
+
+  const rect = scrollHost.value.getBoundingClientRect()
+  const ratio = Math.min(Math.max((clientY - rect.top) / rect.height, 0), 1)
+  scrollHost.value.scrollTop = ratio * (scrollHost.value.scrollHeight - scrollHost.value.clientHeight)
+}
+
+function beginMapDrag(event: PointerEvent) {
+  mapDragActive.value = true
+  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  scrollMapToClientY(event.clientY)
+}
+
+function dragMap(event: PointerEvent) {
+  if (mapDragActive.value) {
+    scrollMapToClientY(event.clientY)
+  }
+}
+
+function endMapDrag() {
+  mapDragActive.value = false
+}
+
+function beginOutlineResize(event: PointerEvent) {
+  outlineResizeStart.value = { x: event.clientX, width: props.outlineWidth }
+  window.addEventListener('pointermove', resizeOutline)
+  window.addEventListener('pointerup', stopOutlineResize)
+}
+
+function resizeOutline(event: PointerEvent) {
+  if (outlineResizeStart.value) {
+    emit('set-outline-width', outlineResizeStart.value.width + event.clientX - outlineResizeStart.value.x)
+  }
+}
+
+function stopOutlineResize() {
+  outlineResizeStart.value = null
+  window.removeEventListener('pointermove', resizeOutline)
+  window.removeEventListener('pointerup', stopOutlineResize)
+}
+
+function beginMapResize(event: PointerEvent) {
+  mapResizeStart.value = { x: event.clientX, width: props.documentMapWidth }
+  window.addEventListener('pointermove', resizeMap)
+  window.addEventListener('pointerup', stopMapResize)
+}
+
+function resizeMap(event: PointerEvent) {
+  if (mapResizeStart.value) {
+    emit('set-document-map-width', mapResizeStart.value.width - event.clientX + mapResizeStart.value.x)
+  }
+}
+
+function stopMapResize() {
+  mapResizeStart.value = null
+  window.removeEventListener('pointermove', resizeMap)
+  window.removeEventListener('pointerup', stopMapResize)
+}
+
 function handleVisualClick(event: MouseEvent) {
   const link = (event.target as HTMLElement | null)?.closest('a[href]')
 
@@ -576,6 +667,8 @@ function runTableCommand(command: (chain: TableCommandChain) => boolean) {
 }
 
 onBeforeUnmount(() => {
+  stopOutlineResize()
+  stopMapResize()
   editor.value?.destroy()
   editor.value = null
   resolveInputDialog?.(null)
@@ -584,10 +677,50 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="visual-editor" data-testid="visual-editor">
-    <div ref="scrollHost" class="visual-editor-scroll">
-      <div ref="editorHost" class="visual-editor-content" @click.capture="handleVisualClick" />
+  <div
+    class="editor-navigation-frame"
+    :style="{
+      '--outline-width': `${outlineWidth}px`,
+      '--document-map-width': `${documentMapWidth}px`,
+    }"
+  >
+    <aside v-if="showOutline" class="document-outline" aria-label="Document outline">
+      <button
+        v-for="heading in headings"
+        :key="`${heading.line}:${heading.id}`"
+        type="button"
+        class="document-outline-item"
+        :style="{ '--heading-level': heading.level }"
+        @click="scrollToHeading(heading.id)"
+      >
+        {{ heading.text }}
+      </button>
+      <span class="outline-resize-handle" role="separator" aria-label="Resize outline" @pointerdown="beginOutlineResize" />
+    </aside>
+
+    <div class="visual-editor" data-testid="visual-editor">
+      <div ref="scrollHost" class="visual-editor-scroll">
+        <div ref="editorHost" class="visual-editor-content" @click.capture="handleVisualClick" />
+      </div>
     </div>
+
+    <aside
+      v-if="showDocumentMap"
+      class="document-map"
+      aria-label="Document map"
+      @pointerdown="beginMapDrag"
+      @pointermove="dragMap"
+      @pointerup="endMapDrag"
+      @pointercancel="endMapDrag"
+    >
+      <span
+        v-for="block in mapBlocks"
+        :key="block.index"
+        class="document-map-line"
+        :class="block.kind"
+      />
+      <span class="document-map-resize-handle" role="separator" aria-label="Resize document map" @pointerdown.stop="beginMapResize" />
+    </aside>
 
     <PromptDialog
       :open="!!inputDialog"

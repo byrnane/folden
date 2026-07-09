@@ -2,12 +2,14 @@
 import type { OpenDocument } from '../../domain/documents/documentState'
 import type { EditorPane } from '../../application/types/shell'
 import { startDocumentDrag } from '../documentDrag'
+import type { DocumentDisplayLabel } from '../../domain/documents/documentLabels'
 
 const props = defineProps<{
   documents: OpenDocument[]
   visiblePanes: EditorPane[]
   activePane: EditorPane | undefined
   activePaneId: EditorPane['id']
+  documentLabels: Record<string, DocumentDisplayLabel>
   collapsed: boolean
   cleanDisplayPath: (path: string) => string
   isDirty: (document: OpenDocument) => boolean
@@ -89,14 +91,14 @@ function selectDocument(documentId: string) {
         kind: 'open-editor',
         documentId: document.id,
         paneId: getPrimaryDocumentPane(document.id)?.id ?? activePaneId,
-        label: document.name,
+        label: props.documentLabels[document.id]?.label ?? document.name,
       })"
       @click="selectDocument(document.id)"
     >
       <span class="open-editor-dirty-slot" aria-hidden="true">
         <span v-if="isDirty(document)" class="open-editor-dirty-dot" />
       </span>
-      <span class="open-editor-name">{{ document.name }}</span>
+      <span class="open-editor-name">{{ documentLabels[document.id]?.label ?? document.name }}</span>
       <span class="open-editor-pane">
         {{ getDocumentPaneLabel(document.id) }}
       </span>

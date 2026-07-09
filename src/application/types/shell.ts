@@ -18,6 +18,7 @@ export type EditorPane = {
 
 export type EditorPaneTabView = {
   document: OpenDocument
+  label: string
   title: string
   isActive: boolean
   isDirty: boolean
@@ -26,6 +27,7 @@ export type EditorPaneTabView = {
 export type EditorPaneActiveDocumentView = {
   document: OpenDocument
   mode: EditorMode
+  isMarkdown: boolean
   viewSessionId: string
   viewSession: EditorViewSession
   shouldLoadRemoteImages: boolean

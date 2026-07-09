@@ -57,4 +57,14 @@ export const layoutSettingLimits = {
     max: 0.75,
     fallback: 0.5,
   },
+  outlineWidth: {
+    min: 160,
+    max: 360,
+    fallback: 220,
+  },
+  documentMapWidth: {
+    min: 48,
+    max: 96,
+    fallback: 64,
+  },
 } as const satisfies Record<string, NumberLimit>

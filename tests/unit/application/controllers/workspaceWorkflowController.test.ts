@@ -11,6 +11,7 @@ function file(path: string): WorkspaceEntry {
     name: path.split('\\').at(-1) ?? path,
     path,
     kind: 'file',
+    hasOpenableDescendants: false,
     children: [],
   }
 }
@@ -20,6 +21,7 @@ function directory(path: string, children: WorkspaceEntry[] = []): WorkspaceEntr
     name: path.split('\\').at(-1) ?? path,
     path,
     kind: 'directory',
+    hasOpenableDescendants: children.some((entry) => entry.kind === 'file' || entry.hasOpenableDescendants),
     children,
   }
 }
@@ -71,6 +73,8 @@ function createHarness(options: {
     createDirectory: vi.fn(),
     createFile: vi.fn(),
     listDirectory: vi.fn().mockResolvedValue([]),
+    loadWorkspaceSettings: vi.fn().mockResolvedValue({ ignoredPaths: [] }),
+    saveWorkspaceSettings: vi.fn(),
     openTextFileByPath: vi.fn(),
     openWorkspaceDirectory: vi.fn().mockResolvedValue({
       id: 'workspace-2',
@@ -104,6 +108,8 @@ function createHarness(options: {
       loadedPaths.add('')
       void entries
     }),
+    setWorkspaceSettings: vi.fn(),
+    addIgnoredWorkspacePath: vi.fn((path: string) => ({ ignoredPaths: [path] })),
     clearWorkspaceLoadError: vi.fn(),
     setWorkspaceLoadError: vi.fn(),
     setWorkspacePathLoading: vi.fn(),
@@ -247,6 +253,18 @@ describe('workspace workflow controller', () => {
     expect(deps.setWorkspaceLoadError).toHaveBeenCalledWith('src', 'permission denied')
     expect(deps.setWorkspacePathLoading).toHaveBeenCalledWith('src', false)
     expect(deps.setWatcherWarning).toHaveBeenCalledWith('Could not load folder src: permission denied')
+  })
+
+  it('hides workspace paths without closing open documents', async () => {
+    const { controller, deps, workspaceFiles } = createHarness({ documents: [createDocument()] })
+
+    await controller.hideWorkspacePath(directory('drafts'))
+
+    expect(deps.addIgnoredWorkspacePath).toHaveBeenCalledWith('drafts')
+    expect(workspaceFiles.saveWorkspaceSettings).toHaveBeenCalledWith('workspace-1', { ignoredPaths: ['drafts'] })
+    expect(deps.removeWorkspacePathState).toHaveBeenCalledWith('drafts')
+    expect(deps.removeDocumentsFromPanes).not.toHaveBeenCalled()
+    expect(deps.setSelectedPath).toHaveBeenCalledWith(null)
   })
 
   it('moves the active document from the left pane to the right pane', () => {
