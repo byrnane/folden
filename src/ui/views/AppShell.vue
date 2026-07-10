@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   ListTree,
   Map,
+  PanelLeftClose,
   PanelLeftOpen,
   PanelRightOpen,
   Save,
@@ -36,6 +37,7 @@ import {
   layoutSettingLimits,
 } from '../../application/settings'
 import type { ApplicationSettings } from '../../application/settings'
+import type { ActivitySection } from '../../application/settings'
 import { uiIconSizes } from '../uiConstants'
 import { vFitLabel } from '../fitLabel'
 
@@ -56,6 +58,7 @@ const {
   cleanDisplayPath,
   closeDocument,
   canExecuteCommand,
+  closeSidebar,
   clearDocumentExternalState,
   clearSidebarSelection,
   confirmDialog,
@@ -132,6 +135,19 @@ const {
   workspaceNameFromPath,
 } = useApplicationShell()
 
+type ActivityScreen = {
+  sidebar: 'workspace' | 'search' | 'create' | 'settings'
+  workbench: 'editor' | 'settings'
+  sidebarClosable: boolean
+}
+
+const activityScreens: Record<ActivitySection, ActivityScreen> = {
+  workspace: { sidebar: 'workspace', workbench: 'editor', sidebarClosable: true },
+  search: { sidebar: 'search', workbench: 'editor', sidebarClosable: true },
+  create: { sidebar: 'create', workbench: 'editor', sidebarClosable: true },
+  settings: { sidebar: 'settings', workbench: 'settings', sidebarClosable: false },
+}
+
 const openEditorsCollapsed = ref(false)
 const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
 const paneToolbarDisabledCommands = ref<Partial<Record<'left' | 'right', EditorCommand[]>>>({})
@@ -155,15 +171,16 @@ const shellStyle = computed(() => ({
   '--visual-max-width': `${clampNumber(appSettings.value.editor.visualMaxWidth, applicationSettingLimits.visualMaxWidth)}px`,
 }))
 
+const activeScreen = computed(() => activityScreens[layoutSettings.value.activeActivitySection])
+const sidebarLabel = computed(() => ({
+  workspace: 'Workspace',
+  search: 'Search',
+  create: 'Create',
+  settings: 'Settings',
+})[activeScreen.value.sidebar])
 const showSidebar = computed(() =>
   !layoutSettings.value.focusMode
-  && (
-    layoutSettings.value.activeActivitySection === 'settings'
-    || (
-      appSettings.value.appearance.showSidebar
-      && layoutSettings.value.activeActivitySection === 'workspace'
-    )
-  ),
+  && (!activeScreen.value.sidebarClosable || appSettings.value.appearance.showSidebar),
 )
 
 const activePane = computed(() =>
@@ -209,7 +226,7 @@ const activePaneIsRight = computed(() => activePaneId.value === 'right')
 const moveActiveTabTitle = computed(() => activePaneIsRight.value ? 'Move active tab left' : 'Move active tab right')
 const moveActiveTabIcon = computed(() => activePaneIsRight.value ? PanelRightOpen : PanelLeftOpen)
 const showDocumentToolbar = computed(() =>
-  (layoutSettings.value.activeActivitySection !== 'settings' || layoutSettings.value.focusMode)
+  (activeScreen.value.workbench === 'editor' || layoutSettings.value.focusMode)
   && activeDocument.value !== null
   && isMarkdownDocument(activeDocument.value),
 )
@@ -229,7 +246,7 @@ const disabledToolbarCommands = computed(() =>
     : paneToolbarDisabledCommands.value[activePaneId.value] ?? visualDefaultDisabledToolbarCommands,
 )
 const showSettingsView = computed(() =>
-  layoutSettings.value.activeActivitySection === 'settings' && !layoutSettings.value.focusMode,
+  activeScreen.value.workbench === 'settings' && !layoutSettings.value.focusMode,
 )
 const showEditorView = computed(() => !showSettingsView.value)
 
@@ -349,21 +366,19 @@ onBeforeUnmount(() => {
       :mode="layoutSettings.activityRailMode"
       :compact-width="layoutSettings.activityCompactWidth"
       :expanded-width="layoutSettings.activityExpandedWidth"
-      :can-create-document="canExecuteCommand('document.new')"
       @set-section="setActivitySection"
       @set-mode="setActivityRailMode"
       @set-width="setActivityRailWidth"
       @reset-width="resetActivityRailWidth"
-      @create-document="executeCommand('document.new')"
     />
 
     <aside
       v-if="showSidebar"
       class="workspace-sidebar"
-      :aria-label="layoutSettings.activeActivitySection === 'settings' ? 'Settings' : 'Workspace'"
+      :aria-label="sidebarLabel"
       @click.self="clearSidebarSelection"
     >
-      <template v-if="layoutSettings.activeActivitySection === 'settings'">
+      <template v-if="activeScreen.sidebar === 'settings'">
         <div class="workspace-header">
           <div>
             <p class="app-kicker">Folden</p>
@@ -398,7 +413,7 @@ onBeforeUnmount(() => {
         </nav>
       </template>
 
-      <template v-else>
+      <template v-else-if="activeScreen.sidebar === 'workspace'">
         <div class="workspace-header">
           <div class="workspace-title-block">
             <p class="app-kicker">Folden</p>
@@ -532,6 +547,30 @@ onBeforeUnmount(() => {
           </section>
         </div>
       </template>
+
+      <section v-else class="sidebar-placeholder" :aria-label="activeScreen.sidebar === 'search' ? 'Search' : 'Create'">
+        <p class="app-kicker">Folden</p>
+        <h1>{{ activeScreen.sidebar === 'search' ? 'Search' : 'Create' }}</h1>
+        <p>
+          {{ activeScreen.sidebar === 'search'
+            ? 'Search will appear here in a future update.'
+            : 'Document templates will appear here in a future update.' }}
+        </p>
+      </section>
+
+      <footer class="sidebar-footer">
+        <button
+          type="button"
+          class="icon-button labelled-icon-button sidebar-close-button"
+          title="Close sidebar"
+          aria-label="Close sidebar"
+          :disabled="!activeScreen.sidebarClosable"
+          @click="closeSidebar"
+        >
+          <PanelLeftClose :size="uiIconSizes.workspaceAction" />
+          <span>Close sidebar</span>
+        </button>
+      </footer>
     </aside>
 
     <div
@@ -554,7 +593,7 @@ onBeforeUnmount(() => {
         <div class="topbar-title">
           <span class="document-title" data-testid="document-title">{{ activeDocument?.name ?? 'No document' }}</span>
           <div
-            v-if="layoutSettings.activeActivitySection !== 'settings' || layoutSettings.focusMode"
+            v-if="showEditorView"
             class="mode-switch topbar-mode-switch"
             aria-label="Editor mode"
           >
@@ -753,7 +792,7 @@ onBeforeUnmount(() => {
       />
 
       <EditorPaneGrid
-        v-if="layoutSettings.activeActivitySection !== 'settings' || layoutSettings.focusMode"
+        v-if="showEditorView"
         :visible-panes="editorPaneViews"
         :active-pane-id="activePaneId"
         :split-enabled="splitEnabled"

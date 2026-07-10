@@ -24,7 +24,6 @@ const props = defineProps<{
   mode: ActivityRailMode
   compactWidth: number
   expandedWidth: number
-  canCreateDocument: boolean
 }>()
 
 const emit = defineEmits<{
@@ -32,7 +31,6 @@ const emit = defineEmits<{
   setMode: [mode: ActivityRailMode]
   setWidth: [width: number]
   resetWidth: []
-  createDocument: []
 }>()
 
 type ResizeStart = {
@@ -159,7 +157,8 @@ onBeforeUnmount(() => {
         class="activity-button"
         title="Search"
         aria-label="Search"
-        disabled
+        :class="{ active: activeSection === 'search' }"
+        @click="emit('setSection', 'search')"
       >
         <Search :size="uiIconSizes.activityRail" />
         <span>Search</span>
@@ -167,10 +166,10 @@ onBeforeUnmount(() => {
       <button
         type="button"
         class="activity-button"
-        title="New scratch document"
-        aria-label="New scratch document"
-        :disabled="!canCreateDocument"
-        @click="emit('createDocument')"
+        :class="{ active: activeSection === 'create' }"
+        title="Create"
+        aria-label="Create"
+        @click="emit('setSection', 'create')"
       >
         <FilePenLine :size="uiIconSizes.activityRail" />
         <span>Create</span>

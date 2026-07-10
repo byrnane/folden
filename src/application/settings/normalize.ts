@@ -143,8 +143,10 @@ export function normalizeLayoutSettings(value: unknown): LayoutSettings {
   const candidate = value as Partial<LayoutSettings>
 
   return {
-    activeActivitySection: candidate.activeActivitySection === 'settings'
-      ? 'settings'
+    activeActivitySection: candidate.activeActivitySection === 'search'
+      || candidate.activeActivitySection === 'create'
+      || candidate.activeActivitySection === 'settings'
+      ? candidate.activeActivitySection
       : defaultLayoutSettings.activeActivitySection,
     activityRailMode: candidate.activityRailMode === 'expanded' || candidate.activityRailMode === 'compact'
       ? candidate.activityRailMode

@@ -61,11 +61,11 @@ export function extractMarkdownHeadings(content: string): MarkdownHeading[] {
 }
 
 export function buildDocumentMapLines(content: string): DocumentMapLine[] {
-  const lines = content.split(/\r?\n/u)
-
-  if (lines.length < 24) {
+  if (!content.trim()) {
     return []
   }
+
+  const lines = content.split(/\r?\n/u)
 
   return lines.map((line, index) => {
     const trimmedLine = line.trim()

@@ -67,6 +67,29 @@ button {
     color var(--motion-fast) ease;
 }
 
+button,
+.activity-bar,
+.workspace-sidebar,
+.activity-splitter,
+.sidebar-splitter,
+.pane-splitter,
+.topbar,
+.document-toolbar,
+.statusbar,
+.document-outline,
+.document-map,
+.open-editors,
+.workspace-tree-actions,
+.workspace-tree {
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+}
+
 button:hover:not(:disabled),
 button.active {
   border-color: var(--border-strong);
@@ -268,7 +291,7 @@ textarea:focus-visible {
 
 .workspace-sidebar {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   border-right: 1px solid var(--border);
   background: var(--sidebar-bg);
@@ -327,6 +350,31 @@ h1 {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
+}
+
+.sidebar-placeholder {
+  align-self: start;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.sidebar-placeholder p:last-child {
+  margin: 0;
+  color: var(--muted-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sidebar-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding: 8px;
+}
+
+.sidebar-close-button {
+  width: auto;
 }
 
 .open-editors {

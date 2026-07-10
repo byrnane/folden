@@ -68,6 +68,17 @@ describe('application settings', () => {
     })
   })
 
+  it.each(['workspace', 'search', 'create', 'settings'] as const)(
+    'keeps supported activity section %s',
+    (activeActivitySection) => {
+      expect(normalizeLayoutSettings({ activeActivitySection }).activeActivitySection).toBe(activeActivitySection)
+    },
+  )
+
+  it('falls back to workspace for an unknown activity section', () => {
+    expect(normalizeLayoutSettings({ activeActivitySection: 'templates' }).activeActivitySection).toBe('workspace')
+  })
+
   it('defaults document navigation visibility when persisted layout is older', () => {
     expect(normalizeLayoutSettings({
       showDocumentOutline: false,

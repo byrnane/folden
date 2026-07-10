@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
+  applicationSettingsStorageKey,
   applicationLayoutStorageKey,
   dragBy,
   layoutSettingLimits,
@@ -82,13 +83,15 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
     window.localStorage.getItem(storageKey)
   ), applicationLayoutStorageKey)).toContain('"activityExpandedWidth"')
 
-  await page
-    .getByRole('navigation', { name: 'Activity' })
-    .getByRole('button', { name: 'New scratch document' })
-    .click()
-  await expect(page.getByTestId('document-title')).toHaveText('Untitled.md')
+  await page.getByRole('navigation', { name: 'Activity' }).getByRole('button', { name: 'Search' }).click()
+  await expect(page.getByRole('complementary', { name: 'Search' })).toContainText('Search will appear here')
+  await expect(page.getByTestId('document-title')).toHaveText('README.md')
 
-  await expect(page.getByRole('button', { name: 'Search' })).toBeDisabled()
+  await page.getByRole('navigation', { name: 'Activity' }).getByRole('button', { name: 'Create' }).click()
+  await expect(page.getByRole('complementary', { name: 'Create' })).toContainText('Document templates will appear here')
+  await expect(page.getByTestId('document-title')).toHaveText('README.md')
+
+  await page.getByRole('navigation', { name: 'Activity' }).getByRole('button', { name: 'Workspace' }).click()
 
   await page.getByRole('button', { name: 'Collapse rail' }).click()
   await expect(workspaceRailLabel).toBeHidden()
@@ -104,6 +107,40 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
 
   await page.getByRole('button', { name: 'Expand rail' }).click()
   await expect(scratchLabel).toBeVisible()
+})
+
+test('switches sidebar screens and restores a closed sidebar from activity rail', async ({ page }) => {
+  await openApp(page)
+
+  const activity = page.getByRole('navigation', { name: 'Activity' })
+  await activity.getByRole('button', { name: 'Search' }).click()
+  await expect(page.getByRole('complementary', { name: 'Search' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Close sidebar' }).click()
+  await expect(page.locator('.workspace-sidebar')).toHaveCount(0)
+  await expect.poll(async () => page.evaluate((storageKey) => (
+    window.localStorage.getItem(storageKey)
+  ), applicationSettingsStorageKey)).toContain('"showSidebar":false')
+
+  await activity.getByRole('button', { name: 'Create' }).click()
+  await expect(page.getByRole('complementary', { name: 'Create' })).toBeVisible()
+  await expect.poll(async () => page.evaluate((storageKey) => (
+    window.localStorage.getItem(storageKey)
+  ), applicationSettingsStorageKey)).toContain('"showSidebar":true')
+
+  await activity.getByRole('button', { name: 'Settings' }).click()
+  await expect(page.getByRole('complementary', { name: 'Settings' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Close sidebar' })).toBeDisabled()
+})
+
+test('keeps document text selectable while service chrome is not', async ({ page }) => {
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-README.md').click()
+
+  await expect(page.getByRole('navigation', { name: 'Activity' })).toHaveCSS('user-select', 'none')
+  await expect(page.getByRole('button', { name: 'Save' })).toHaveCSS('user-select', 'none')
+  await expect(page.getByTestId('visual-editor')).not.toHaveCSS('user-select', 'none')
 })
 
 test('keeps sidebar resize limits honest while compacting narrow windows', async ({ page }) => {

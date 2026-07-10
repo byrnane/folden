@@ -173,6 +173,22 @@ test('document map scrolls long markdown in visual and source modes', async ({ p
     .toContain('"documentMapWidth"')
 })
 
+test('document map appears for short markdown in visual and source modes', async ({ page }) => {
+  await openApp(page, {
+    mockOptions: {
+      initialFiles: {
+        'short-map.md': '# Short map\n\nA short document.',
+      },
+    },
+  })
+  await openWorkspace(page)
+  await page.getByTestId('workspace-entry-short-map.md').click()
+
+  await expect(page.getByRole('complementary', { name: 'Document map' })).toBeVisible()
+  await page.getByRole('button', { name: 'Source' }).click()
+  await expect(page.getByRole('complementary', { name: 'Document map' })).toBeVisible()
+})
+
 test('plain text source documents do not show markdown outline or map', async ({ page }) => {
   await openApp(page, {
     mockOptions: {

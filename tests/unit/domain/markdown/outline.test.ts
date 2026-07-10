@@ -37,8 +37,9 @@ describe('markdown outline', () => {
     ])
   })
 
-  it('builds a compact map only for long documents', () => {
-    expect(buildDocumentMapLines('Short\nfile')).toEqual([])
+  it('builds a map for every non-empty document', () => {
+    expect(buildDocumentMapLines('Short\nfile')).toHaveLength(2)
+    expect(buildDocumentMapLines('')).toEqual([])
 
     const lines = buildDocumentMapLines([
       '# Heading',

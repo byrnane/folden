@@ -16,6 +16,7 @@ import {
   defaultLayoutSettings,
   layoutSettingLimits,
 } from './settings'
+import type { ActivitySection } from './settings'
 import {
   cleanDisplayPath,
   isMarkdownDocument,
@@ -519,10 +520,16 @@ export function useApplicationShell() {
     return getWorkspaceRelativePathFromAbsolute(path, cleanDisplayPath)
   }
 
-  function setActivitySection(section: 'workspace' | 'settings') {
+  function setActivitySection(section: ActivitySection) {
     layoutSettings.value.activeActivitySection = section
-    if (section === 'workspace') {
+    if (section !== 'settings') {
       appSettings.value.appearance.showSidebar = true
+    }
+  }
+
+  function closeSidebar() {
+    if (layoutSettings.value.activeActivitySection !== 'settings') {
+      appSettings.value.appearance.showSidebar = false
     }
   }
 
@@ -940,6 +947,7 @@ export function useApplicationShell() {
     setSplitEnabled,
     reorderDocumentInPane,
     resetLayoutSettings,
+    closeSidebar,
     runActiveEditorCommand,
     setActivitySection,
     setActivityRailMode,

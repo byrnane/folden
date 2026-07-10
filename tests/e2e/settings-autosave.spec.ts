@@ -65,6 +65,7 @@ test('keeps settings number input editable and stores autosave delay as millisec
   await expect(page.getByTestId('document-title')).toHaveCount(0)
 
   const sourceSize = page.getByLabel('Source size')
+  await expect(sourceSize).not.toHaveCSS('user-select', 'none')
   await sourceSize.fill('1')
   await expect(sourceSize).toHaveValue('1')
   await sourceSize.blur()

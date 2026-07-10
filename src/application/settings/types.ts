@@ -39,7 +39,7 @@ export type ApplicationSettings = {
   workspace: WorkspaceSettings
 }
 
-export type ActivitySection = 'workspace' | 'settings'
+export type ActivitySection = 'workspace' | 'search' | 'create' | 'settings'
 export type ActivityRailMode = 'compact' | 'expanded'
 
 export type LayoutSettings = {
