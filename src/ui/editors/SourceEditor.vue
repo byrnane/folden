@@ -9,8 +9,15 @@ import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
 import { toSourceSelectionState } from '../../domain/documents/editorViewState'
 import type { EditorCommand } from '../../application/types/shell'
-import { extractMarkdownHeadings } from '../../domain/markdown/outline'
+import {
+  buildDocumentMapLines,
+  extractMarkdownHeadings,
+  findActiveHeading,
+} from '../../domain/markdown/outline'
+import type { MarkdownHeading } from '../../domain/markdown/outline'
 import PromptDialog from '../dialogs/PromptDialog.vue'
+import DocumentMap from '../navigation/DocumentMap.vue'
+import DocumentOutline from '../navigation/DocumentOutline.vue'
 import {
   createImageInputDialog,
   createLinkInputDialog,
@@ -38,11 +45,8 @@ const emit = defineEmits<{
 }>()
 
 const editorHost = ref<HTMLDivElement | null>(null)
-const mapHost = ref<HTMLElement | null>(null)
 const mapViewport = ref({ top: 0, height: 100 })
-const outlineResizeStart = ref<{ x: number, width: number } | null>(null)
-const mapResizeStart = ref<{ x: number, width: number } | null>(null)
-const mapDragActive = ref(false)
+const activeHeadingId = ref<string | null>(null)
 const inputDialog = ref<EditorInputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
 let editorView: EditorView | null = null
@@ -92,36 +96,8 @@ const markdownHighlightStyle = HighlightStyle.define([
 
 const headings = computed(() => props.isMarkdown ? extractMarkdownHeadings(props.modelValue) : [])
 const showOutline = computed(() => props.showDocumentOutline && headings.value.length > 0)
-const mapLines = computed(() => {
-  if (!props.isMarkdown) {
-    return []
-  }
-
-  const lines = props.modelValue.split(/\r?\n/u)
-  if (lines.length < 24) {
-    return []
-  }
-
-  return lines.map((line, index) => {
-    const trimmedLine = line.trim()
-    const leadingSpaces = line.match(/^\s*/u)?.[0].length ?? 0
-    const kind = /^(#{1,6})\s+/u.test(line)
-      ? 'heading'
-      : /^\s*(?:[-*+]|\d+[.)])\s+/u.test(line) ? 'list' : trimmedLine ? 'text' : 'empty'
-
-    return {
-      index,
-      kind,
-      width: kind === 'heading' ? 92 : Math.min(Math.max(trimmedLine.length * 2.2, 18), kind === 'list' ? 72 : 88),
-      indent: Math.min(leadingSpaces * 3, 24),
-    }
-  })
-})
+const mapLines = computed(() => props.isMarkdown ? buildDocumentMapLines(props.modelValue) : [])
 const showDocumentMap = computed(() => props.showDocumentMap && mapLines.value.length > 0)
-const mapViewportStyle = computed(() => ({
-  top: `${mapViewport.value.top}%`,
-  height: `${mapViewport.value.height}%`,
-}))
 
 function clampPosition(position: number) {
   return Math.min(Math.max(position, 0), editorView?.state.doc.length ?? 0)
@@ -209,6 +185,12 @@ function scrollToLine(lineNumber: number) {
     scrollIntoView: true,
   })
   editorView.focus()
+  editorView.requestMeasure({ read: updateMapViewport })
+}
+
+function scrollToHeading(heading: MarkdownHeading) {
+  activeHeadingId.value = heading.id
+  scrollToLine(heading.line)
 }
 
 function updateMapViewport() {
@@ -223,6 +205,7 @@ function updateMapViewport() {
 
   if (scrollHeight <= 0 || clientHeight <= 0 || scrollHeight <= clientHeight) {
     mapViewport.value = { top: 0, height: 100 }
+    updateActiveHeading()
     return
   }
 
@@ -230,69 +213,30 @@ function updateMapViewport() {
   const maxTop = 100 - height
   const top = Math.min((scrollElement.scrollTop / (scrollHeight - clientHeight)) * maxTop, maxTop)
   mapViewport.value = { top, height }
+  updateActiveHeading()
 }
 
-function scrollMapToClientY(clientY: number) {
-  if (!editorView || !mapHost.value) {
+function updateActiveHeading() {
+  if (!editorView || headings.value.length === 0) {
+    activeHeadingId.value = null
     return
   }
 
-  const rect = mapHost.value.getBoundingClientRect()
-  const ratio = Math.min(Math.max((clientY - rect.top) / rect.height, 0), 1)
+  const scrollElement = editorView.scrollDOM
+  const positions = Object.fromEntries(headings.value.map((heading) => {
+    const line = editorView!.state.doc.line(Math.min(Math.max(heading.line, 1), editorView!.state.doc.lines))
+    return [heading.id, editorView!.lineBlockAt(line.from).top]
+  }))
+  activeHeadingId.value = findActiveHeading(headings.value, positions, scrollElement.scrollTop)
+}
+
+function scrollMapToRatio(ratio: number) {
+  if (!editorView) {
+    return
+  }
+
   editorView.scrollDOM.scrollTop = ratio * (editorView.scrollDOM.scrollHeight - editorView.scrollDOM.clientHeight)
   updateMapViewport()
-}
-
-function beginMapDrag(event: PointerEvent) {
-  mapDragActive.value = true
-  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
-  scrollMapToClientY(event.clientY)
-}
-
-function dragMap(event: PointerEvent) {
-  if (mapDragActive.value) {
-    scrollMapToClientY(event.clientY)
-  }
-}
-
-function endMapDrag() {
-  mapDragActive.value = false
-}
-
-function beginOutlineResize(event: PointerEvent) {
-  outlineResizeStart.value = { x: event.clientX, width: props.outlineWidth }
-  window.addEventListener('pointermove', resizeOutline)
-  window.addEventListener('pointerup', stopOutlineResize)
-}
-
-function resizeOutline(event: PointerEvent) {
-  if (outlineResizeStart.value) {
-    emit('set-outline-width', outlineResizeStart.value.width + event.clientX - outlineResizeStart.value.x)
-  }
-}
-
-function stopOutlineResize() {
-  outlineResizeStart.value = null
-  window.removeEventListener('pointermove', resizeOutline)
-  window.removeEventListener('pointerup', stopOutlineResize)
-}
-
-function beginMapResize(event: PointerEvent) {
-  mapResizeStart.value = { x: event.clientX, width: props.documentMapWidth }
-  window.addEventListener('pointermove', resizeMap)
-  window.addEventListener('pointerup', stopMapResize)
-}
-
-function resizeMap(event: PointerEvent) {
-  if (mapResizeStart.value) {
-    emit('set-document-map-width', mapResizeStart.value.width - event.clientX + mapResizeStart.value.x)
-  }
-}
-
-function stopMapResize() {
-  mapResizeStart.value = null
-  window.removeEventListener('pointermove', resizeMap)
-  window.removeEventListener('pointerup', stopMapResize)
 }
 
 type MarkdownLinkMatch = {
@@ -657,8 +601,6 @@ defineExpose({
 })
 
 onBeforeUnmount(() => {
-  stopOutlineResize()
-  stopMapResize()
   editorView?.scrollDOM.removeEventListener('scroll', updateMapViewport)
   mapResizeObserver?.disconnect()
   mapResizeObserver = null
@@ -677,40 +619,23 @@ onBeforeUnmount(() => {
       '--document-map-width': `${documentMapWidth}px`,
     }"
   >
-    <aside v-if="showOutline" class="document-outline" aria-label="Document outline">
-      <button
-        v-for="heading in headings"
-        :key="`${heading.line}:${heading.id}`"
-        type="button"
-        class="document-outline-item"
-        :style="{ '--heading-level': heading.level }"
-        @click="scrollToLine(heading.line)"
-      >
-        {{ heading.text }}
-      </button>
-      <span class="outline-resize-handle" role="separator" aria-label="Resize outline" @pointerdown="beginOutlineResize" />
-    </aside>
+    <DocumentOutline
+      v-if="showOutline"
+      :headings="headings"
+      :active-heading-id="activeHeadingId"
+      :width="outlineWidth"
+      @select="scrollToHeading"
+      @resize="emit('set-outline-width', $event)"
+    />
     <div ref="editorHost" class="source-editor" data-testid="source-editor" />
-    <aside
+    <DocumentMap
       v-if="showDocumentMap"
-      ref="mapHost"
-      class="document-map"
-      aria-label="Document map"
-      @pointerdown="beginMapDrag"
-      @pointermove="dragMap"
-      @pointerup="endMapDrag"
-      @pointercancel="endMapDrag"
-    >
-      <span
-        v-for="line in mapLines"
-        :key="line.index"
-        class="document-map-line"
-        :class="line.kind"
-        :style="{ '--map-line-width': `${line.width}%`, '--map-line-indent': `${line.indent}%` }"
-      />
-      <span class="document-map-viewport" :style="mapViewportStyle" />
-      <span class="document-map-resize-handle" role="separator" aria-label="Resize document map" @pointerdown.stop="beginMapResize" />
-    </aside>
+      :lines="mapLines"
+      :viewport="mapViewport"
+      :width="documentMapWidth"
+      @navigate="scrollMapToRatio"
+      @resize="emit('set-document-map-width', $event)"
+    />
   </div>
   <PromptDialog
     :open="!!inputDialog"

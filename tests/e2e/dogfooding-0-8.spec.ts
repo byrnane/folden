@@ -105,6 +105,14 @@ test('outline navigates visual and source editors', async ({ page }) => {
   const outline = page.getByRole('complementary', { name: 'Document outline' })
   await expect(outline).toBeVisible()
   await expect.poll(async () => outline.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+  const startHeading = outline.getByRole('button', { name: 'Start' })
+  await expect(startHeading).toHaveClass(/active/)
+  await startHeading.focus()
+  await page.keyboard.press('End')
+  await expect(outline.getByRole('button', { name: 'Last Stop' })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect.poll(async () => page.locator('.visual-editor-scroll').evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+  await expect(outline.getByRole('button', { name: 'Last Stop' })).toHaveClass(/active/)
   await page.getByRole('button', { name: 'Deep Target' }).click()
   await expect.poll(async () => page.locator('.visual-editor-scroll').evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
 
@@ -119,6 +127,7 @@ test('outline navigates visual and source editors', async ({ page }) => {
   })
   await page.getByRole('button', { name: 'Last Stop' }).click()
   await expect.poll(async () => page.locator('.source-editor .cm-scroller').evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+  await expect(outline.getByRole('button', { name: 'Deep Target' })).toHaveClass(/active/)
 })
 
 test('document map scrolls long markdown in visual and source modes', async ({ page }) => {

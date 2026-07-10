@@ -32,6 +32,8 @@
 * конфликт при одновременном редактировании;
 * сценарии rename, create, delete и move в рабочем пространстве;
 * большие Markdown-файлы;
+* активный раздел оглавления, клавиатурную навигацию и click/drag карты документа в обоих режимах;
+* скрытие файлов рабочего пространства через `.folden/workspace.json` с проверкой после перезапуска;
 * локальные и удалённые изображения;
 * сохранение layout и settings между запусками;
 * несколько часов непрерывной работы;
@@ -42,6 +44,10 @@
 Release gate 0.7 покрыл регрессионный чек-лист редактора автоматическими E2E-тестами: переключение Visual/Source без dirty-state, мгновенную правку Visual перед Source, kitchen-sink save/reopen, сохранение raw HTML/frontmatter в Source, Source link/image dialogs, редактирование tables/task lists, сохранение scroll/selection и drag/drop payloads для вкладок, workspace-файлов и external paths.
 
 Это не заменяет реальный dogfooding и smoke test установщика. Такие сессии фиксируются отдельно ниже.
+
+## Automated closeout 0.8
+
+Release gate 0.8 покрывает уникальные labels файлов, workspace-level ignores, muted folders, compact workspace actions, Outline, click/drag карты документа, сохранение её размеров и исключение plain text. В 0.8.2 добавлены активный пункт оглавления и клавиатурная навигация.
 
 ## Backlog проблем
 

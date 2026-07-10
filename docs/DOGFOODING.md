@@ -30,6 +30,8 @@ Required coverage:
 * conflict during simultaneous editing;
 * workspace rename, create, delete, and move scenarios;
 * large Markdown files;
+* outline active-section tracking, keyboard navigation, and document-map click/drag in both editor modes;
+* workspace-level hiding through `.folden/workspace.json`, including reopen and restart;
 * local and remote images;
 * layout and settings persistence between launches;
 * several hours of use;
@@ -40,6 +42,10 @@ Required coverage:
 The 0.7 release gate covered the editor regression checklist with automated E2E tests: Visual/Source no-dirty switching, instant Visual edits before Source, kitchen-sink save/reopen, raw HTML/frontmatter Source preservation, Source link/image dialogs, table/task-list editing, scroll/selection preservation, and tab/workspace/external drag/drop payloads.
 
 This does not replace real dogfooding or installer smoke testing. Record those sessions separately below.
+
+## 0.8 Automated Closeout
+
+The 0.8 release gate covers duplicate document labels, workspace-level ignores, muted folders, compact workspace actions, Outline navigation, document-map click/drag, persisted navigation widths, and plain-text exclusion. 0.8.2 additionally covers the active Outline item and keyboard navigation.
 
 ## Issue Backlog
 

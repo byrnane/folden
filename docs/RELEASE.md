@@ -40,6 +40,8 @@ For editor releases, confirm the automated E2E coverage includes:
 * Source link/image dialogs for insert, edit, cancel, and validation.
 * Scratch `Untitled.md` toolbar behavior before save.
 * Tab, workspace-file, and external-path drag/drop into editor panes and right split.
+* Workspace-level ignores survive reopening the workspace and do not close already opened files.
+* Outline follows the active Markdown section in Source and Visual; keyboard navigation and document-map click/drag remain usable.
 
 Do not describe Visual mode as supporting every Markdown construct. The 0.7 contract is supported CommonMark/GFM editing plus safety-gated raw blocks; Source remains the preservation path for raw Markdown.
 
@@ -68,6 +70,8 @@ Use the built Windows installer artifact:
 * Open, edit, save, close, and reopen a Markdown file.
 * Open one document in split view with Source and Visual modes.
 * Switch between Visual and Source.
+* Use Outline keyboard navigation and document-map click/drag on a long Markdown document.
+* Hide a workspace file or folder, restart Folden, and verify the item remains hidden while an already open document stays open.
 * Enable autosave and confirm a saved file is updated.
 * Force-close the app and confirm recovery behavior.
 * Modify an open file outside Folden and confirm reload/conflict behavior.

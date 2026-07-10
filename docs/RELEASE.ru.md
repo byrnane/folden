@@ -42,6 +42,8 @@ cargo test
 * Source link/image dialogs: insert, edit, cancel и validation;
 * toolbar для scratch `Untitled.md` до сохранения;
 * drag/drop вкладок, файлов из workspace и external paths в editor panes и right split.
+* workspace-level ignores после reopen не закрывают уже открытые файлы;
+* Outline следует текущему разделу Markdown в Source и Visual; клавиатурная навигация и click/drag карты остаются рабочими.
 
 Не описывайте Visual mode как поддержку любого Markdown. Контракт 0.7: редактирование supported CommonMark/GFM плюс safety-gated raw blocks; Source остаётся режимом сохранения raw Markdown.
 
@@ -70,6 +72,8 @@ npm run tauri -- build
 * Открыть, отредактировать, сохранить, закрыть и повторно открыть Markdown-файл.
 * Открыть один документ в split view одновременно в Source- и Visual-режимах.
 * Переключиться между Visual и Source.
+* Проверить клавиатурную навигацию Outline и click/drag карты на длинном Markdown-документе.
+* Скрыть файл или папку рабочего пространства, перезапустить Folden и убедиться, что уже открытый документ не закрылся.
 * Включить autosave и убедиться, что сохранённый файл обновляется.
 * Принудительно закрыть приложение и проверить recovery.
 * Изменить открытый файл вне Folden и проверить reload/conflict flow.

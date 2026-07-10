@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { extractMarkdownHeadings } from '../../../../src/domain/markdown/outline'
+import {
+  buildDocumentMapLines,
+  extractMarkdownHeadings,
+  findActiveHeading,
+} from '../../../../src/domain/markdown/outline'
 
 describe('markdown outline', () => {
   it('extracts headings and ignores fenced code blocks', () => {
@@ -31,5 +35,29 @@ describe('markdown outline', () => {
     ].join('\n'))).toEqual([
       { id: 'visible', level: 3, text: 'Visible', line: 5 },
     ])
+  })
+
+  it('builds a compact map only for long documents', () => {
+    expect(buildDocumentMapLines('Short\nfile')).toEqual([])
+
+    const lines = buildDocumentMapLines([
+      '# Heading',
+      '  - List item',
+      '',
+      ...Array.from({ length: 22 }, () => 'Paragraph'),
+    ].join('\n'))
+
+    expect(lines.slice(0, 3)).toEqual([
+      expect.objectContaining({ kind: 'heading', width: 92 }),
+      expect.objectContaining({ kind: 'list', indent: 6 }),
+      expect.objectContaining({ kind: 'empty' }),
+    ])
+  })
+
+  it('selects the last heading above the viewport', () => {
+    const headings = extractMarkdownHeadings('# First\nText\n## Second\nText\n### Third')
+
+    expect(findActiveHeading(headings, { first: 0, second: 120, third: 260 }, 140)).toBe('second')
+    expect(findActiveHeading(headings, { first: 40, second: 160, third: 260 }, 0)).toBe('first')
   })
 })

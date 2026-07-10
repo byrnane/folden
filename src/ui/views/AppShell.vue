@@ -15,7 +15,7 @@ import {
   PanelRightOpen,
   Save,
 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import ConfirmDialog from '../dialogs/ConfirmDialog.vue'
 import ConflictResolutionDialog from '../dialogs/ConflictResolutionDialog.vue'
 import MarkdownSafetyDialog from '../dialogs/MarkdownSafetyDialog.vue'
@@ -26,6 +26,7 @@ import ActivityRail from './ActivityRail.vue'
 import DocumentToolbar from './DocumentToolbar.vue'
 import EditorPaneGrid from './EditorPaneGrid.vue'
 import OpenEditors from './OpenEditors.vue'
+import SettingsView from './SettingsView.vue'
 import WorkspaceTree from '../workspace/WorkspaceTree.vue'
 import { useApplicationShell } from '../../applicationShell'
 import type { EditorCommand } from '../../application/types/shell'
@@ -34,6 +35,7 @@ import {
   applicationSettingLimits,
   layoutSettingLimits,
 } from '../../application/settings'
+import type { ApplicationSettings } from '../../application/settings'
 import { uiIconSizes } from '../uiConstants'
 import { vFitLabel } from '../fitLabel'
 
@@ -135,12 +137,6 @@ const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
 const paneToolbarDisabledCommands = ref<Partial<Record<'left' | 'right', EditorCommand[]>>>({})
 const sidebarResizeStart = ref<{ x: number, width: number } | null>(null)
 const splitResizeStart = ref<{ x: number, ratio: number, width: number } | null>(null)
-const sourceFontSizeInput = ref(String(appSettings.value.editor.sourceFontSize))
-const visualFontSizeInput = ref(String(appSettings.value.editor.visualFontSize))
-const lineHeightInput = ref(String(appSettings.value.editor.lineHeight))
-const visualMaxWidthInput = ref(String(appSettings.value.editor.visualMaxWidth))
-const autosaveDelaySecondsInput = ref(formatSeconds(appSettings.value.autosave.debounceMs))
-const uiScaleInput = ref(String(appSettings.value.appearance.uiScale))
 
 const activityWidth = computed(() => layoutSettings.value.activityRailMode === 'expanded'
   ? layoutSettings.value.activityExpandedWidth
@@ -243,65 +239,14 @@ function clampNumber(value: unknown, limit: { min: number, max: number, fallback
     : limit.fallback
 }
 
-function inputText(event: Event) {
-  return (event.target as HTMLInputElement).value
-}
-
-function formatSeconds(milliseconds: number) {
-  return String(milliseconds / 1000)
-}
-
-function secondsLimit(millisecondsLimit: { min: number, max: number, fallback: number, step: number }) {
-  return {
-    min: millisecondsLimit.min / 1000,
-    max: millisecondsLimit.max / 1000,
-    fallback: millisecondsLimit.fallback / 1000,
-    step: millisecondsLimit.step / 1000,
-  }
-}
-
-const autosaveDelaySecondsLimit = secondsLimit(applicationSettingLimits.autosaveDebounceMs)
-
 function formatOpenDocumentsStatus(openCount: number, unsavedCount: number) {
   return unsavedCount > 0
     ? `${openCount} open · ${unsavedCount} unsaved`
     : `${openCount} open`
 }
 
-function applyNumberInput(value: string, limit: { min: number, max: number, fallback: number }) {
-  const numberValue = Number(value)
-  return clampNumber(Number.isFinite(numberValue) ? numberValue : limit.fallback, limit)
-}
-
-function updateSourceFontSize() {
-  appSettings.value.editor.sourceFontSize = applyNumberInput(sourceFontSizeInput.value, applicationSettingLimits.sourceFontSize)
-  sourceFontSizeInput.value = String(appSettings.value.editor.sourceFontSize)
-}
-
-function updateVisualFontSize() {
-  appSettings.value.editor.visualFontSize = applyNumberInput(visualFontSizeInput.value, applicationSettingLimits.visualFontSize)
-  visualFontSizeInput.value = String(appSettings.value.editor.visualFontSize)
-}
-
-function updateLineHeight() {
-  appSettings.value.editor.lineHeight = applyNumberInput(lineHeightInput.value, applicationSettingLimits.lineHeight)
-  lineHeightInput.value = String(appSettings.value.editor.lineHeight)
-}
-
-function updateVisualMaxWidth() {
-  appSettings.value.editor.visualMaxWidth = applyNumberInput(visualMaxWidthInput.value, applicationSettingLimits.visualMaxWidth)
-  visualMaxWidthInput.value = String(appSettings.value.editor.visualMaxWidth)
-}
-
-function updateAutosaveDebounce() {
-  const seconds = applyNumberInput(autosaveDelaySecondsInput.value, autosaveDelaySecondsLimit)
-  appSettings.value.autosave.debounceMs = Math.round(seconds * 1000)
-  autosaveDelaySecondsInput.value = formatSeconds(appSettings.value.autosave.debounceMs)
-}
-
-function updateUiScale() {
-  appSettings.value.appearance.uiScale = applyNumberInput(uiScaleInput.value, applicationSettingLimits.uiScale)
-  uiScaleInput.value = String(appSettings.value.appearance.uiScale)
+function updateAppSettings(nextSettings: ApplicationSettings) {
+  Object.assign(appSettings.value, nextSettings)
 }
 
 function beginSidebarResize(event: MouseEvent) {
@@ -378,24 +323,6 @@ function updatePaneToolbarState(paneId: 'left' | 'right', state: { disabledComma
   }
 }
 
-watch(() => appSettings.value.editor.sourceFontSize, (value) => {
-  sourceFontSizeInput.value = String(value)
-})
-watch(() => appSettings.value.editor.visualFontSize, (value) => {
-  visualFontSizeInput.value = String(value)
-})
-watch(() => appSettings.value.editor.lineHeight, (value) => {
-  lineHeightInput.value = String(value)
-})
-watch(() => appSettings.value.editor.visualMaxWidth, (value) => {
-  visualMaxWidthInput.value = String(value)
-})
-watch(() => appSettings.value.autosave.debounceMs, (value) => {
-  autosaveDelaySecondsInput.value = formatSeconds(value)
-})
-watch(() => appSettings.value.appearance.uiScale, (value) => {
-  uiScaleInput.value = String(value)
-})
 onBeforeUnmount(() => {
   stopSidebarResize()
   stopSplitResize()
@@ -757,156 +684,15 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <section
-        v-if="layoutSettings.activeActivitySection === 'settings' && !layoutSettings.focusMode"
-        class="settings-view"
-        aria-label="Settings"
-      >
-        <div class="settings-panel">
-          <header class="settings-panel-header">
-            <p class="app-kicker">Settings</p>
-            <h2>
-              {{
-                activeSettingsSection === 'editor'
-                  ? 'Editor'
-                  : activeSettingsSection === 'files'
-                    ? 'Files'
-                    : 'Appearance'
-              }}
-            </h2>
-          </header>
-          <section v-if="activeSettingsSection === 'editor'" class="settings-section">
-            <label class="settings-row">
-              <span>
-                <strong>Source font</strong>
-                <small>Font stack for plain text editing.</small>
-              </span>
-              <input v-model="appSettings.editor.sourceFontFamily" type="text">
-            </label>
-            <label class="settings-row">
-              <span>
-                <strong>Source size</strong>
-                <small>Text size in Source mode.</small>
-              </span>
-              <input :value="sourceFontSizeInput" type="number" :min="applicationSettingLimits.sourceFontSize.min" :max="applicationSettingLimits.sourceFontSize.max" @input="sourceFontSizeInput = inputText($event)" @change="updateSourceFontSize" @blur="updateSourceFontSize">
-            </label>
-            <label class="settings-row">
-              <span>
-                <strong>Visual size</strong>
-                <small>Text size in Visual mode.</small>
-              </span>
-              <input :value="visualFontSizeInput" type="number" :min="applicationSettingLimits.visualFontSize.min" :max="applicationSettingLimits.visualFontSize.max" @input="visualFontSizeInput = inputText($event)" @change="updateVisualFontSize" @blur="updateVisualFontSize">
-            </label>
-            <label class="settings-row">
-              <span>
-                <strong>Line height</strong>
-                <small>Shared editor line spacing.</small>
-              </span>
-              <input :value="lineHeightInput" type="number" :min="applicationSettingLimits.lineHeight.min" :max="applicationSettingLimits.lineHeight.max" :step="applicationSettingLimits.lineHeight.step" @input="lineHeightInput = inputText($event)" @change="updateLineHeight" @blur="updateLineHeight">
-            </label>
-            <label class="settings-row">
-              <span>
-                <strong>Visual width</strong>
-                <small>Maximum readable content width.</small>
-              </span>
-              <input :value="visualMaxWidthInput" type="number" :min="applicationSettingLimits.visualMaxWidth.min" :max="applicationSettingLimits.visualMaxWidth.max" @input="visualMaxWidthInput = inputText($event)" @change="updateVisualMaxWidth" @blur="updateVisualMaxWidth">
-            </label>
-            <label class="settings-row settings-toggle-row">
-              <span>
-                <strong>Word wrap</strong>
-                <small>Wrap long lines in Source mode.</small>
-              </span>
-              <input v-model="appSettings.editor.wordWrap" class="settings-switch" type="checkbox">
-            </label>
-            <label class="settings-row">
-              <span>
-                <strong>Markdown opens as</strong>
-                <small>Default mode for Markdown files.</small>
-              </span>
-              <select v-model="appSettings.editor.defaultMarkdownMode">
-                <option value="visual">Visual</option>
-                <option value="source">Source</option>
-              </select>
-            </label>
-          </section>
-          <section v-else-if="activeSettingsSection === 'files'" class="settings-section">
-            <label class="settings-row settings-toggle-row">
-              <span>
-                <strong>Autosave</strong>
-                <small>Save changed existing files after a short pause.</small>
-              </span>
-              <input v-model="appSettings.autosave.enabled" class="settings-switch" type="checkbox">
-            </label>
-            <label class="settings-row">
-              <span>
-                <strong>Autosave delay</strong>
-                <small>Delay before autosave starts, in seconds.</small>
-              </span>
-              <input :value="autosaveDelaySecondsInput" type="number" :min="autosaveDelaySecondsLimit.min" :max="autosaveDelaySecondsLimit.max" :step="autosaveDelaySecondsLimit.step" @input="autosaveDelaySecondsInput = inputText($event)" @change="updateAutosaveDebounce" @blur="updateAutosaveDebounce">
-            </label>
-            <label class="settings-row settings-toggle-row">
-              <span>
-                <strong>Save on focus loss</strong>
-                <small>Autosave changed existing files when Folden loses focus.</small>
-              </span>
-              <input v-model="appSettings.autosave.saveOnWindowBlur" class="settings-switch" type="checkbox">
-            </label>
-            <label class="settings-row settings-toggle-row">
-              <span>
-                <strong>Save before switching files</strong>
-                <small>Autosave the current file before another document becomes active.</small>
-              </span>
-              <input v-model="appSettings.autosave.saveOnDocumentSwitch" class="settings-switch" type="checkbox">
-            </label>
-          </section>
-          <section v-else class="settings-section">
-            <label class="settings-row">
-              <span>
-                <strong>UI scale</strong>
-                <small>Scale controls and application chrome.</small>
-              </span>
-              <input :value="uiScaleInput" type="number" :min="applicationSettingLimits.uiScale.min" :max="applicationSettingLimits.uiScale.max" :step="applicationSettingLimits.uiScale.step" @input="uiScaleInput = inputText($event)" @change="updateUiScale" @blur="updateUiScale">
-            </label>
-            <label class="settings-row">
-              <span>
-                <strong>Density</strong>
-                <small>Spacing preset for controls.</small>
-              </span>
-              <select v-model="appSettings.appearance.density">
-                <option value="compact">Compact</option>
-                <option value="comfortable">Comfortable</option>
-              </select>
-            </label>
-            <label class="settings-row settings-toggle-row">
-              <span>
-                <strong>Status bar</strong>
-                <small>Show document stats at the bottom.</small>
-              </span>
-              <input v-model="appSettings.appearance.showStatusBar" class="settings-switch" type="checkbox">
-            </label>
-            <label class="settings-row settings-toggle-row">
-              <span>
-                <strong>Sidebar</strong>
-                <small>Show workspace sidebar outside Settings.</small>
-              </span>
-              <input v-model="appSettings.appearance.showSidebar" class="settings-switch" type="checkbox">
-            </label>
-            <div class="settings-actions">
-              <button type="button" @click="resetLayoutSettings">
-                Reset layout
-              </button>
-              <button
-                type="button"
-                :disabled="!canExecuteCommand('diagnostics.export')"
-                data-testid="export-diagnostics"
-                @click="executeCommand('diagnostics.export')"
-              >
-                Export diagnostics
-              </button>
-            </div>
-          </section>
-        </div>
-      </section>
+      <SettingsView
+        v-if="showSettingsView"
+        :app-settings="appSettings"
+        :active-section="activeSettingsSection"
+        :can-export-diagnostics="canExecuteCommand('diagnostics.export')"
+        @update-settings="updateAppSettings"
+        @reset-layout="resetLayoutSettings"
+        @export-diagnostics="executeCommand('diagnostics.export')"
+      />
 
       <div
         v-if="errorMessage || watcherWarning"

@@ -13,7 +13,7 @@ It is built around a simple contract:
 
 ## What It Does
 
-Folden can open files and folders, edit Markdown in Source or Visual mode, work with tabs and a two-pane split view, save safely, recover unsaved work, detect external changes, and keep local layout/settings between launches.
+Folden can open files and folders, edit Markdown in Source or Visual mode, navigate long documents through an outline and document map, work with tabs and a two-pane split view, save safely, recover unsaved work, detect external changes, and keep local layout/settings between launches.
 
 It is not a cloud notes service, collaboration platform, mobile app, database-backed knowledge base, plugin platform, or AI writing product.
 

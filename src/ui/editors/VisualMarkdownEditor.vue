@@ -18,12 +18,18 @@ import { toVisualSelectionState } from '../../domain/documents/editorViewState'
 import { resolveVisualImageSource } from '../../domain/markdown/imageRendering'
 import { validateLinkTarget } from '../../domain/markdown/markdownSafety'
 import type { EditorCommand } from '../../application/types/shell'
-import { extractMarkdownHeadings } from '../../domain/markdown/outline'
+import {
+  buildDocumentMapLines,
+  extractMarkdownHeadings,
+  findActiveHeading,
+} from '../../domain/markdown/outline'
 import {
   createImageInputDialog,
   createLinkInputDialog,
   type EditorInputDialogState,
 } from './editorInputDialogs'
+import DocumentMap from '../navigation/DocumentMap.vue'
+import DocumentOutline from '../navigation/DocumentOutline.vue'
 
 const props = defineProps<{
   documentId: string
@@ -49,11 +55,8 @@ const emit = defineEmits<{
 
 const scrollHost = ref<HTMLDivElement | null>(null)
 const editorHost = ref<HTMLDivElement | null>(null)
-const mapHost = ref<HTMLElement | null>(null)
 const mapViewport = ref({ top: 0, height: 100 })
-const outlineResizeStart = ref<{ x: number, width: number } | null>(null)
-const mapResizeStart = ref<{ x: number, width: number } | null>(null)
-const mapDragActive = ref(false)
+const activeHeadingId = ref<string | null>(null)
 const editor = shallowRef<Editor | null>(null)
 const inputDialog = ref<EditorInputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
@@ -65,32 +68,8 @@ let mapResizeObserver: ResizeObserver | null = null
 
 const headings = computed(() => extractMarkdownHeadings(props.modelValue))
 const showOutline = computed(() => props.showDocumentOutline && headings.value.length > 0)
-const mapBlocks = computed(() => {
-  const lines = props.modelValue.split(/\r?\n/u)
-  if (lines.length < 24) {
-    return []
-  }
-
-  return lines.map((line, index) => {
-    const trimmedLine = line.trim()
-    const leadingSpaces = line.match(/^\s*/u)?.[0].length ?? 0
-    const kind = /^(#{1,6})\s+/u.test(line)
-      ? 'heading'
-      : /^\s*(?:[-*+]|\d+[.)])\s+/u.test(line) ? 'list' : trimmedLine ? 'text' : 'empty'
-
-    return {
-      index,
-      kind,
-      width: kind === 'heading' ? 92 : Math.min(Math.max(trimmedLine.length * 2.2, 18), kind === 'list' ? 72 : 88),
-      indent: Math.min(leadingSpaces * 3, 24),
-    }
-  })
-})
+const mapBlocks = computed(() => buildDocumentMapLines(props.modelValue))
 const showDocumentMap = computed(() => props.showDocumentMap && mapBlocks.value.length > 0)
-const mapViewportStyle = computed(() => ({
-  top: `${mapViewport.value.top}%`,
-  height: `${mapViewport.value.height}%`,
-}))
 
 const structuralTableCommands: EditorCommand[] = [
   'add-row-before',
@@ -373,6 +352,7 @@ function openVisualLink(href: string) {
 
 function scrollToHeading(id: string) {
   findAnchorTarget(`#${encodeURIComponent(id)}`)?.scrollIntoView({ block: 'start' })
+  requestAnimationFrame(updateMapViewport)
 }
 
 function updateMapViewport() {
@@ -387,6 +367,7 @@ function updateMapViewport() {
 
   if (scrollHeight <= 0 || clientHeight <= 0 || scrollHeight <= clientHeight) {
     mapViewport.value = { top: 0, height: 100 }
+    updateActiveHeading()
     return
   }
 
@@ -394,69 +375,32 @@ function updateMapViewport() {
   const maxTop = 100 - height
   const top = Math.min((scrollElement.scrollTop / (scrollHeight - clientHeight)) * maxTop, maxTop)
   mapViewport.value = { top, height }
+  updateActiveHeading()
 }
 
-function scrollMapToClientY(clientY: number) {
-  if (!scrollHost.value || !mapHost.value) {
+function updateActiveHeading() {
+  if (!scrollHost.value || !editorHost.value || headings.value.length === 0) {
+    activeHeadingId.value = null
     return
   }
 
-  const rect = mapHost.value.getBoundingClientRect()
-  const ratio = Math.min(Math.max((clientY - rect.top) / rect.height, 0), 1)
+  const scrollElement = scrollHost.value
+  const scrollRect = scrollElement.getBoundingClientRect()
+  const positions = Object.fromEntries(headings.value.map((heading) => {
+    const element = findAnchorTarget(`#${encodeURIComponent(heading.id)}`)
+    const rect = element?.getBoundingClientRect()
+    return [heading.id, rect ? rect.top - scrollRect.top + scrollElement.scrollTop : Number.POSITIVE_INFINITY]
+  }))
+  activeHeadingId.value = findActiveHeading(headings.value, positions, scrollElement.scrollTop)
+}
+
+function scrollMapToRatio(ratio: number) {
+  if (!scrollHost.value) {
+    return
+  }
+
   scrollHost.value.scrollTop = ratio * (scrollHost.value.scrollHeight - scrollHost.value.clientHeight)
   updateMapViewport()
-}
-
-function beginMapDrag(event: PointerEvent) {
-  mapDragActive.value = true
-  ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
-  scrollMapToClientY(event.clientY)
-}
-
-function dragMap(event: PointerEvent) {
-  if (mapDragActive.value) {
-    scrollMapToClientY(event.clientY)
-  }
-}
-
-function endMapDrag() {
-  mapDragActive.value = false
-}
-
-function beginOutlineResize(event: PointerEvent) {
-  outlineResizeStart.value = { x: event.clientX, width: props.outlineWidth }
-  window.addEventListener('pointermove', resizeOutline)
-  window.addEventListener('pointerup', stopOutlineResize)
-}
-
-function resizeOutline(event: PointerEvent) {
-  if (outlineResizeStart.value) {
-    emit('set-outline-width', outlineResizeStart.value.width + event.clientX - outlineResizeStart.value.x)
-  }
-}
-
-function stopOutlineResize() {
-  outlineResizeStart.value = null
-  window.removeEventListener('pointermove', resizeOutline)
-  window.removeEventListener('pointerup', stopOutlineResize)
-}
-
-function beginMapResize(event: PointerEvent) {
-  mapResizeStart.value = { x: event.clientX, width: props.documentMapWidth }
-  window.addEventListener('pointermove', resizeMap)
-  window.addEventListener('pointerup', stopMapResize)
-}
-
-function resizeMap(event: PointerEvent) {
-  if (mapResizeStart.value) {
-    emit('set-document-map-width', mapResizeStart.value.width - event.clientX + mapResizeStart.value.x)
-  }
-}
-
-function stopMapResize() {
-  mapResizeStart.value = null
-  window.removeEventListener('pointermove', resizeMap)
-  window.removeEventListener('pointerup', stopMapResize)
 }
 
 function handleVisualClick(event: MouseEvent) {
@@ -716,8 +660,6 @@ function runTableCommand(command: (chain: TableCommandChain) => boolean) {
 }
 
 onBeforeUnmount(() => {
-  stopOutlineResize()
-  stopMapResize()
   scrollHost.value?.removeEventListener('scroll', updateMapViewport)
   mapResizeObserver?.disconnect()
   mapResizeObserver = null
@@ -736,19 +678,14 @@ onBeforeUnmount(() => {
       '--document-map-width': `${documentMapWidth}px`,
     }"
   >
-    <aside v-if="showOutline" class="document-outline" aria-label="Document outline">
-      <button
-        v-for="heading in headings"
-        :key="`${heading.line}:${heading.id}`"
-        type="button"
-        class="document-outline-item"
-        :style="{ '--heading-level': heading.level }"
-        @click="scrollToHeading(heading.id)"
-      >
-        {{ heading.text }}
-      </button>
-      <span class="outline-resize-handle" role="separator" aria-label="Resize outline" @pointerdown="beginOutlineResize" />
-    </aside>
+    <DocumentOutline
+      v-if="showOutline"
+      :headings="headings"
+      :active-heading-id="activeHeadingId"
+      :width="outlineWidth"
+      @select="scrollToHeading($event.id)"
+      @resize="emit('set-outline-width', $event)"
+    />
 
     <div class="visual-editor" data-testid="visual-editor">
       <div ref="scrollHost" class="visual-editor-scroll">
@@ -756,26 +693,14 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <aside
+    <DocumentMap
       v-if="showDocumentMap"
-      ref="mapHost"
-      class="document-map"
-      aria-label="Document map"
-      @pointerdown="beginMapDrag"
-      @pointermove="dragMap"
-      @pointerup="endMapDrag"
-      @pointercancel="endMapDrag"
-    >
-      <span
-        v-for="block in mapBlocks"
-        :key="block.index"
-        class="document-map-line"
-        :class="block.kind"
-        :style="{ '--map-line-width': `${block.width}%`, '--map-line-indent': `${block.indent}%` }"
-      />
-      <span class="document-map-viewport" :style="mapViewportStyle" />
-      <span class="document-map-resize-handle" role="separator" aria-label="Resize document map" @pointerdown.stop="beginMapResize" />
-    </aside>
+      :lines="mapBlocks"
+      :viewport="mapViewport"
+      :width="documentMapWidth"
+      @navigate="scrollMapToRatio"
+      @resize="emit('set-document-map-width', $event)"
+    />
 
     <PromptDialog
       :open="!!inputDialog"

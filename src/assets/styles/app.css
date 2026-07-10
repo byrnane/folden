@@ -1508,6 +1508,12 @@ h1 {
   color: var(--strong-text);
 }
 
+.document-outline-item.active {
+  border-left-color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--strong-text);
+}
+
 .outline-resize-handle,
 .document-map-resize-handle {
   position: absolute;
