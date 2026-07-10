@@ -375,6 +375,7 @@ onBeforeUnmount(() => {
     <aside
       v-if="showSidebar"
       class="workspace-sidebar"
+      :class="{ 'sidebar-compact': layoutSettings.activityRailMode === 'compact' }"
       :aria-label="sidebarLabel"
       @click.self="clearSidebarSelection"
     >

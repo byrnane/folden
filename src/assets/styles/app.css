@@ -367,14 +367,24 @@ h1 {
 }
 
 .sidebar-footer {
+  grid-row: 3;
   display: flex;
-  justify-content: flex-end;
   border-top: 1px solid var(--border);
-  padding: 8px;
+  padding: 0;
 }
 
 .sidebar-close-button {
-  width: auto;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.app-shell:not(.comfortable) .sidebar-close-button {
+  width: 100%;
+}
+
+.workspace-sidebar.sidebar-compact .sidebar-close-button span {
+  display: none;
 }
 
 .open-editors {
@@ -1577,12 +1587,13 @@ h1 {
 
 .document-map {
   position: relative;
-  display: grid;
-  align-content: stretch;
-  gap: 1px;
+  align-self: start;
   width: var(--document-map-width, 64px);
   min-width: 48px;
   max-width: 96px;
+  box-sizing: border-box;
+  height: min(calc(var(--document-map-content-height) + 16px), 100%);
+  min-height: 24px;
   overflow: hidden;
   border-left: 1px solid var(--border);
   background:
@@ -1594,7 +1605,19 @@ h1 {
   touch-action: none;
 }
 
+.document-map-content {
+  position: absolute;
+  top: 8px;
+  right: 6px;
+  left: 6px;
+  display: block;
+  height: var(--document-map-content-height);
+  will-change: transform;
+}
+
 .document-map-line {
+  position: absolute;
+  top: var(--map-line-top, 0%);
   width: calc(var(--map-line-width, 100%) - var(--map-line-indent, 0%));
   min-width: 5px;
   min-height: 2px;
@@ -1622,7 +1645,6 @@ h1 {
   right: 2px;
   left: 2px;
   top: 0;
-  min-height: 18px;
   border: 1px solid rgba(174, 183, 197, 0.28);
   border-radius: 3px;
   background: rgba(174, 183, 197, 0.16);

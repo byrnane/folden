@@ -95,6 +95,15 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
 
   await page.getByRole('button', { name: 'Collapse rail' }).click()
   await expect(workspaceRailLabel).toBeHidden()
+  const closeSidebarButton = page.getByRole('button', { name: 'Close sidebar' })
+  await expect(closeSidebarButton.locator('span')).toBeHidden()
+  await expect.poll(async () => closeSidebarButton.evaluate((button) => {
+    const sidebar = button.closest('.workspace-sidebar')!
+    const buttonRect = button.getBoundingClientRect()
+    const sidebarRect = sidebar.getBoundingClientRect()
+    return Math.abs(buttonRect.width - sidebarRect.width) <= 1
+      && Math.abs(buttonRect.bottom - sidebarRect.bottom) <= 1
+  })).toBe(true)
   await expect.poll(async () => page.locator('.activity-bar').evaluate((element) => (
     Math.round(element.getBoundingClientRect().width)
   ))).toBeLessThanOrEqual(layoutSettingLimits.activityCompactWidth.max)

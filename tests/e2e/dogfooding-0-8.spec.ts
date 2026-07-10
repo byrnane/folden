@@ -18,6 +18,12 @@ const longMarkdown = [
   ...Array.from({ length: 24 }, (_, index) => `Tail ${index + 1}.`),
 ].join('\n')
 
+const veryLongMarkdown = [
+  '# Long map',
+  '',
+  ...Array.from({ length: 260 }, (_, index) => `Line ${index + 1}.`),
+].join('\n')
+
 async function openWorkspace(page: Parameters<typeof openApp>[0]) {
   await page.getByTestId('open-folder-empty').click()
   await expect(page.getByRole('heading', { name: 'FoldenE2E' })).toBeVisible()
@@ -134,7 +140,7 @@ test('document map scrolls long markdown in visual and source modes', async ({ p
   await openApp(page, {
     mockOptions: {
       initialFiles: {
-        'map.md': longMarkdown,
+        'map.md': veryLongMarkdown,
       },
     },
   })
@@ -148,6 +154,19 @@ test('document map scrolls long markdown in visual and source modes', async ({ p
   expect(visualMapBox).not.toBeNull()
   await page.mouse.click(visualMapBox!.x + visualMapBox!.width / 2, visualMapBox!.y + visualMapBox!.height - 8)
   await expect.poll(async () => page.locator('.visual-editor-scroll').evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+  await page.locator('.visual-editor-scroll').evaluate((element) => {
+    element.scrollTop = element.scrollHeight
+    element.dispatchEvent(new Event('scroll'))
+  })
+  await expect.poll(async () => visualMap.locator('.document-map-viewport').evaluate((element) => {
+    const map = element.parentElement!
+    const viewport = element.getBoundingClientRect()
+    const mapRect = map.getBoundingClientRect()
+    return Math.abs(viewport.bottom - mapRect.bottom) <= 17
+  })).toBe(true)
+  await expect.poll(async () => visualMap.locator('.document-map-content').evaluate((element) => (
+    getComputedStyle(element).transform !== 'none'
+  ))).toBe(true)
 
   await page.getByRole('button', { name: 'Document map' }).click()
   await expect(visualMap).toHaveCount(0)
@@ -184,7 +203,11 @@ test('document map appears for short markdown in visual and source modes', async
   await openWorkspace(page)
   await page.getByTestId('workspace-entry-short-map.md').click()
 
-  await expect(page.getByRole('complementary', { name: 'Document map' })).toBeVisible()
+  const documentMap = page.getByRole('complementary', { name: 'Document map' })
+  await expect(documentMap).toBeVisible()
+  await expect.poll(async () => documentMap.evaluate((element) => (
+    element.clientHeight < element.parentElement!.clientHeight
+  ))).toBe(true)
   await page.getByRole('button', { name: 'Source' }).click()
   await expect(page.getByRole('complementary', { name: 'Document map' })).toBeVisible()
 })

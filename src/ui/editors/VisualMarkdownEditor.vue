@@ -56,6 +56,7 @@ const emit = defineEmits<{
 const scrollHost = ref<HTMLDivElement | null>(null)
 const editorHost = ref<HTMLDivElement | null>(null)
 const mapViewport = ref({ top: 0, height: 100 })
+const mapLinePositions = ref<Record<number, number>>({})
 const activeHeadingId = ref<string | null>(null)
 const editor = shallowRef<Editor | null>(null)
 const inputDialog = ref<EditorInputDialogState | null>(null)
@@ -365,13 +366,20 @@ function updateMapViewport() {
   const scrollHeight = scrollElement.scrollHeight
   const clientHeight = scrollElement.clientHeight
 
+  mapLinePositions.value = Object.fromEntries(headings.value.map((heading) => {
+    const element = findAnchorTarget(`#${encodeURIComponent(heading.id)}`)
+    const rect = element?.getBoundingClientRect()
+    const position = rect ? rect.top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop : 0
+    return [heading.line - 1, Math.min(Math.max((position / scrollHeight) * 100, 0), 100)]
+  }))
+
   if (scrollHeight <= 0 || clientHeight <= 0 || scrollHeight <= clientHeight) {
     mapViewport.value = { top: 0, height: 100 }
     updateActiveHeading()
     return
   }
 
-  const height = Math.max((clientHeight / scrollHeight) * 100, 8)
+  const height = (clientHeight / scrollHeight) * 100
   const maxTop = 100 - height
   const top = Math.min((scrollElement.scrollTop / (scrollHeight - clientHeight)) * maxTop, maxTop)
   mapViewport.value = { top, height }
@@ -696,6 +704,7 @@ onBeforeUnmount(() => {
     <DocumentMap
       v-if="showDocumentMap"
       :lines="mapBlocks"
+      :line-positions="mapLinePositions"
       :viewport="mapViewport"
       :width="documentMapWidth"
       @navigate="scrollMapToRatio"
