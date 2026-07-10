@@ -6,6 +6,12 @@
 * Минорные версии: 5-10 строк.
 * Мажорные версии: полноценные release notes.
 
+## 0.8.5 - 2026-07-10
+
+* Document map плавно прокручивается по всей длине Markdown-документа в Visual и Source режимах.
+* CI больше не дублирует lint, unit tests и frontend build; Rust-проверки снова проходят.
+* Добавлены regression checks для раннего сдвига карты и native workspace contract.
+
 ## 0.8.4 - 2026-07-10
 
 * Черновик release notes.

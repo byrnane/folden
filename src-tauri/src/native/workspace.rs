@@ -287,9 +287,7 @@ pub(crate) fn list_directory(
 fn workspace_settings_path(workspace: &AuthorizedWorkspace) -> PathBuf {
     workspace.root_path.join(".folden").join("workspace.json")
 }
-pub(crate) fn load_workspace_settings_from_path(
-    path: &Path,
-) -> Result<WorkspaceSettings, String> {
+pub(crate) fn load_workspace_settings_from_path(path: &Path) -> Result<WorkspaceSettings, String> {
     if !path.exists() {
         return Ok(WorkspaceSettings {
             ignored_paths: Vec::new(),
@@ -300,14 +298,9 @@ pub(crate) fn load_workspace_settings_from_path(
     let settings: WorkspaceSettings = serde_json::from_str(&content)
         .map_err(|error| format!("Workspace settings must be valid JSON: {error}"))?;
 
-    if settings
-        .ignored_paths
-        .iter()
-        .any(|value| {
-            value.trim().is_empty()
-                || ensure_relative_path(value, "load_workspace_settings").is_err()
-        })
-    {
+    if settings.ignored_paths.iter().any(|value| {
+        value.trim().is_empty() || ensure_relative_path(value, "load_workspace_settings").is_err()
+    }) {
         return Err("Workspace ignored paths must be relative paths.".to_string());
     }
 
@@ -339,7 +332,8 @@ pub(crate) fn save_workspace_settings(
     let state = state.lock().unwrap();
     let workspace = get_workspace(&state, &workspace_id, "save_workspace_settings")?;
     let settings_dir = workspace.root_path.join(".folden");
-    fs::create_dir_all(&settings_dir).map_err(|error| io_error("save_workspace_settings", error))?;
+    fs::create_dir_all(&settings_dir)
+        .map_err(|error| io_error("save_workspace_settings", error))?;
 
     for path in &settings.ignored_paths {
         ensure_relative_path(path, "save_workspace_settings")?;

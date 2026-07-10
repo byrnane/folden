@@ -212,10 +212,12 @@ mod tests {
         fs::create_dir_all(temp.path.join("assets")).expect("failed to create assets");
         fs::write(temp.path.join("assets").join("image.png"), "not text")
             .expect("failed to write unsupported file");
-        fs::create_dir_all(temp.path.join("notes").join("nested"))
-            .expect("failed to create notes");
-        fs::write(temp.path.join("notes").join("nested").join("draft.md"), "# Draft")
-            .expect("failed to write markdown");
+        fs::create_dir_all(temp.path.join("notes").join("nested")).expect("failed to create notes");
+        fs::write(
+            temp.path.join("notes").join("nested").join("draft.md"),
+            "# Draft",
+        )
+        .expect("failed to write markdown");
         fs::create_dir_all(temp.path.join(".folden")).expect("failed to create service folder");
         fs::write(temp.path.join(".folden").join("workspace.json"), "{}")
             .expect("failed to write service file");

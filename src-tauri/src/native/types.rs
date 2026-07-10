@@ -89,6 +89,7 @@ pub(crate) struct NativeFsEvent {
     pub(crate) path: String,
 }
 #[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceEntry {
     pub(crate) name: String,
     pub(crate) path: String,

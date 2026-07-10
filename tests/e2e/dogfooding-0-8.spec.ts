@@ -150,6 +150,15 @@ test('document map scrolls long markdown in visual and source modes', async ({ p
   const visualMap = page.getByRole('complementary', { name: 'Document map' })
   await expect(visualMap).toBeVisible()
   await expect(visualMap.locator('.document-map-viewport')).toBeVisible()
+  await page.locator('.visual-editor-scroll').evaluate((element) => {
+    element.scrollTop = (element.scrollHeight - element.clientHeight) * 0.05
+    element.dispatchEvent(new Event('scroll'))
+  })
+  await expect.poll(async () => visualMap.locator('.document-map-content').evaluate((element) => {
+    const content = element.getBoundingClientRect()
+    const map = element.parentElement!.getBoundingClientRect()
+    return content.top < map.top + 7
+  })).toBe(true)
   const visualMapBox = await visualMap.boundingBox()
   expect(visualMapBox).not.toBeNull()
   await page.mouse.click(visualMapBox!.x + visualMapBox!.width / 2, visualMapBox!.y + visualMapBox!.height - 8)
@@ -177,6 +186,15 @@ test('document map scrolls long markdown in visual and source modes', async ({ p
   const sourceMap = page.getByRole('complementary', { name: 'Document map' })
   await expect(sourceMap).toBeVisible()
   await expect(sourceMap.locator('.document-map-viewport')).toBeVisible()
+  await page.locator('.source-editor .cm-scroller').evaluate((element) => {
+    element.scrollTop = (element.scrollHeight - element.clientHeight) * 0.05
+    element.dispatchEvent(new Event('scroll'))
+  })
+  await expect.poll(async () => sourceMap.locator('.document-map-content').evaluate((element) => {
+    const content = element.getBoundingClientRect()
+    const map = element.parentElement!.getBoundingClientRect()
+    return content.top < map.top + 7
+  })).toBe(true)
   const sourceMapBox = await sourceMap.boundingBox()
   expect(sourceMapBox).not.toBeNull()
   await page.mouse.move(sourceMapBox!.x + sourceMapBox!.width / 2, sourceMapBox!.y + 8)

@@ -199,11 +199,8 @@ build/desktop/release/app.exe
 * Rust cache;
 * `npm ci`;
 * `npm run quality`;
-* `npm run lint`;
-* `npm run test:coverage`;
 * Playwright Chromium install;
 * `npm run test:e2e`;
-* `npm run vue:build`;
 * `cargo fmt --check`;
 * `cargo clippy -- -D warnings`;
 * `cargo test`;

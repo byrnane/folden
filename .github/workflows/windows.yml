@@ -37,20 +37,11 @@ jobs:
       - name: Quality gate
         run: npm run quality
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Coverage report
-        run: npm run test:coverage
-
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
       - name: Browser E2E tests
         run: npm run test:e2e
-
-      - name: Frontend build
-        run: npm run vue:build
 
       - name: Cargo fmt
         working-directory: src-tauri

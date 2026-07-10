@@ -30,9 +30,13 @@ const viewportHeight = computed(() => Math.min(
 const viewportContentTop = computed(() => (props.viewport.top / 100) * contentHeight.value)
 const contentOffset = computed(() => {
   const maxOffset = Math.max(contentHeight.value - mapViewportHeight.value, 0)
-  const centeredOffset = viewportContentTop.value - (mapViewportHeight.value - viewportHeight.value) / 2
+  const scrollRange = 100 - props.viewport.height
 
-  return Math.min(Math.max(centeredOffset, 0), maxOffset)
+  if (maxOffset === 0 || scrollRange <= 0) {
+    return 0
+  }
+
+  return Math.min(Math.max(props.viewport.top / scrollRange, 0), 1) * maxOffset
 })
 const mapStyle = computed(() => ({
   '--document-map-content-height': `${contentHeight.value}px`,
