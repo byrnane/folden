@@ -31,34 +31,36 @@ const unsafeFixtures = [
 
 describe('markdown safety', () => {
   it('accepts a supported markdown subset', () => {
-    const report = analyzeMarkdownSafety([
-      '# Heading',
-      '',
-      'Paragraph with **bold** and _italic_.',
-      '',
-      '- one',
-      '  - nested',
-      '',
-      '1. ordered',
-      '',
-      '> quote',
-      '',
-      '```ts',
-      'const answer = 42',
-      '```',
-      '',
-      '[link](https://example.com)',
-      '![image](./image.png)',
-      '',
-      '| a | b |',
-      '| - | - |',
-      '| 1 | 2 |',
-      '',
-      '- [x] done',
-      '- [ ] todo',
-      '',
-      '---',
-    ].join('\n'))
+    const report = analyzeMarkdownSafety(
+      [
+        '# Heading',
+        '',
+        'Paragraph with **bold** and _italic_.',
+        '',
+        '- one',
+        '  - nested',
+        '',
+        '1. ordered',
+        '',
+        '> quote',
+        '',
+        '```ts',
+        'const answer = 42',
+        '```',
+        '',
+        '[link](https://example.com)',
+        '![image](./image.png)',
+        '',
+        '| a | b |',
+        '| - | - |',
+        '| 1 | 2 |',
+        '',
+        '- [x] done',
+        '- [ ] todo',
+        '',
+        '---',
+      ].join('\n'),
+    )
 
     expect(report.safeForVisualEditing).toBe(true)
     expect(report.unsupportedFeatures).toEqual([])
@@ -82,10 +84,12 @@ describe('markdown safety', () => {
 
     expect(report.safeForVisualEditing).toBe(true)
     expect(report.unsupportedFeatures).toEqual([])
-    expect(report.remoteImages).toEqual([{
-      line: 1,
-      source: 'https://example.com/a.png',
-    }])
+    expect(report.remoteImages).toEqual([
+      {
+        line: 1,
+        source: 'https://example.com/a.png',
+      },
+    ])
   })
 
   it('rejects dangerous link schemes while allowing remote image placeholders', () => {

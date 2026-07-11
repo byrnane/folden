@@ -47,13 +47,17 @@ test('shows markdown toolbar and visual mode for scratch markdown documents', as
   await sourceEditor(page).click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\nscratch toolbar')
-  await page.keyboard.press(process.platform === 'darwin' ? 'Alt+Shift+ArrowLeft' : 'Control+Shift+ArrowLeft')
+  await page.keyboard.press(
+    process.platform === 'darwin' ? 'Alt+Shift+ArrowLeft' : 'Control+Shift+ArrowLeft',
+  )
   await page.getByRole('button', { name: 'Bold' }).click()
 
   await expect(page.getByTestId('source-editor')).toContainText('**toolbar**')
 })
 
-test('switches supported markdown kitchen sink without content or dirty changes', async ({ page }) => {
+test('switches supported markdown kitchen sink without content or dirty changes', async ({
+  page,
+}) => {
   await openApp(page, {
     mockOptions: {
       initialFiles: {
@@ -71,11 +75,17 @@ test('switches supported markdown kitchen sink without content or dirty changes'
 
   await page.getByRole('button', { name: 'Source', exact: true }).click()
   await expect(page.getByTestId('open-documents-status')).toHaveText('2 open')
-  await expect.poll(async () => page.evaluate(() => (
-    (window as Window & {
-      __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
-    }).__FOLDEN_TAURI_MOCK__?.readFile('markdown_kitchen_sink.md')
-  ))).toBe(supportedKitchenSink)
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        (
+          window as Window & {
+            __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
+          }
+        ).__FOLDEN_TAURI_MOCK__?.readFile('markdown_kitchen_sink.md'),
+      ),
+    )
+    .toBe(supportedKitchenSink)
   await expect(page.getByTestId('source-editor')).toContainText('Markdown Kitchen Sink')
 
   const editor = sourceEditor(page)
@@ -84,7 +94,11 @@ test('switches supported markdown kitchen sink without content or dirty changes'
   await page.keyboard.type('\nSaved closeout line.\n')
   await page.getByTestId('save-document').click()
   await expect(page.getByTestId('open-documents-status')).toHaveText('2 open')
-  await page.locator('.pane-tabs .tab-button').filter({ hasText: 'markdown_kitchen_sink.md' }).locator('.tab-close').click({ force: true })
+  await page
+    .locator('.pane-tabs .tab-button')
+    .filter({ hasText: 'markdown_kitchen_sink.md' })
+    .locator('.tab-close')
+    .click({ force: true })
   await page.getByTestId('workspace-entry-markdown_kitchen_sink.md').click()
   await page.getByRole('button', { name: 'Source', exact: true }).click()
   await expect(page.getByTestId('source-editor')).toContainText('Saved closeout line.')
@@ -118,25 +132,39 @@ test('keeps unsafe kitchen sink and raw source blocks unchanged', async ({ page 
 
   await expect(page.getByTestId('source-editor')).toContainText('Markdown Kitchen Sink')
   await page.getByRole('button', { name: 'Visual', exact: true }).click()
-  await expect(page.getByRole('dialog', { name: 'Visual mode may rewrite markdown_kitchen_sink.md' })).toBeVisible()
+  await expect(
+    page.getByRole('dialog', { name: 'Visual mode may rewrite markdown_kitchen_sink.md' }),
+  ).toBeVisible()
   await page.getByRole('button', { name: 'Stay in Source' }).click()
 
   await expect(page.getByTestId('source-editor')).toContainText('Markdown Kitchen Sink')
   await expect(page.getByTestId('open-documents-status')).toHaveText('2 open')
-  await expect.poll(async () => page.evaluate(() => (
-    (window as Window & {
-      __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
-    }).__FOLDEN_TAURI_MOCK__?.readFile('markdown_kitchen_sink.md')
-  ))).toBe(unsafeKitchenSink)
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        (
+          window as Window & {
+            __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
+          }
+        ).__FOLDEN_TAURI_MOCK__?.readFile('markdown_kitchen_sink.md'),
+      ),
+    )
+    .toBe(unsafeKitchenSink)
 
   await page.getByTestId('workspace-entry-raw_source.md').click()
   await page.getByRole('button', { name: 'Source', exact: true }).click()
   await page.getByTestId('save-document').click()
-  await expect.poll(async () => page.evaluate(() => (
-    (window as Window & {
-      __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
-    }).__FOLDEN_TAURI_MOCK__?.readFile('raw_source.md')
-  ))).toBe(rawSource)
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        (
+          window as Window & {
+            __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
+          }
+        ).__FOLDEN_TAURI_MOCK__?.readFile('raw_source.md'),
+      ),
+    )
+    .toBe(rawSource)
 })
 
 test('uses validated dialogs for source links and images', async ({ page }) => {
@@ -147,7 +175,9 @@ test('uses validated dialogs for source links and images', async ({ page }) => {
   await editor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\nsource dialog')
-  await page.keyboard.press(process.platform === 'darwin' ? 'Alt+Shift+ArrowLeft' : 'Control+Shift+ArrowLeft')
+  await page.keyboard.press(
+    process.platform === 'darwin' ? 'Alt+Shift+ArrowLeft' : 'Control+Shift+ArrowLeft',
+  )
   await page.getByRole('button', { name: 'Link' }).click()
 
   await expect(page.getByRole('dialog', { name: 'Edit link' })).toBeVisible()
@@ -203,12 +233,16 @@ test('keeps instant visual edits and view position when switching modes', async 
   await expect(page.getByTestId('source-editor')).toContainText('instant visual edit')
 
   const sourceScroller = page.getByTestId('source-editor').locator('.cm-scroller')
-  await sourceScroller.evaluate((node) => { node.scrollTop = 900 })
+  await sourceScroller.evaluate((node) => {
+    node.scrollTop = 900
+  })
   const beforeSwitchScroll = await sourceScroller.evaluate((node) => node.scrollTop)
   expect(beforeSwitchScroll).toBeGreaterThan(100)
   await page.getByRole('button', { name: 'Visual', exact: true }).click()
   await page.getByRole('button', { name: 'Source', exact: true }).click()
-  await expect.poll(async () => sourceScroller.evaluate((node) => node.scrollTop)).toBeGreaterThan(100)
+  await expect
+    .poll(async () => sourceScroller.evaluate((node) => node.scrollTop))
+    .toBeGreaterThan(100)
 })
 
 test('edits visual tables and task checkboxes without rewriting neighbors', async ({ page }) => {
@@ -270,33 +304,46 @@ test('opens workspace and external drag payloads in editor drop zones', async ({
   })
   await page.getByTestId('open-folder-empty').click()
 
-  await page.locator('.editor-pane').first().evaluate((target, mimeType) => {
-    const dataTransfer = new DataTransfer()
-    dataTransfer.setData(mimeType, JSON.stringify({
-      kind: 'workspace-file',
-      path: 'README.md',
-      label: 'README.md',
-    }))
-    target.dispatchEvent(new DragEvent('drop', {
-      bubbles: true,
-      cancelable: true,
-      dataTransfer,
-    }))
-  }, documentDragMimeType)
+  await page
+    .locator('.editor-pane')
+    .first()
+    .evaluate((target, mimeType) => {
+      const dataTransfer = new DataTransfer()
+      dataTransfer.setData(
+        mimeType,
+        JSON.stringify({
+          kind: 'workspace-file',
+          path: 'README.md',
+          label: 'README.md',
+        }),
+      )
+      target.dispatchEvent(
+        new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+        }),
+      )
+    }, documentDragMimeType)
   await expect(page.getByTestId('document-title')).toHaveText('README.md')
 
   await page.locator('.right-split-drop-zone').evaluate((target, mimeType) => {
     const dataTransfer = new DataTransfer()
-    dataTransfer.setData(mimeType, JSON.stringify({
-      kind: 'external-path',
-      path: 'external.md',
-      label: 'external.md',
-    }))
-    target.dispatchEvent(new DragEvent('drop', {
-      bubbles: true,
-      cancelable: true,
-      dataTransfer,
-    }))
+    dataTransfer.setData(
+      mimeType,
+      JSON.stringify({
+        kind: 'external-path',
+        path: 'external.md',
+        label: 'external.md',
+      }),
+    )
+    target.dispatchEvent(
+      new DragEvent('drop', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer,
+      }),
+    )
   }, documentDragMimeType)
   await expect(page.locator('.editor-pane')).toHaveCount(2)
   await expect(page.getByTestId('document-title')).toHaveText('external.md')

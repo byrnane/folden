@@ -5,7 +5,7 @@ import type { DocumentMapLine } from '../../domain/markdown/outline'
 const props = defineProps<{
   lines: DocumentMapLine[]
   linePositions: Readonly<Record<number, number>>
-  viewport: { top: number, height: number }
+  viewport: { top: number; height: number }
   width: number
 }>()
 
@@ -15,7 +15,7 @@ const emit = defineEmits<{
 }>()
 
 const mapDragActive = ref(false)
-const mapResizeStart = ref<{ x: number, width: number } | null>(null)
+const mapResizeStart = ref<{ x: number; width: number } | null>(null)
 const mapElement = ref<HTMLElement | null>(null)
 const visibleHeight = ref(0)
 const lineHeight = 5
@@ -23,10 +23,12 @@ let mapResizeObserver: ResizeObserver | null = null
 
 const contentHeight = computed(() => Math.max(props.lines.length * lineHeight, 24))
 const mapViewportHeight = computed(() => visibleHeight.value)
-const viewportHeight = computed(() => Math.min(
-  (props.viewport.height / 100) * contentHeight.value,
-  mapViewportHeight.value || contentHeight.value,
-))
+const viewportHeight = computed(() =>
+  Math.min(
+    (props.viewport.height / 100) * contentHeight.value,
+    mapViewportHeight.value || contentHeight.value,
+  ),
+)
 const viewportContentTop = computed(() => (props.viewport.top / 100) * contentHeight.value)
 const contentOffset = computed(() => {
   const maxOffset = Math.max(contentHeight.value - mapViewportHeight.value, 0)
@@ -136,6 +138,11 @@ onBeforeUnmount(() => {
       />
     </span>
     <span class="document-map-viewport" :style="viewportStyle" />
-    <span class="document-map-resize-handle" role="separator" aria-label="Resize document map" @pointerdown.stop="beginResize" />
+    <span
+      class="document-map-resize-handle"
+      role="separator"
+      aria-label="Resize document map"
+      @pointerdown.stop="beginResize"
+    />
   </aside>
 </template>

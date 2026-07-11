@@ -59,10 +59,9 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     const files = new Map<string, string>([
       ['README.md', '# E2E Note\r\n\r\nOriginal content.\r\n'],
       ['notes\\daily.md', '# Daily\n\nNested note.\n'],
-      ...Object.entries(mockOptions.initialFiles ?? {}).map(([path, content]) => [
-        path.replaceAll('/', '\\'),
-        content,
-      ] as const),
+      ...Object.entries(mockOptions.initialFiles ?? {}).map(
+        ([path, content]) => [path.replaceAll('/', '\\'), content] as const,
+      ),
     ])
     let recoveryEntries = [...(mockOptions.recoveryEntries ?? [])]
     const callbacks = new Map<number, (data: unknown) => unknown>()
@@ -74,7 +73,9 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
     let diagnosticExportCount = 0
     const nativeDocumentPaths = new Map<string, string>()
     let workspaceSettings = { ignoredPaths: [] as string[] }
-    const unsupportedFiles = new Set((mockOptions.unsupportedFiles ?? []).map((path) => path.replaceAll('/', '\\')))
+    const unsupportedFiles = new Set(
+      (mockOptions.unsupportedFiles ?? []).map((path) => path.replaceAll('/', '\\')),
+    )
 
     function fingerprint(content: string) {
       modifiedAtMs += 1
@@ -201,8 +202,8 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       }
 
       const markOpenable = (entry: WorkspaceEntry): boolean => {
-        entry.hasOpenableDescendants = entry.children.some((child) =>
-          child.kind === 'file' || markOpenable(child),
+        entry.hasOpenableDescendants = entry.children.some(
+          (child) => child.kind === 'file' || markOpenable(child),
         )
         return entry.hasOpenableDescendants
       }
@@ -280,7 +281,9 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           return structuredClone(workspaceSettings)
         case 'save_workspace_settings':
           workspaceSettings = {
-            ignoredPaths: Array.isArray((args?.settings as typeof workspaceSettings | undefined)?.ignoredPaths)
+            ignoredPaths: Array.isArray(
+              (args?.settings as typeof workspaceSettings | undefined)?.ignoredPaths,
+            )
               ? [...(args!.settings as typeof workspaceSettings).ignoredPaths]
               : [],
           }
@@ -292,7 +295,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           const content = String(args?.content ?? '')
           const documentId = typeof args?.documentId === 'string' ? args.documentId : null
           const relativePath = documentId
-            ? nativeDocumentPaths.get(documentId) ?? 'README.md'
+            ? (nativeDocumentPaths.get(documentId) ?? 'README.md')
             : String(args?.suggestedFileName ?? 'Untitled.md')
 
           files.set(relativePath, content)

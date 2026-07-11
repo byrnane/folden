@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { X } from 'lucide-vue-next'
-import { onBeforeUnmount, ref } from 'vue'
+import { defineAsyncComponent, onBeforeUnmount, ref } from 'vue'
 import type { WorkspaceEntry } from '../../domain/native'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
-import type { EditorAdapter, EditorCommand, EditorPane, EditorPaneView } from '../../application/types/shell'
-import SourceEditor from '../editors/SourceEditor.vue'
-import VisualMarkdownEditor from '../editors/VisualMarkdownEditor.vue'
-import {
-  readDocumentDragPayload,
-  type DocumentDragPayload,
-} from '../documentDrag'
+import type {
+  EditorAdapter,
+  EditorCommand,
+  EditorPane,
+  EditorPaneView,
+} from '../../application/types/shell'
+import { readDocumentDragPayload, type DocumentDragPayload } from '../documentDrag'
 import {
   cleanupEditorPaneGridInteractionState,
   clearPendingTabClickSuppression,
@@ -20,6 +20,10 @@ import {
 import { uiIconSizes } from '../uiConstants'
 
 const tabPointerDragStartDistancePx = 5
+const SourceEditor = defineAsyncComponent(() => import('../editors/SourceEditor.vue'))
+const VisualMarkdownEditor = defineAsyncComponent(
+  () => import('../editors/VisualMarkdownEditor.vue'),
+)
 
 const props = defineProps<{
   visiblePanes: EditorPaneView[]
@@ -34,7 +38,10 @@ const props = defineProps<{
   workspaceRootPath: string | null
   closeDocument: (pane: EditorPane, documentId: string) => void | Promise<void>
   openDroppedPath: (path: string, paneId: EditorPane['id']) => void | Promise<void>
-  openWorkspaceFile: (entry: Pick<WorkspaceEntry, 'path' | 'kind'>, paneId: EditorPane['id']) => void | Promise<void>
+  openWorkspaceFile: (
+    entry: Pick<WorkspaceEntry, 'path' | 'kind'>,
+    paneId: EditorPane['id'],
+  ) => void | Promise<void>
   setActiveDocument: (pane: EditorPane, documentId: string) => void | Promise<void>
   setPaneEditorAdapter: (paneId: EditorPane['id'], adapter: EditorAdapter | null) => void
 }>()
@@ -94,9 +101,11 @@ function dragActive() {
 }
 
 function getDroppedPath(event: DragEvent) {
-  const file = event.dataTransfer?.files.item(0) as (File & {
-    path?: string
-  }) | null
+  const file = event.dataTransfer?.files.item(0) as
+    | (File & {
+        path?: string
+      })
+    | null
 
   return file?.path ?? file?.webkitRelativePath ?? null
 }
@@ -215,7 +224,8 @@ function getTabDropTarget(event: PointerEvent) {
 
   const tabTarget = target?.closest<HTMLElement>('[data-tab-drop-pane]')
   const paneTarget = target?.closest<HTMLElement>('[data-pane-id]')
-  const paneId = (tabTarget?.dataset.tabDropPane ?? paneTarget?.dataset.paneId) as EditorPane['id'] | undefined
+  const paneId = (tabTarget?.dataset.tabDropPane ?? paneTarget?.dataset.paneId) as
+    EditorPane['id'] | undefined
 
   if (paneId !== 'left' && paneId !== 'right') {
     return null
@@ -241,8 +251,9 @@ function handleTabPointerMove(event: PointerEvent) {
   }
 
   if (
-    !drag.dragging
-    && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < tabPointerDragStartDistancePx
+    !drag.dragging &&
+    Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <
+      tabPointerDragStartDistancePx
   ) {
     return
   }
@@ -253,9 +264,9 @@ function handleTabPointerMove(event: PointerEvent) {
   const target = getTabDropTarget(event)
   if (target) {
     const pane = props.visiblePanes.find((candidate) => candidate.id === target.paneId)
-    const kind = target.dropKind ?? (target.targetIndex >= (pane?.tabs.length ?? 0)
-      ? 'tab-tail'
-      : `tab-${target.targetIndex}`)
+    const kind =
+      target.dropKind ??
+      (target.targetIndex >= (pane?.tabs.length ?? 0) ? 'tab-tail' : `tab-${target.targetIndex}`)
     activeDropTarget.value = `${kind}:${target.paneId}`
   } else {
     activeDropTarget.value = null
@@ -303,11 +314,15 @@ function finishTabPointerDrag(event: PointerEvent) {
     suppressNextTabClick.value = false
     interactionState.suppressNextTabClickTimeout = 0
   })
-  moveDroppedDocument({
-    kind: 'tab',
-    documentId: drag.documentId,
-    paneId: drag.sourcePaneId,
-  }, target.paneId, target.targetIndex)
+  moveDroppedDocument(
+    {
+      kind: 'tab',
+      documentId: drag.documentId,
+      paneId: drag.sourcePaneId,
+    },
+    target.paneId,
+    target.targetIndex,
+  )
 }
 
 function openRightSplitDrop(event: DragEvent) {
@@ -358,7 +373,10 @@ onBeforeUnmount(() => {
       :key="pane.id"
       class="editor-pane"
       :data-pane-id="pane.id"
-      :class="{ active: activePaneId === pane.id, 'drop-target-active': isDropTarget('pane', pane.id) }"
+      :class="{
+        active: activePaneId === pane.id,
+        'drop-target-active': isDropTarget('pane', pane.id),
+      }"
       @click="emit('setActivePane', pane.id)"
       @dragenter="setDropTarget('pane', pane.id)"
       @dragover.prevent="handleDocumentDragOver"
@@ -380,7 +398,10 @@ onBeforeUnmount(() => {
             class="tab-button"
             :data-tab-drop-pane="pane.id"
             :data-tab-drop-index="index"
-            :class="{ active: tab.isActive, 'tab-drop-active': isDropTarget(`tab-${index}`, pane.id) }"
+            :class="{
+              active: tab.isActive,
+              'tab-drop-active': isDropTarget(`tab-${index}`, pane.id),
+            }"
             :title="tab.title"
             @dragenter.stop="setDropTarget(`tab-${index}`, pane.id)"
             @pointerdown="beginTabPointerDrag($event, tab.document.id, tab.label, pane.id)"
@@ -413,46 +434,55 @@ onBeforeUnmount(() => {
       </header>
 
       <template v-if="pane.activeDocument">
-        <VisualMarkdownEditor
-          v-if="pane.activeDocument.mode === 'visual'"
-          :key="`${pane.activeDocument.viewSessionId}:${pane.activeDocument.shouldLoadRemoteImages ? 'remote-on' : 'remote-off'}`"
-          :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
-          :document-id="pane.activeDocument.document.id"
-          :view-id="pane.activeDocument.viewSessionId"
-          :model-value="pane.activeDocument.document.content"
-          :revision="pane.activeDocument.document.revision"
-          :document-path="pane.activeDocument.document.path"
-          :workspace-root-path="workspaceRootPath"
-          :outline-width="outlineWidth"
-          :document-map-width="documentMapWidth"
-          :show-document-outline="showDocumentOutline"
-          :show-document-map="showDocumentMap"
-          :allow-remote-images="pane.activeDocument.shouldLoadRemoteImages"
-          :view-state="pane.activeDocument.viewSession"
-          @document-update="emit('documentUpdate', $event)"
-          @toolbar-state="emit('toolbarState', pane.id, $event)"
-          @set-outline-width="emit('setOutlineWidth', $event)"
-          @set-document-map-width="emit('setDocumentMapWidth', $event)"
-        />
-        <section v-else class="source-editor-frame">
-          <SourceEditor
-            :key="`${pane.activeDocument.viewSessionId}:${sourceWordWrap ? 'wrap' : 'nowrap'}`"
+        <Suspense v-if="pane.activeDocument.mode === 'visual'">
+          <VisualMarkdownEditor
+            :key="`${pane.activeDocument.viewSessionId}:${pane.activeDocument.shouldLoadRemoteImages ? 'remote-on' : 'remote-off'}`"
             :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
             :document-id="pane.activeDocument.document.id"
             :view-id="pane.activeDocument.viewSessionId"
             :model-value="pane.activeDocument.document.content"
             :revision="pane.activeDocument.document.revision"
-            :word-wrap="sourceWordWrap"
-            :is-markdown="pane.activeDocument.isMarkdown"
+            :document-path="pane.activeDocument.document.path"
+            :workspace-root-path="workspaceRootPath"
             :outline-width="outlineWidth"
             :document-map-width="documentMapWidth"
             :show-document-outline="showDocumentOutline"
             :show-document-map="showDocumentMap"
+            :allow-remote-images="pane.activeDocument.shouldLoadRemoteImages"
             :view-state="pane.activeDocument.viewSession"
             @document-update="emit('documentUpdate', $event)"
+            @toolbar-state="emit('toolbarState', pane.id, $event)"
             @set-outline-width="emit('setOutlineWidth', $event)"
             @set-document-map-width="emit('setDocumentMapWidth', $event)"
           />
+          <template #fallback>
+            <div class="editor-loading" role="status">Loading Visual editor…</div>
+          </template>
+        </Suspense>
+        <section v-else class="source-editor-frame">
+          <Suspense>
+            <SourceEditor
+              :key="`${pane.activeDocument.viewSessionId}:${sourceWordWrap ? 'wrap' : 'nowrap'}`"
+              :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
+              :document-id="pane.activeDocument.document.id"
+              :view-id="pane.activeDocument.viewSessionId"
+              :model-value="pane.activeDocument.document.content"
+              :revision="pane.activeDocument.document.revision"
+              :word-wrap="sourceWordWrap"
+              :is-markdown="pane.activeDocument.isMarkdown"
+              :outline-width="outlineWidth"
+              :document-map-width="documentMapWidth"
+              :show-document-outline="showDocumentOutline"
+              :show-document-map="showDocumentMap"
+              :view-state="pane.activeDocument.viewSession"
+              @document-update="emit('documentUpdate', $event)"
+              @set-outline-width="emit('setOutlineWidth', $event)"
+              @set-document-map-width="emit('setDocumentMapWidth', $event)"
+            />
+            <template #fallback>
+              <div class="editor-loading" role="status">Loading Source editor…</div>
+            </template>
+          </Suspense>
         </section>
       </template>
 

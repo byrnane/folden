@@ -33,11 +33,14 @@ type ToolbarItem = {
   icon?: Component
 }
 
-const props = withDefaults(defineProps<{
-  disabledCommands?: EditorCommand[]
-}>(), {
-  disabledCommands: () => [],
-})
+const props = withDefaults(
+  defineProps<{
+    disabledCommands?: EditorCommand[]
+  }>(),
+  {
+    disabledCommands: () => [],
+  },
+)
 
 const emit = defineEmits<{
   runCommand: [command: EditorCommand]
@@ -74,7 +77,12 @@ const visualToolbarGroups: Array<{
       { command: 'italic', title: 'Italic', label: 'Italic', icon: Italic },
       { command: 'strike', title: 'Strikethrough', label: 'Strike', icon: Strikethrough },
       { command: 'inline-code', title: 'Inline code', label: 'Inline code', icon: Code },
-      { command: 'clear-formatting', title: 'Clear formatting', label: 'Clear', icon: RemoveFormatting },
+      {
+        command: 'clear-formatting',
+        title: 'Clear formatting',
+        label: 'Clear',
+        icon: RemoveFormatting,
+      },
     ],
   },
   {
@@ -102,8 +110,18 @@ const visualToolbarGroups: Array<{
       { command: 'add-row-before', title: 'Add row before', label: 'Row before', icon: Rows3 },
       { command: 'add-row-after', title: 'Add row after', label: 'Row after', icon: Rows3 },
       { command: 'delete-row', title: 'Delete row', label: 'Delete row', icon: Trash2 },
-      { command: 'add-column-before', title: 'Add column before', label: 'Column before', icon: Columns3 },
-      { command: 'add-column-after', title: 'Add column after', label: 'Column after', icon: Columns3 },
+      {
+        command: 'add-column-before',
+        title: 'Add column before',
+        label: 'Column before',
+        icon: Columns3,
+      },
+      {
+        command: 'add-column-after',
+        title: 'Add column after',
+        label: 'Column after',
+        icon: Columns3,
+      },
       { command: 'delete-column', title: 'Delete column', label: 'Delete column', icon: Trash2 },
       { command: 'delete-table', title: 'Delete table', label: 'Delete table', icon: Trash2 },
     ],
@@ -125,9 +143,9 @@ function toggleHeadingsMenu() {
 
 function handleDocumentPointerDown(event: PointerEvent) {
   if (
-    headingsMenuElement.value
-    && event.target instanceof Node
-    && headingsMenuElement.value.contains(event.target)
+    headingsMenuElement.value &&
+    event.target instanceof Node &&
+    headingsMenuElement.value.contains(event.target)
   ) {
     return
   }
@@ -183,10 +201,7 @@ onBeforeUnmount(() => {
           <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbar" />
           <span>{{ item.label }}</span>
         </button>
-        <div
-          ref="headingsMenuElement"
-          class="toolbar-menu"
-        >
+        <div ref="headingsMenuElement" class="toolbar-menu">
           <button
             ref="headingsMenuTriggerElement"
             type="button"

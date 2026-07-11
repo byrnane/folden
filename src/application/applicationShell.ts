@@ -2,21 +2,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createDialogController } from './controllers/dialogController'
 import { createPaneController } from './controllers/paneController'
 import type { NativeFsEvent } from '../domain/native'
-import {
-  type EditorMode,
-  type OpenDocument,
-} from '../domain/documents/documentState'
+import { type EditorMode, type OpenDocument } from '../domain/documents/documentState'
 import {
   loadApplicationSettings,
   loadLayoutSettings,
   saveApplicationSettings,
   saveLayoutSettings,
 } from '../infrastructure/settings/settings'
-import {
-  defaultLayoutSettings,
-  layoutSettingLimits,
-} from './settings'
-import type { ActivitySection } from './settings'
 import {
   cleanDisplayPath,
   isMarkdownDocument,
@@ -35,6 +27,7 @@ import { createApplicationLifecycleController } from './controllers/applicationL
 import { createWorkspaceWorkflowController } from './controllers/workspaceWorkflowController'
 import { createVisualSafetyController } from './controllers/visualSafetyController'
 import { createApplicationCommandController } from './controllers/applicationCommandController'
+import { createLayoutController } from './controllers/layoutController'
 import { createTauriNativePorts } from '../infrastructure/tauri/nativePorts'
 import type { EditorCommand, EditorPane } from './types/shell'
 export type { EditorAdapter, EditorCommand } from './types/shell'
@@ -48,7 +41,28 @@ export function useApplicationShell() {
   const hasNativeRuntimeOnStartup = isTauriRuntime()
   const nativePorts = createTauriNativePorts()
   const appSettings = ref(loadApplicationSettings())
-  const layoutSettings = ref(loadLayoutSettings())
+  const layoutController = createLayoutController({
+    appSettings,
+    loadLayoutSettings,
+    saveLayoutSettings,
+  })
+  const {
+    layoutSettings,
+    setActivitySection,
+    closeSidebar,
+    setActivityRailMode,
+    resetLayoutSettings,
+    setSidebarWidth,
+    setActivityRailWidth,
+    resetActivityRailWidth,
+    setSplitRatio,
+    setOutlineWidth,
+    setDocumentMapWidth,
+    toggleDocumentOutline,
+    toggleDocumentMap,
+    toggleFocusMode,
+    dispose: disposeLayoutController,
+  } = layoutController
   const documentController = createDocumentController(initialText)
   const {
     initialDocument,
@@ -259,7 +273,10 @@ export function useApplicationShell() {
     return applyDefaultMarkdownMode(openDocumentState(document))
   }
 
-  function refreshWorkspaceBranchForDocuments(branchPath: string | null, preserveDescendants = true) {
+  function refreshWorkspaceBranchForDocuments(
+    branchPath: string | null,
+    preserveDescendants = true,
+  ) {
     return workspaceWorkflowController.refreshWorkspaceBranch(branchPath, preserveDescendants)
   }
 
@@ -352,7 +369,9 @@ export function useApplicationShell() {
       return
     }
 
-    await documentWorkflowController.triggerAutosaveDocuments(documents.value.map((document) => document.id))
+    await documentWorkflowController.triggerAutosaveDocuments(
+      documents.value.map((document) => document.id),
+    )
   }
 
   async function setActiveDocument(pane: EditorPane, documentId: string) {
@@ -370,12 +389,18 @@ export function useApplicationShell() {
     await openNativeDocumentState()
   }
 
-  async function openLoadedDocument(document: Parameters<typeof openLoadedDocumentState>[0], paneId?: EditorPane['id']) {
+  async function openLoadedDocument(
+    document: Parameters<typeof openLoadedDocumentState>[0],
+    paneId?: EditorPane['id'],
+  ) {
     await triggerAutosaveForDocumentSwitch()
     return openLoadedDocumentState(document, paneId)
   }
 
-  async function openWorkspaceFile(entry: Parameters<typeof openWorkspaceFileState>[0], paneId?: EditorPane['id']) {
+  async function openWorkspaceFile(
+    entry: Parameters<typeof openWorkspaceFileState>[0],
+    paneId?: EditorPane['id'],
+  ) {
     await triggerAutosaveForDocumentSwitch()
     await openWorkspaceFileState(entry, paneId)
   }
@@ -495,7 +520,8 @@ export function useApplicationShell() {
     }
 
     const activeContent = paneEditors.value[pane.id]?.flushContent()
-    const hasOnlyLineEndingChanges = activeContent !== undefined &&
+    const hasOnlyLineEndingChanges =
+      activeContent !== undefined &&
       activeContent !== document.content &&
       normalizeEditorLineEndings(activeContent) === normalizeEditorLineEndings(document.content)
 
@@ -518,94 +544,6 @@ export function useApplicationShell() {
 
   function workspaceRelativePathFromAbsolute(path: string) {
     return getWorkspaceRelativePathFromAbsolute(path, cleanDisplayPath)
-  }
-
-  function setActivitySection(section: ActivitySection) {
-    layoutSettings.value.activeActivitySection = section
-    if (section !== 'settings') {
-      appSettings.value.appearance.showSidebar = true
-    }
-  }
-
-  function closeSidebar() {
-    if (layoutSettings.value.activeActivitySection !== 'settings') {
-      appSettings.value.appearance.showSidebar = false
-    }
-  }
-
-  function setActivityRailMode(mode: 'compact' | 'expanded') {
-    layoutSettings.value.activityRailMode = mode
-  }
-
-  function resetLayoutSettings() {
-    layoutSettings.value = structuredClone(defaultLayoutSettings)
-    appSettings.value.appearance.showActivityBar = true
-    appSettings.value.appearance.showSidebar = true
-    appSettings.value.appearance.showStatusBar = true
-  }
-
-  function setSidebarWidth(width: number) {
-    layoutSettings.value.sidebarWidth = Math.min(
-      Math.max(width, layoutSettingLimits.sidebarWidth.min),
-      layoutSettingLimits.sidebarWidth.max,
-    )
-  }
-
-  function setActivityRailWidth(width: number) {
-    if (layoutSettings.value.activityRailMode === 'expanded') {
-      layoutSettings.value.activityExpandedWidth = Math.min(
-        Math.max(width, layoutSettingLimits.activityExpandedWidth.min),
-        layoutSettingLimits.activityExpandedWidth.max,
-      )
-      return
-    }
-
-    layoutSettings.value.activityCompactWidth = Math.min(
-      Math.max(width, layoutSettingLimits.activityCompactWidth.min),
-      layoutSettingLimits.activityCompactWidth.max,
-    )
-  }
-
-  function resetActivityRailWidth() {
-    if (layoutSettings.value.activityRailMode === 'expanded') {
-      layoutSettings.value.activityExpandedWidth = defaultLayoutSettings.activityExpandedWidth
-      return
-    }
-
-    layoutSettings.value.activityCompactWidth = defaultLayoutSettings.activityCompactWidth
-  }
-
-  function setSplitRatio(ratio: number) {
-    layoutSettings.value.splitRatio = Math.min(
-      Math.max(ratio, layoutSettingLimits.splitRatio.min),
-      layoutSettingLimits.splitRatio.max,
-    )
-  }
-
-  function setOutlineWidth(width: number) {
-    layoutSettings.value.outlineWidth = Math.min(
-      Math.max(width, layoutSettingLimits.outlineWidth.min),
-      layoutSettingLimits.outlineWidth.max,
-    )
-  }
-
-  function setDocumentMapWidth(width: number) {
-    layoutSettings.value.documentMapWidth = Math.min(
-      Math.max(width, layoutSettingLimits.documentMapWidth.min),
-      layoutSettingLimits.documentMapWidth.max,
-    )
-  }
-
-  function toggleDocumentOutline() {
-    layoutSettings.value.showDocumentOutline = !layoutSettings.value.showDocumentOutline
-  }
-
-  function toggleDocumentMap() {
-    layoutSettings.value.showDocumentMap = !layoutSettings.value.showDocumentMap
-  }
-
-  function toggleFocusMode() {
-    layoutSettings.value.focusMode = !layoutSettings.value.focusMode
   }
 
   function runActiveEditorCommand(command: EditorCommand) {
@@ -643,7 +581,10 @@ export function useApplicationShell() {
         const document = getDocument(documentId)
 
         if (document) {
-          markDocumentConflict(documentId, `Could not reload external changes: ${formatError(error)}`)
+          markDocumentConflict(
+            documentId,
+            `Could not reload external changes: ${formatError(error)}`,
+          )
         }
       })
     })
@@ -734,11 +675,7 @@ export function useApplicationShell() {
     setSplitEnabled,
     moveActiveDocumentToRight,
   })
-  const {
-    canExecuteCommand,
-    executeCommand,
-    handleGlobalKeydown,
-  } = commandController
+  const { canExecuteCommand, executeCommand, handleGlobalKeydown } = commandController
 
   const applicationLifecycleController = createApplicationLifecycleController({
     documentFiles: nativePorts.documents,
@@ -786,10 +723,8 @@ export function useApplicationShell() {
     openRecoveryDialog,
     openUnsavedDialog,
   })
-  const {
-    mount: mountApplicationLifecycle,
-    dispose: disposeApplicationLifecycle,
-  } = applicationLifecycleController
+  const { mount: mountApplicationLifecycle, dispose: disposeApplicationLifecycle } =
+    applicationLifecycleController
 
   watch(
     appSettings,
@@ -799,7 +734,9 @@ export function useApplicationShell() {
 
       if (workspace.value) {
         void refreshWorkspace().catch((error) => {
-          setWatcherWarning(`Could not refresh workspace after settings change: ${formatError(error)}`)
+          setWatcherWarning(
+            `Could not refresh workspace after settings change: ${formatError(error)}`,
+          )
         })
       }
     },
@@ -807,22 +744,15 @@ export function useApplicationShell() {
   )
 
   watch(
-    layoutSettings,
-    (settings) => {
-      saveLayoutSettings(settings)
-    },
-    { deep: true },
-  )
-
-  watch(
-    () => documents.value.map((document) => ({
-      id: document.id,
-      revision: document.revision,
-      persistedRevision: document.persistedRevision,
-      nativeId: document.nativeId,
-      externalState: document.externalState,
-      saveState: document.saveState,
-    })),
+    () =>
+      documents.value.map((document) => ({
+        id: document.id,
+        revision: document.revision,
+        persistedRevision: document.persistedRevision,
+        nativeId: document.nativeId,
+        externalState: document.externalState,
+        saveState: document.saveState,
+      })),
     () => {
       syncAutosaveTimers()
     },
@@ -870,6 +800,7 @@ export function useApplicationShell() {
 
   onBeforeUnmount(() => {
     window.removeEventListener('blur', triggerAutosaveOnWindowBlur)
+    disposeLayoutController()
     disposeApplicationLifecycle()
   })
 

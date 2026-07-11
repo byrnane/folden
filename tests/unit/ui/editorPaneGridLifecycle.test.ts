@@ -61,7 +61,10 @@ describe('editor pane grid lifecycle cleanup', () => {
       suppressNextTabClickTimeout: timeoutId,
     }
 
-    cleanupEditorPaneGridInteractionState(state, clearTimeout as unknown as typeof window.clearTimeout)
+    cleanupEditorPaneGridInteractionState(
+      state,
+      clearTimeout as unknown as typeof window.clearTimeout,
+    )
     vi.runAllTimers()
 
     expect(timeoutCallback).not.toHaveBeenCalled()

@@ -14,8 +14,13 @@ const emit = defineEmits<{
 }>()
 
 const buttons = ref<HTMLButtonElement[]>([])
-const resizeStart = ref<{ x: number, width: number } | null>(null)
-const activeIndex = computed(() => Math.max(0, props.headings.findIndex((heading) => heading.id === props.activeHeadingId)))
+const resizeStart = ref<{ x: number; width: number } | null>(null)
+const activeIndex = computed(() =>
+  Math.max(
+    0,
+    props.headings.findIndex((heading) => heading.id === props.activeHeadingId),
+  ),
+)
 
 function selectHeading(heading: MarkdownHeading) {
   emit('select', heading)
@@ -35,7 +40,9 @@ function handleKeydown(event: KeyboardEvent, index: number, heading: MarkdownHea
 
   if (event.key === 'Home' || event.key === 'End') {
     event.preventDefault()
-    void nextTick(() => buttons.value[event.key === 'Home' ? 0 : props.headings.length - 1]?.focus())
+    void nextTick(() =>
+      buttons.value[event.key === 'Home' ? 0 : props.headings.length - 1]?.focus(),
+    )
     return
   }
 
@@ -82,6 +89,11 @@ onBeforeUnmount(stopResize)
     >
       {{ heading.text }}
     </button>
-    <span class="outline-resize-handle" role="separator" aria-label="Resize outline" @pointerdown="beginResize" />
+    <span
+      class="outline-resize-handle"
+      role="separator"
+      aria-label="Resize outline"
+      @pointerdown="beginResize"
+    />
   </aside>
 </template>

@@ -1,8 +1,5 @@
 import type { ApplicationSettings, LayoutSettings } from './types'
-import {
-  applicationSettingLimits,
-  layoutSettingLimits,
-} from './limits'
+import { applicationSettingLimits, layoutSettingLimits } from './limits'
 
 export const defaultApplicationSettings: ApplicationSettings = {
   autosave: {
@@ -12,7 +9,8 @@ export const defaultApplicationSettings: ApplicationSettings = {
     saveOnDocumentSwitch: false,
   },
   editor: {
-    sourceFontFamily: '"JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
+    sourceFontFamily:
+      '"JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
     sourceFontSize: applicationSettingLimits.sourceFontSize.fallback,
     visualFontSize: applicationSettingLimits.visualFontSize.fallback,
     lineHeight: applicationSettingLimits.lineHeight.fallback,

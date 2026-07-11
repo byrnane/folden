@@ -41,7 +41,9 @@ export type EditorPaneView = EditorPane & {
 export type EditorAdapter = {
   flushContent: () => string
   captureViewState?: () => Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>
-  restoreViewState?: (viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>) => void
+  restoreViewState?: (
+    viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>,
+  ) => void
   runCommand?: (command: EditorCommand) => void
 }
 

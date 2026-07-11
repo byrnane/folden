@@ -29,12 +29,8 @@ const emit = defineEmits<{
     </div>
 
     <template #actions>
-      <button type="button" @click="emit('cancel')">
-        Stay in Source
-      </button>
-      <button type="button" class="danger" @click="emit('confirm')">
-        Open in Visual Anyway
-      </button>
+      <button type="button" @click="emit('cancel')">Stay in Source</button>
+      <button type="button" class="danger" @click="emit('confirm')">Open in Visual Anyway</button>
     </template>
   </AppDialog>
 </template>

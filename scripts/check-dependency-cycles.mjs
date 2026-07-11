@@ -42,7 +42,10 @@ function resolveImport(fromFile, specifier) {
     ...sourceExtensions.map((extension) => path.join(basePath, `index${extension}`)),
   ]
 
-  return candidates.find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile()) ?? null
+  return (
+    candidates.find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile()) ??
+    null
+  )
 }
 
 function runtimeImports(content) {

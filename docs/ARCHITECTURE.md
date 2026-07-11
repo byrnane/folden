@@ -32,11 +32,12 @@ Vue views, editors, dialogs, and workspace UI live here. UI components render st
 
 Application orchestration lives here:
 
-* `applicationShell.ts` composes controllers, infrastructure adapters, lifecycle hooks, and the facade returned to the UI.
-* `controllers/` owns application state, workflows, dialogs, commands, session persistence, external changes, and lifecycle.
-* `settings/` owns application and layout setting types, defaults, limits, and normalization.
-* `ports/nativePorts.ts` defines the application-side contracts for native capabilities.
-* helpers and shell types keep application-specific formatting and facade types near the shell.
+- `applicationShell.ts` composes controllers, infrastructure adapters, lifecycle hooks, and the facade returned to the UI.
+- `controllers/` owns application state, workflows, dialogs, commands, layout settings, session persistence, external changes, and lifecycle.
+- `state/` contains Vue-backed application stores; pure document types and rules stay in `domain`.
+- `settings/` owns application and layout setting types, defaults, limits, and normalization.
+- `ports/nativePorts.ts` defines the application-side contracts for native capabilities.
+- helpers and shell types keep application-specific formatting and facade types near the shell.
 
 Application workflows may use domain rules and application ports. They must not import Tauri APIs directly.
 
@@ -44,11 +45,11 @@ Application workflows may use domain rules and application ports. They must not 
 
 Framework-independent rules and types live here:
 
-* document revision and dirty-state helpers;
-* document state, history, editor-session synchronization, and save queue;
-* Markdown safety, image resolution, conflict diffing, outline extraction, and document-map construction;
-* native DTO guards and native error shape;
-* workspace filtering rules.
+- document revision and dirty-state helpers;
+- document types, history, editor-session synchronization, and save queue;
+- Markdown safety, image path resolution, conflict diffing, outline extraction, and document-map construction;
+- native DTO guards and native error shape;
+- workspace filtering rules.
 
 `domain` must not depend on Vue, Tauri, UI components, browser storage, or infrastructure adapters.
 
@@ -56,21 +57,22 @@ Framework-independent rules and types live here:
 
 Infrastructure implements application contracts:
 
-* `infrastructure/tauri/nativePorts.ts` groups Tauri-backed implementations of native ports;
-* `infrastructure/tauri/files.ts` contains low-level Tauri command invocation helpers;
-* `infrastructure/settings/settings.ts` persists browser-side application and layout settings and handles legacy layout migration.
+- `infrastructure/tauri/nativePorts.ts` groups Tauri-backed implementations of native ports;
+- `infrastructure/tauri/files.ts` contains low-level Tauri command invocation helpers;
+- `infrastructure/tauri/visualImageAssets.ts` converts resolved local image paths through Tauri's asset protocol;
+- `infrastructure/settings/settings.ts` persists browser-side application and layout settings and handles legacy layout migration.
 
 Infrastructure can depend on application port types and domain DTOs. It should not own product workflows.
 
 ## Allowed Dependencies
 
-* `domain` is pure TypeScript logic with no Vue, Tauri, UI, or infrastructure dependency.
-* `application` uses domain rules and application port contracts.
-* Application workflows do not import Tauri APIs directly.
-* `infrastructure` implements application ports.
-* `ui` calls the application facade returned by `useApplicationShell`.
-* UI layout components such as `ActivityRail.vue`, `OpenEditors.vue`, `DocumentToolbar.vue`, and `EditorPaneGrid.vue` own rendering and direct interaction details, not application workflows.
-* `applicationShell` is the composition root. It wires dependencies and exposes state/actions, but it is not the place for new domain logic or large workflows.
+- `domain` is pure TypeScript logic with no Vue, Tauri, UI, or infrastructure dependency.
+- `application` uses domain rules and application port contracts.
+- Application workflows do not import Tauri APIs directly.
+- `infrastructure` implements application ports.
+- `ui` calls the application facade returned by `useApplicationShell`.
+- UI layout components such as `ActivityRail.vue`, `OpenEditors.vue`, `DocumentToolbar.vue`, and `EditorPaneGrid.vue` own rendering and direct interaction details, not application workflows.
+- `applicationShell` is the composition root. It wires dependencies and exposes state/actions, but it is not the place for new domain logic or large workflows.
 
 ## State Ownership
 
@@ -78,21 +80,22 @@ Controllers own state. Outside code receives refs, computed values, and explicit
 
 State-controller responsibilities:
 
-* `documentController` owns open documents, document revisions, dirty state, external states, save state, and document content updates.
-* `paneController` owns panes, active pane, split state, document-to-pane layout, editor sessions, and per-pane document modes.
-* `workspaceController` owns the opened workspace, tree expansion/loading/error state, selection, recent workspaces, and workspace path remapping.
-* `sessionController` owns pending recovery entries, session snapshot building, recovery snapshot building, debounced persistence, and disposal of its persistence timer.
-* `externalChangesController` owns watcher warnings, debounced workspace refreshes, debounced document reloads, and routing of native filesystem events.
-* `visualSafetyController` owns Visual-mode safety decisions and per-document remote-image permissions.
-* `dialogController` owns prompt, confirm, unsaved, Markdown safety, conflict, and recovery dialog state.
-* `commandController` and `applicationCommandController` own command registration and command execution.
-* Application settings and layout settings are normalized in `src/application/settings`. Browser persistence stays in `src/infrastructure/settings/settings.ts`.
+- `documentController` owns open documents, document revisions, dirty state, external states, save state, and document content updates.
+- `paneController` owns panes, active pane, split state, document-to-pane layout, editor sessions, and per-pane document modes.
+- `workspaceController` owns the opened workspace, tree expansion/loading/error state, selection, recent workspaces, and workspace path remapping.
+- `sessionController` owns pending recovery entries, session snapshot building, recovery snapshot building, debounced persistence, and disposal of its persistence timer.
+- `externalChangesController` owns watcher warnings, debounced workspace refreshes, debounced document reloads, and routing of native filesystem events.
+- `visualSafetyController` owns Visual-mode safety decisions and per-document remote-image permissions.
+- `dialogController` owns prompt, confirm, unsaved, Markdown safety, conflict, and recovery dialog state.
+- `commandController` and `applicationCommandController` own command registration and command execution.
+- `layoutController` owns layout state, bounds, visibility actions, reset behavior, and persistence coordination.
+- Application settings and layout settings are normalized in `src/application/settings`. Browser storage access stays in `src/infrastructure/settings/settings.ts`.
 
 Workflow-controller responsibilities:
 
-* `documentWorkflowController` coordinates document open, save, save as copy, close, autosave, reload, conflict handling, pane editor flushing, and undo/redo.
-* `workspaceWorkflowController` coordinates workspace opening, restoration, tree loading, file/folder creation, rename, trash, split opening, and branch refresh after file changes.
-* `applicationLifecycleController` owns mount/dispose behavior, startup restoration, recovery prompting, native event subscriptions, window close handling, final save/session persistence, and listener cleanup.
+- `documentWorkflowController` coordinates document open, save, save as copy, close, autosave, reload, conflict handling, pane editor flushing, and undo/redo.
+- `workspaceWorkflowController` coordinates workspace opening, restoration, tree loading, file/folder creation, rename, trash, split opening, and branch refresh after file changes.
+- `applicationLifecycleController` owns mount/dispose behavior, startup restoration, recovery prompting, native event subscriptions, window close handling, final save/session persistence, and listener cleanup.
 
 Lifecycle code belongs in `applicationLifecycleController`. Controllers that create timers or listeners must expose `dispose`.
 
@@ -102,11 +105,11 @@ Application code talks to native capabilities through `src/application/ports/nat
 
 Port groups:
 
-* `DocumentFilePort`: open text files, open workspace files by path, save text files, and close native document handles.
-* `WorkspaceFilePort`: open or restore workspace directories, list directories, open files, create files/directories, rename paths, and move paths to trash.
-* `SessionStoragePort`: load/save session state and recovery snapshots.
-* `DiagnosticsPort`: log frontend events, open the logs folder, and export diagnostics.
-* `NativeEventPort`: subscribe to native events and access the current native window close/destroy operations.
+- `DocumentFilePort`: open text files, open workspace files by path, save text files, and close native document handles.
+- `WorkspaceFilePort`: open or restore workspace directories, list directories, open files, create files/directories, rename paths, and move paths to trash.
+- `SessionStoragePort`: load/save session state and recovery snapshots.
+- `DiagnosticsPort`: log frontend events, open the logs folder, and export diagnostics.
+- `NativeEventPort`: subscribe to native events and access the current native window close/destroy operations.
 
 When adding a new Tauri capability, add the application port contract first, then implement it in infrastructure. Application controllers should receive the port through dependency injection instead of importing Tauri APIs.
 
@@ -116,15 +119,15 @@ Rust code lives under `src-tauri/src`.
 
 Module responsibilities:
 
-* `native/types.rs`: stable serializable DTOs shared with TypeScript contracts.
-* `native/errors.rs`: native error codes, retryability, user messages, and technical diagnostics.
-* `native/state.rs`: authorized native document/workspace state.
-* `native/paths.rs`: path normalization, validation, root protection, and workspace-safe path helpers.
-* `native/watcher.rs`: filesystem watcher setup, watcher event filtering, and Folden temp-save suppression.
-* `native/documents.rs`: text file open/save, format detection, atomic writes, stale-fingerprint protection, and native document lifecycle.
-* `native/workspace.rs`: workspace authorization, directory listing, workspace file open/create/rename/trash.
-* `native/persistence.rs`: session and recovery snapshot storage.
-* `native/diagnostics.rs`: frontend event logging, logs-folder opening, and redacted diagnostic export.
+- `native/types.rs`: stable serializable DTOs shared with TypeScript contracts.
+- `native/errors.rs`: native error codes, retryability, user messages, and technical diagnostics.
+- `native/state.rs`: authorized native document/workspace state.
+- `native/paths.rs`: path normalization, validation, root protection, and workspace-safe path helpers.
+- `native/watcher.rs`: filesystem watcher setup, watcher event filtering, and Folden temp-save suppression.
+- `native/documents.rs`: text file open/save, format detection, atomic writes, stale-fingerprint protection, and native document lifecycle.
+- `native/workspace.rs`: workspace authorization, directory listing, workspace file open/create/rename/trash.
+- `native/persistence.rs`: session and recovery snapshot storage.
+- `native/diagnostics.rs`: frontend event logging, logs-folder opening, and redacted diagnostic export.
 
 `lib.rs` registers Tauri commands, configures native state and logging, installs the panic hook, and composes the native layer. New native modules should be wired through `lib.rs`, but `lib.rs` should not become the home for module-specific logic.
 
@@ -252,41 +255,41 @@ Example feature requiring filesystem/native access:
 
 ## Rules Not To Break
 
-* Do not add domain logic to Vue components.
-* Do not add large workflows to `applicationShell`.
-* Do not import Tauri APIs directly from application controllers.
-* Do not mutate another controller's state outside its methods.
-* Do not bypass the save queue or session persistence coordination.
-* Do not duplicate native DTOs without contract tests.
-* Do not store saved user document content as the canonical copy in hidden app data.
-* Do not change native command contracts without updating TypeScript/Rust contract tests.
+- Do not add domain logic to Vue components.
+- Do not add large workflows to `applicationShell`.
+- Do not import Tauri APIs directly from application controllers.
+- Do not mutate another controller's state outside its methods.
+- Do not bypass the save queue or session persistence coordination.
+- Do not duplicate native DTOs without contract tests.
+- Do not store saved user document content as the canonical copy in hidden app data.
+- Do not change native command contracts without updating TypeScript/Rust contract tests.
 
 ## Testing Map
 
-| Change type | Required tests |
-| --- | --- |
-| Pure document/workspace/Markdown rule | Domain unit tests |
-| Controller state ownership | Controller unit tests |
-| Workflow orchestration | Workflow/controller unit tests with fakes |
-| Native port adapter shape | Application-port or infrastructure tests when available |
-| Native DTO or command contract | TypeScript/Rust contract tests |
-| Rust path/filesystem/persistence behavior | Rust module tests |
-| User-visible editing/workspace flow | Playwright E2E smoke plus targeted unit tests |
+| Change type                                | Required tests                                                                |
+| ------------------------------------------ | ----------------------------------------------------------------------------- |
+| Pure document/workspace/Markdown rule      | Domain unit tests                                                             |
+| Controller state ownership                 | Controller unit tests                                                         |
+| Workflow orchestration                     | Workflow/controller unit tests with fakes                                     |
+| Native port adapter shape                  | Application-port or infrastructure tests when available                       |
+| Native DTO or command contract             | TypeScript/Rust contract tests                                                |
+| Rust path/filesystem/persistence behavior  | Rust module tests                                                             |
+| User-visible editing/workspace flow        | Playwright E2E smoke plus targeted unit tests                                 |
 | Close, save, recovery, or watcher behavior | Unit tests, Rust tests when native behavior changed, and manual desktop smoke |
 
 Current Playwright E2E specs live in `tests/e2e`:
 
-* `panes-tabs.spec.ts`: split panes, tab reorder/transfer, Open Editors, and malformed drag payloads.
-* `recovery-conflict.spec.ts`: recovery, external changes, missing files, and conflicts.
-* `settings-autosave.spec.ts`: settings persistence, diagnostics export, and autosave behavior.
-* `shell-layout.spec.ts`: activity rail, toolbar behavior, layout persistence, fit labels, and reset layout.
-* `visual-safety.spec.ts`: Visual-mode safety and local/remote image behavior.
-* `workspace-save.spec.ts`: workspace open/create/rename/trash and save refresh flows.
+- `panes-tabs.spec.ts`: split panes, tab reorder/transfer, Open Editors, and malformed drag payloads.
+- `recovery-conflict.spec.ts`: recovery, external changes, missing files, and conflicts.
+- `settings-autosave.spec.ts`: settings persistence, diagnostics export, and autosave behavior.
+- `shell-layout.spec.ts`: activity rail, toolbar behavior, layout persistence, fit labels, and reset layout.
+- `visual-safety.spec.ts`: Visual-mode safety and local/remote image behavior.
+- `workspace-save.spec.ts`: workspace open/create/rename/trash and save refresh flows.
 
 ## Lifecycle and Cleanup
 
-* Controllers that own timers, debounced work, or listeners must expose `dispose`.
-* Each subscription should have one clear owner.
-* Async listener registration must tolerate early disposal.
-* Final session and recovery persistence must finish before the native window is destroyed.
-* Native document handles should be closed when the app finalizes or documents are removed.
+- Controllers that own timers, debounced work, or listeners must expose `dispose`.
+- Each subscription should have one clear owner.
+- Async listener registration must tolerate early disposal.
+- Final session and recovery persistence must finish before the native window is destroyed.
+- Native document handles should be closed when the app finalizes or documents are removed.

@@ -103,19 +103,18 @@ try {
   if (viteServer) {
     const viteExitBeforeReady = new Promise((_, reject) => {
       viteServer.once('exit', (code, signal) => {
-        reject(new Error(
-          signal
-            ? `Vite dev server exited with signal ${signal} before it became ready.`
-            : `Vite dev server exited with code ${code ?? 1} before it became ready.`,
-        ))
+        reject(
+          new Error(
+            signal
+              ? `Vite dev server exited with signal ${signal} before it became ready.`
+              : `Vite dev server exited with code ${code ?? 1} before it became ready.`,
+          ),
+        )
       })
       viteServer.once('error', reject)
     })
 
-    await Promise.race([
-      waitForServer(serverUrl),
-      viteExitBeforeReady,
-    ])
+    await Promise.race([waitForServer(serverUrl), viteExitBeforeReady])
   }
 
   const playwright = spawnNode(playwrightBin, ['test', ...process.argv.slice(2)])

@@ -3,6 +3,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 import vue from 'eslint-plugin-vue'
 import vueParser from 'vue-eslint-parser'
+import eslintConfigPrettier from 'eslint-config-prettier/flat'
 
 const browserGlobals = {
   BeforeUnloadEvent: 'readonly',
@@ -68,4 +69,5 @@ export default defineConfig([
       globals: nodeGlobals,
     },
   },
+  eslintConfigPrettier,
 ])

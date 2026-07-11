@@ -39,11 +39,15 @@ afterEach(() => {
 
 describe('document drag payload', () => {
   it('accepts a valid document drag payload', () => {
-    expect(parseDocumentDragPayload(JSON.stringify({
-      kind: 'tab',
-      documentId: 'document-1',
-      paneId: 'left',
-    }))).toEqual({
+    expect(
+      parseDocumentDragPayload(
+        JSON.stringify({
+          kind: 'tab',
+          documentId: 'document-1',
+          paneId: 'left',
+        }),
+      ),
+    ).toEqual({
       kind: 'tab',
       documentId: 'document-1',
       paneId: 'left',
@@ -51,11 +55,15 @@ describe('document drag payload', () => {
   })
 
   it('accepts a valid workspace file drag payload', () => {
-    expect(parseDocumentDragPayload(JSON.stringify({
-      kind: 'workspace-file',
-      path: 'notes\\daily.md',
-      label: 'daily.md',
-    }))).toEqual({
+    expect(
+      parseDocumentDragPayload(
+        JSON.stringify({
+          kind: 'workspace-file',
+          path: 'notes\\daily.md',
+          label: 'daily.md',
+        }),
+      ),
+    ).toEqual({
       kind: 'workspace-file',
       path: 'notes\\daily.md',
       label: 'daily.md',
@@ -63,11 +71,15 @@ describe('document drag payload', () => {
   })
 
   it('accepts external path payloads', () => {
-    expect(parseDocumentDragPayload(JSON.stringify({
-      kind: 'external-path',
-      path: 'C:\\Inbox\\draft.md',
-      label: 'draft.md',
-    }))).toEqual({
+    expect(
+      parseDocumentDragPayload(
+        JSON.stringify({
+          kind: 'external-path',
+          path: 'C:\\Inbox\\draft.md',
+          label: 'draft.md',
+        }),
+      ),
+    ).toEqual({
       kind: 'external-path',
       path: 'C:\\Inbox\\draft.md',
       label: 'draft.md',
@@ -79,34 +91,50 @@ describe('document drag payload', () => {
   })
 
   it('rejects missing payload fields', () => {
-    expect(parseDocumentDragPayload(JSON.stringify({
-      kind: 'tab',
-      paneId: 'left',
-    }))).toBeNull()
+    expect(
+      parseDocumentDragPayload(
+        JSON.stringify({
+          kind: 'tab',
+          paneId: 'left',
+        }),
+      ),
+    ).toBeNull()
   })
 
   it('rejects unknown drag kinds', () => {
-    expect(parseDocumentDragPayload(JSON.stringify({
-      kind: 'workspace-entry',
-      path: 'README.md',
-      label: 'README.md',
-    }))).toBeNull()
+    expect(
+      parseDocumentDragPayload(
+        JSON.stringify({
+          kind: 'workspace-entry',
+          path: 'README.md',
+          label: 'README.md',
+        }),
+      ),
+    ).toBeNull()
   })
 
   it('rejects unknown pane ids', () => {
-    expect(parseDocumentDragPayload(JSON.stringify({
-      kind: 'tab',
-      documentId: 'document-1',
-      paneId: 'center',
-    }))).toBeNull()
+    expect(
+      parseDocumentDragPayload(
+        JSON.stringify({
+          kind: 'tab',
+          documentId: 'document-1',
+          paneId: 'center',
+        }),
+      ),
+    ).toBeNull()
   })
 
   it('rejects non-string document ids', () => {
-    expect(parseDocumentDragPayload(JSON.stringify({
-      kind: 'tab',
-      documentId: 42,
-      paneId: 'left',
-    }))).toBeNull()
+    expect(
+      parseDocumentDragPayload(
+        JSON.stringify({
+          kind: 'tab',
+          documentId: 42,
+          paneId: 'left',
+        }),
+      ),
+    ).toBeNull()
   })
 
   it('reads and starts a drag operation with stable MIME and text labels', () => {
@@ -140,12 +168,14 @@ describe('document drag payload', () => {
       label: 'daily.md',
     })
 
-    expect(dataTransfer.getData(documentDragMimeType)).toBe(JSON.stringify({
-      kind: 'open-editor',
-      documentId: 'document-1',
-      paneId: 'right',
-      label: 'daily.md',
-    }))
+    expect(dataTransfer.getData(documentDragMimeType)).toBe(
+      JSON.stringify({
+        kind: 'open-editor',
+        documentId: 'document-1',
+        paneId: 'right',
+        label: 'daily.md',
+      }),
+    )
     expect(dataTransfer.getData('text/plain')).toBe('daily.md')
     expect(dataTransfer.effectAllowed).toBe('move')
     expect(dataTransfer.dropEffect).toBe('move')

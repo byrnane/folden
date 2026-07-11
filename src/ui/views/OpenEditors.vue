@@ -51,7 +51,9 @@ function getPrimaryDocumentPane(documentId: string) {
     return props.activePane
   }
 
-  return props.visiblePanes.find((pane) => pane.documentIds.includes(documentId)) ?? props.activePane
+  return (
+    props.visiblePanes.find((pane) => pane.documentIds.includes(documentId)) ?? props.activePane
+  )
 }
 
 function isVisiblePaneDocument(documentId: string) {
@@ -87,24 +89,33 @@ function selectDocument(documentId: string) {
       }"
       :title="document.path ? cleanDisplayPath(document.path) : 'Scratch document'"
       draggable="true"
-      @dragstart="startDocumentDrag($event, {
-        kind: 'open-editor',
-        documentId: document.id,
-        paneId: getPrimaryDocumentPane(document.id)?.id ?? activePaneId,
-        label: props.documentLabels[document.id]?.label ?? document.name,
-      })"
+      @dragstart="
+        startDocumentDrag($event, {
+          kind: 'open-editor',
+          documentId: document.id,
+          paneId: getPrimaryDocumentPane(document.id)?.id ?? activePaneId,
+          label: props.documentLabels[document.id]?.label ?? document.name,
+        })
+      "
       @click="selectDocument(document.id)"
     >
       <span class="open-editor-dirty-slot" aria-hidden="true">
         <span v-if="isDirty(document)" class="open-editor-dirty-dot" />
       </span>
-      <span class="open-editor-name">{{ documentLabels[document.id]?.label ?? document.name }}</span>
+      <span class="open-editor-name">{{
+        documentLabels[document.id]?.label ?? document.name
+      }}</span>
       <span class="open-editor-pane">
         {{ getDocumentPaneLabel(document.id) }}
       </span>
     </button>
   </section>
-  <button v-else-if="documents.length" type="button" class="section-header" @click="emit('update:collapsed', false)">
+  <button
+    v-else-if="documents.length"
+    type="button"
+    class="section-header"
+    @click="emit('update:collapsed', false)"
+  >
     Open Editors
   </button>
 </template>

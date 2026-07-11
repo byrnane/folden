@@ -15,7 +15,10 @@ type LineRange = {
   rightEnd: number
 }
 
-export function buildConflictDiffRows(leftContent: string, rightContent: string): ConflictDiffRow[] {
+export function buildConflictDiffRows(
+  leftContent: string,
+  rightContent: string,
+): ConflictDiffRow[] {
   const leftLines = splitLines(leftContent)
   const rightLines = splitLines(rightContent)
   const equalRanges = findEqualRanges(leftLines, rightLines)
@@ -83,9 +86,9 @@ function buildChangedRows(
     rows.push({
       kind: leftExists && rightExists ? 'changed' : leftExists ? 'removed' : 'added',
       leftLineNumber: leftExists ? leftStart + index + 1 : null,
-      leftText: leftExists ? leftChunk[index] ?? '' : '',
+      leftText: leftExists ? (leftChunk[index] ?? '') : '',
       rightLineNumber: rightExists ? rightStart + index + 1 : null,
-      rightText: rightExists ? rightChunk[index] ?? '' : '',
+      rightText: rightExists ? (rightChunk[index] ?? '') : '',
     })
   }
 
@@ -103,9 +106,10 @@ function findEqualRanges(leftLines: string[], rightLines: string[]) {
 
   for (let leftIndex = leftLength - 1; leftIndex >= 0; leftIndex -= 1) {
     for (let rightIndex = rightLength - 1; rightIndex >= 0; rightIndex -= 1) {
-      lcs[leftIndex][rightIndex] = leftLines[leftIndex] === rightLines[rightIndex]
-        ? lcs[leftIndex + 1][rightIndex + 1] + 1
-        : Math.max(lcs[leftIndex + 1][rightIndex], lcs[leftIndex][rightIndex + 1])
+      lcs[leftIndex][rightIndex] =
+        leftLines[leftIndex] === rightLines[rightIndex]
+          ? lcs[leftIndex + 1][rightIndex + 1] + 1
+          : Math.max(lcs[leftIndex + 1][rightIndex], lcs[leftIndex][rightIndex + 1])
     }
   }
 

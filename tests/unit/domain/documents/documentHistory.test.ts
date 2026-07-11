@@ -24,9 +24,7 @@ describe('document history', () => {
     const initialHistory = recordDocumentHistory(createDocumentHistoryState(), 'first')
     const undone = undoDocumentHistory(initialHistory, 'second')
 
-    expect(
-      recordDocumentHistory(undone!.history, 'first-fixed'),
-    ).toEqual({
+    expect(recordDocumentHistory(undone!.history, 'first-fixed')).toEqual({
       past: [{ content: 'first-fixed' }],
       future: [],
     })

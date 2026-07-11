@@ -2,13 +2,8 @@ export type ClosePaneSnapshot = {
   documentIds: string[]
 }
 
-export function countOpenDocumentViews(
-  panes: readonly ClosePaneSnapshot[],
-  documentId: string,
-) {
-  return panes.reduce((count, pane) => (
-    count + (pane.documentIds.includes(documentId) ? 1 : 0)
-  ), 0)
+export function countOpenDocumentViews(panes: readonly ClosePaneSnapshot[], documentId: string) {
+  return panes.reduce((count, pane) => count + (pane.documentIds.includes(documentId) ? 1 : 0), 0)
 }
 
 export function shouldPromptToDiscardDocument(

@@ -37,12 +37,6 @@ jobs:
       - name: Quality gate
         run: npm run quality
 
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium
-
-      - name: Browser E2E tests
-        run: npm run test:e2e
-
       - name: Cargo fmt
         working-directory: src-tauri
         run: cargo fmt --check
@@ -54,6 +48,3 @@ jobs:
       - name: Cargo test
         working-directory: src-tauri
         run: cargo test
-
-      - name: Tauri build
-        run: npm run app:build

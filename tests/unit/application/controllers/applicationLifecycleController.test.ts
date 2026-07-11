@@ -3,7 +3,10 @@ import { ref } from 'vue'
 import { createApplicationLifecycleController } from '../../../../src/application/controllers/applicationLifecycleController'
 import { createTextFileFormat } from '../../../../src/domain/document'
 import type { OpenDocument } from '../../../../src/domain/documents/documentState'
-import type { PersistedSessionState, RecoverySnapshot } from '../../../../src/application/sessionRecovery'
+import type {
+  PersistedSessionState,
+  RecoverySnapshot,
+} from '../../../../src/application/sessionRecovery'
 import type { EditorPane } from '../../../../src/application/types/shell'
 
 function createDocument(overrides: Partial<OpenDocument> = {}): OpenDocument {
@@ -92,10 +95,14 @@ function createHarness() {
     destroy: vi.fn().mockResolvedValue(undefined),
   }
   const loadSessionState = vi.fn().mockResolvedValue(createSession())
-  const loadRecoverySnapshots = vi.fn().mockResolvedValue({ entries: [createRecoverySnapshot()], diagnostics: [] })
+  const loadRecoverySnapshots = vi
+    .fn()
+    .mockResolvedValue({ entries: [createRecoverySnapshot()], diagnostics: [] })
   const saveSessionState = vi.fn().mockResolvedValue(undefined)
   const saveRecoverySnapshots = vi.fn().mockResolvedValue(undefined)
-  const restoreWorkspaceByPath = vi.fn().mockResolvedValue({ id: 'workspace-1', rootPath: 'C:\\Docs', name: 'Docs' })
+  const restoreWorkspaceByPath = vi
+    .fn()
+    .mockResolvedValue({ id: 'workspace-1', rootPath: 'C:\\Docs', name: 'Docs' })
   const openTextFileByPath = vi.fn().mockResolvedValue({
     id: 'native-1',
     path: 'C:\\Docs\\doc.md',
@@ -106,7 +113,9 @@ function createHarness() {
     fingerprint: null,
   })
   const openTextFileAtPath = vi.fn()
-  const listen = vi.fn(async (event: string) => event === 'folden://fs-event' ? unlistenFs : unlistenWarning)
+  const listen = vi.fn(async (event: string) =>
+    event === 'folden://fs-event' ? unlistenFs : unlistenWarning,
+  )
   const getCurrentWindow = vi.fn(() => currentWindow)
 
   const deps = {
@@ -141,23 +150,27 @@ function createHarness() {
     },
     hasNativeRuntime: true,
     windowTarget: {
-      addEventListener: vi.fn((
-        type: 'keydown' | 'beforeunload',
-        listener: ((event: KeyboardEvent) => void) | ((event: BeforeUnloadEvent) => void),
-      ) => {
-        listeners.set(type, listener)
-      }),
-      removeEventListener: vi.fn((
-        type: 'keydown' | 'beforeunload',
-        listener: ((event: KeyboardEvent) => void) | ((event: BeforeUnloadEvent) => void),
-      ) => {
-        if (listeners.get(type) === listener) {
-          listeners.delete(type)
-        }
-      }),
+      addEventListener: vi.fn(
+        (
+          type: 'keydown' | 'beforeunload',
+          listener: ((event: KeyboardEvent) => void) | ((event: BeforeUnloadEvent) => void),
+        ) => {
+          listeners.set(type, listener)
+        },
+      ),
+      removeEventListener: vi.fn(
+        (
+          type: 'keydown' | 'beforeunload',
+          listener: ((event: KeyboardEvent) => void) | ((event: BeforeUnloadEvent) => void),
+        ) => {
+          if (listeners.get(type) === listener) {
+            listeners.delete(type)
+          }
+        },
+      ),
     },
     errorMessage: ref<string | null>(null),
-    workspace: ref<{ id: string, rootPath: string } | null>(null),
+    workspace: ref<{ id: string; rootPath: string } | null>(null),
     documents,
     dirtyDocuments,
     paneDocumentModes: ref({}),
@@ -174,17 +187,19 @@ function createHarness() {
       documents.value = []
     }),
     addDocumentToPane: vi.fn(),
-    createDocumentDraft: vi.fn((content: string, name = 'Untitled.md') => createDocument({
-      id: `scratch-${documents.value.length}`,
-      nativeId: null,
-      path: null,
-      workspaceId: null,
-      relativePath: null,
-      name,
-      content,
-      revision: 0,
-      persistedRevision: 0,
-    })),
+    createDocumentDraft: vi.fn((content: string, name = 'Untitled.md') =>
+      createDocument({
+        id: `scratch-${documents.value.length}`,
+        nativeId: null,
+        path: null,
+        workspaceId: null,
+        relativePath: null,
+        name,
+        content,
+        revision: 0,
+        persistedRevision: 0,
+      }),
+    ),
     openDocumentState: vi.fn((opened) => {
       const nextDocument = createDocument({
         id: 'doc-1',
@@ -196,7 +211,10 @@ function createHarness() {
       documents.value.push(nextDocument)
       return nextDocument
     }),
-    getDocument: vi.fn((documentId: string) => documents.value.find((candidate) => candidate.id === documentId) ?? null),
+    getDocument: vi.fn(
+      (documentId: string) =>
+        documents.value.find((candidate) => candidate.id === documentId) ?? null,
+    ),
     applyDocumentUpdate: vi.fn((documentId: string, _revision: number, content: string) => {
       const target = documents.value.find((candidate) => candidate.id === documentId)
       if (!target) {
@@ -212,7 +230,9 @@ function createHarness() {
     }),
     restoreLayout: vi.fn(() => new Set(['doc-1'])),
     getPaneSnapshot: vi.fn(() => []),
-    paneDocumentModeKey: vi.fn((paneId: EditorPane['id'], documentId: string) => `${paneId}:${documentId}`),
+    paneDocumentModeKey: vi.fn(
+      (paneId: EditorPane['id'], documentId: string) => `${paneId}:${documentId}`,
+    ),
     isDirty: vi.fn((candidate: OpenDocument) => candidate.revision !== candidate.persistedRevision),
     saveDirtyDocuments: vi.fn().mockResolvedValue(true),
     markRestoreComplete: vi.fn(),
@@ -220,7 +240,9 @@ function createHarness() {
       pendingRecoveryEntries.value = entries
     }),
     removePendingRecoveryEntry: vi.fn((key: string) => {
-      pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter((entry) => entry.key !== key)
+      pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter(
+        (entry) => entry.key !== key,
+      )
     }),
     discardPendingRecoveryEntries: vi.fn(),
     buildPersistedSessionState: vi.fn(createSession),
@@ -276,7 +298,10 @@ describe('application lifecycle controller', () => {
 
   it('handles beforeunload only when documents are dirty', () => {
     const { controller, deps } = createHarness()
-    const event = { preventDefault: vi.fn(), returnValue: undefined as string | undefined } as unknown as BeforeUnloadEvent
+    const event = {
+      preventDefault: vi.fn(),
+      returnValue: undefined as string | undefined,
+    } as unknown as BeforeUnloadEvent
 
     controller.handleBeforeUnload(event)
     expect(event.preventDefault).not.toHaveBeenCalled()
@@ -310,7 +335,9 @@ describe('application lifecycle controller', () => {
 
   it('keeps the window open and surfaces persistence errors on close', async () => {
     const { controller, deps, closeEvent, currentWindow } = createHarness()
-    deps.persistSessionAndRecoveryState.mockRejectedValue(new Error('background wrapper should not be used'))
+    deps.persistSessionAndRecoveryState.mockRejectedValue(
+      new Error('background wrapper should not be used'),
+    )
     deps.saveSessionState.mockRejectedValueOnce(new Error('disk is read-only'))
 
     await controller.handleWindowCloseRequested(closeEvent)
@@ -324,12 +351,16 @@ describe('application lifecycle controller', () => {
   })
 
   it('mounts native subscriptions and cleans listeners on dispose', async () => {
-    const { controller, deps, listeners, unlistenClose, unlistenFs, unlistenWarning } = createHarness()
+    const { controller, deps, listeners, unlistenClose, unlistenFs, unlistenWarning } =
+      createHarness()
 
     controller.mount('# Untitled\n\n')
     await Promise.resolve()
 
-    expect(deps.windowTarget.addEventListener).toHaveBeenCalledWith('keydown', deps.handleGlobalKeydown)
+    expect(deps.windowTarget.addEventListener).toHaveBeenCalledWith(
+      'keydown',
+      deps.handleGlobalKeydown,
+    )
     expect(listeners.has('beforeunload')).toBe(true)
     expect(deps.listen).toHaveBeenCalledWith('folden://fs-event', expect.any(Function))
 
@@ -348,9 +379,7 @@ describe('application lifecycle controller', () => {
     const warningListenerPromise = Promise.resolve(unlistenWarning)
     const closeListenerPromise = Promise.resolve(unlistenClose)
 
-    deps.listen
-      .mockReturnValueOnce(fsListenerPromise)
-      .mockReturnValueOnce(warningListenerPromise)
+    deps.listen.mockReturnValueOnce(fsListenerPromise).mockReturnValueOnce(warningListenerPromise)
     deps.getCurrentWindow().onCloseRequested.mockReturnValueOnce(closeListenerPromise)
 
     controller.mount('# Untitled\n\n')

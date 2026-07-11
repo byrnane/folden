@@ -2,18 +2,21 @@
 import { onBeforeUnmount, watch } from 'vue'
 import AppDialog from './AppDialog.vue'
 
-const props = withDefaults(defineProps<{
-  open: boolean
-  title: string
-  message: string
-  confirmLabel?: string
-  cancelLabel?: string
-  confirmTone?: 'default' | 'danger'
-}>(), {
-  confirmLabel: 'Confirm',
-  cancelLabel: 'Cancel',
-  confirmTone: 'default',
-})
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    message: string
+    confirmLabel?: string
+    cancelLabel?: string
+    confirmTone?: 'default' | 'danger'
+  }>(),
+  {
+    confirmLabel: 'Confirm',
+    cancelLabel: 'Cancel',
+    confirmTone: 'default',
+  },
+)
 
 const emit = defineEmits<{
   confirm: []
@@ -63,11 +66,7 @@ onBeforeUnmount(() => {
       <button type="button" @click="emit('cancel')">
         {{ cancelLabel }}
       </button>
-      <button
-        type="button"
-        :class="{ danger: confirmTone === 'danger' }"
-        @click="emit('confirm')"
-      >
+      <button type="button" :class="{ danger: confirmTone === 'danger' }" @click="emit('confirm')">
         {{ confirmLabel }}
       </button>
     </template>

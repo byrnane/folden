@@ -32,10 +32,7 @@ import WorkspaceTree from '../workspace/WorkspaceTree.vue'
 import { useApplicationShell } from '../../applicationShell'
 import type { EditorCommand } from '../../application/types/shell'
 import { buildDocumentDisplayLabels } from '../../domain/documents/documentLabels'
-import {
-  applicationSettingLimits,
-  layoutSettingLimits,
-} from '../../application/settings'
+import { applicationSettingLimits, layoutSettingLimits } from '../../application/settings'
 import type { ApplicationSettings } from '../../application/settings'
 import type { ActivitySection } from '../../application/settings'
 import { uiIconSizes } from '../uiConstants'
@@ -151,84 +148,101 @@ const activityScreens: Record<ActivitySection, ActivityScreen> = {
 const openEditorsCollapsed = ref(false)
 const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
 const paneToolbarDisabledCommands = ref<Partial<Record<'left' | 'right', EditorCommand[]>>>({})
-const sidebarResizeStart = ref<{ x: number, width: number } | null>(null)
-const splitResizeStart = ref<{ x: number, ratio: number, width: number } | null>(null)
+const sidebarResizeStart = ref<{ x: number; width: number } | null>(null)
+const splitResizeStart = ref<{ x: number; ratio: number; width: number } | null>(null)
 
-const activityWidth = computed(() => layoutSettings.value.activityRailMode === 'expanded'
-  ? layoutSettings.value.activityExpandedWidth
-  : layoutSettings.value.activityCompactWidth)
+const activityWidth = computed(() =>
+  layoutSettings.value.activityRailMode === 'expanded'
+    ? layoutSettings.value.activityExpandedWidth
+    : layoutSettings.value.activityCompactWidth,
+)
 
 const shellStyle = computed(() => ({
   '--activity-width': `${activityWidth.value}px`,
   '--sidebar-width': `${layoutSettings.value.sidebarWidth}px`,
   '--split-left': `${layoutSettings.value.splitRatio}fr`,
   '--split-right': `${1 - layoutSettings.value.splitRatio}fr`,
-  '--ui-scale': String(clampNumber(appSettings.value.appearance.uiScale, applicationSettingLimits.uiScale)),
+  '--ui-scale': String(
+    clampNumber(appSettings.value.appearance.uiScale, applicationSettingLimits.uiScale),
+  ),
   '--source-font-family': appSettings.value.editor.sourceFontFamily,
   '--source-font-size': `${clampNumber(appSettings.value.editor.sourceFontSize, applicationSettingLimits.sourceFontSize)}px`,
-  '--editor-line-height': String(clampNumber(appSettings.value.editor.lineHeight, applicationSettingLimits.lineHeight)),
+  '--editor-line-height': String(
+    clampNumber(appSettings.value.editor.lineHeight, applicationSettingLimits.lineHeight),
+  ),
   '--visual-font-size': `${clampNumber(appSettings.value.editor.visualFontSize, applicationSettingLimits.visualFontSize)}px`,
   '--visual-max-width': `${clampNumber(appSettings.value.editor.visualMaxWidth, applicationSettingLimits.visualMaxWidth)}px`,
 }))
 
 const activeScreen = computed(() => activityScreens[layoutSettings.value.activeActivitySection])
-const sidebarLabel = computed(() => ({
-  workspace: 'Workspace',
-  search: 'Search',
-  create: 'Create',
-  settings: 'Settings',
-})[activeScreen.value.sidebar])
-const showSidebar = computed(() =>
-  !layoutSettings.value.focusMode
-  && (!activeScreen.value.sidebarClosable || appSettings.value.appearance.showSidebar),
+const sidebarLabel = computed(
+  () =>
+    ({
+      workspace: 'Workspace',
+      search: 'Search',
+      create: 'Create',
+      settings: 'Settings',
+    })[activeScreen.value.sidebar],
+)
+const showSidebar = computed(
+  () =>
+    !layoutSettings.value.focusMode &&
+    (!activeScreen.value.sidebarClosable || appSettings.value.appearance.showSidebar),
 )
 
-const activePane = computed(() =>
-  visiblePanes.value.find((pane) => pane.id === activePaneId.value) ?? visiblePanes.value[0],
+const activePane = computed(
+  () => visiblePanes.value.find((pane) => pane.id === activePaneId.value) ?? visiblePanes.value[0],
 )
-const activePaneDocument = computed(() => activePane.value?.activeDocumentId
-  ? getDocument(activePane.value.activeDocumentId)
-  : null)
+const activePaneDocument = computed(() =>
+  activePane.value?.activeDocumentId ? getDocument(activePane.value.activeDocumentId) : null,
+)
 const documentLabels = computed(() => buildDocumentDisplayLabels(documents.value, cleanDisplayPath))
-const editorPaneViews = computed(() => visiblePanes.value.map((pane) => {
-  const activeDocumentInPane = pane.activeDocumentId
-    ? getDocument(pane.activeDocumentId)
-    : null
+const editorPaneViews = computed(() =>
+  visiblePanes.value.map((pane) => {
+    const activeDocumentInPane = pane.activeDocumentId ? getDocument(pane.activeDocumentId) : null
 
-  return {
-    ...pane,
-    tabs: pane.documentIds.flatMap((documentId) => {
-      const document = getDocument(documentId)
+    return {
+      ...pane,
+      tabs: pane.documentIds.flatMap((documentId) => {
+        const document = getDocument(documentId)
 
-      return document
-        ? [{
-            document,
-            label: documentLabels.value[document.id]?.label ?? document.name,
-            title: documentLabels.value[document.id]?.title ?? (document.path ? cleanDisplayPath(document.path) : 'Scratch document'),
-            isActive: pane.activeDocumentId === document.id,
-            isDirty: isDirty(document),
-          }]
-        : []
-    }),
-    activeDocument: activeDocumentInPane
-      ? {
-          document: activeDocumentInPane,
-          mode: getDocumentMode(pane, activeDocumentInPane),
-          isMarkdown: isMarkdownDocument(activeDocumentInPane),
-          viewSessionId: getViewSessionId(pane, activeDocumentInPane),
-          viewSession: getViewSession(pane, activeDocumentInPane),
-          shouldLoadRemoteImages: shouldLoadRemoteImages(activeDocumentInPane),
-        }
-      : null,
-  }
-}))
+        return document
+          ? [
+              {
+                document,
+                label: documentLabels.value[document.id]?.label ?? document.name,
+                title:
+                  documentLabels.value[document.id]?.title ??
+                  (document.path ? cleanDisplayPath(document.path) : 'Scratch document'),
+                isActive: pane.activeDocumentId === document.id,
+                isDirty: isDirty(document),
+              },
+            ]
+          : []
+      }),
+      activeDocument: activeDocumentInPane
+        ? {
+            document: activeDocumentInPane,
+            mode: getDocumentMode(pane, activeDocumentInPane),
+            isMarkdown: isMarkdownDocument(activeDocumentInPane),
+            viewSessionId: getViewSessionId(pane, activeDocumentInPane),
+            viewSession: getViewSession(pane, activeDocumentInPane),
+            shouldLoadRemoteImages: shouldLoadRemoteImages(activeDocumentInPane),
+          }
+        : null,
+    }
+  }),
+)
 const activePaneIsRight = computed(() => activePaneId.value === 'right')
-const moveActiveTabTitle = computed(() => activePaneIsRight.value ? 'Move active tab left' : 'Move active tab right')
-const moveActiveTabIcon = computed(() => activePaneIsRight.value ? PanelRightOpen : PanelLeftOpen)
-const showDocumentToolbar = computed(() =>
-  (activeScreen.value.workbench === 'editor' || layoutSettings.value.focusMode)
-  && activeDocument.value !== null
-  && isMarkdownDocument(activeDocument.value),
+const moveActiveTabTitle = computed(() =>
+  activePaneIsRight.value ? 'Move active tab left' : 'Move active tab right',
+)
+const moveActiveTabIcon = computed(() => (activePaneIsRight.value ? PanelRightOpen : PanelLeftOpen))
+const showDocumentToolbar = computed(
+  () =>
+    (activeScreen.value.workbench === 'editor' || layoutSettings.value.focusMode) &&
+    activeDocument.value !== null &&
+    isMarkdownDocument(activeDocument.value),
 )
 const sourceDisabledToolbarCommands: EditorCommand[] = [
   'add-row-before',
@@ -243,23 +257,22 @@ const visualDefaultDisabledToolbarCommands: EditorCommand[] = sourceDisabledTool
 const disabledToolbarCommands = computed(() =>
   activeDocumentMode.value === 'source'
     ? sourceDisabledToolbarCommands
-    : paneToolbarDisabledCommands.value[activePaneId.value] ?? visualDefaultDisabledToolbarCommands,
+    : (paneToolbarDisabledCommands.value[activePaneId.value] ??
+      visualDefaultDisabledToolbarCommands),
 )
-const showSettingsView = computed(() =>
-  activeScreen.value.workbench === 'settings' && !layoutSettings.value.focusMode,
+const showSettingsView = computed(
+  () => activeScreen.value.workbench === 'settings' && !layoutSettings.value.focusMode,
 )
 const showEditorView = computed(() => !showSettingsView.value)
 
-function clampNumber(value: unknown, limit: { min: number, max: number, fallback: number }) {
+function clampNumber(value: unknown, limit: { min: number; max: number; fallback: number }) {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.min(Math.max(value, limit.min), limit.max)
     : limit.fallback
 }
 
 function formatOpenDocumentsStatus(openCount: number, unsavedCount: number) {
-  return unsavedCount > 0
-    ? `${openCount} open · ${unsavedCount} unsaved`
-    : `${openCount} open`
+  return unsavedCount > 0 ? `${openCount} open · ${unsavedCount} unsaved` : `${openCount} open`
 }
 
 function updateAppSettings(nextSettings: ApplicationSettings) {
@@ -312,7 +325,10 @@ function beginSplitResize(event: MouseEvent) {
 
 function resizeSplit(event: MouseEvent) {
   if (splitResizeStart.value) {
-    setSplitRatio(splitResizeStart.value.ratio + (event.clientX - splitResizeStart.value.x) / splitResizeStart.value.width)
+    setSplitRatio(
+      splitResizeStart.value.ratio +
+        (event.clientX - splitResizeStart.value.x) / splitResizeStart.value.width,
+    )
   }
 }
 
@@ -333,7 +349,10 @@ function resizeSplitWithKeyboard(event: KeyboardEvent) {
   setSplitRatio(layoutSettings.value.splitRatio + direction * step)
 }
 
-function updatePaneToolbarState(paneId: 'left' | 'right', state: { disabledCommands: EditorCommand[] }) {
+function updatePaneToolbarState(
+  paneId: 'left' | 'right',
+  state: { disabledCommands: EditorCommand[] },
+) {
   paneToolbarDisabledCommands.value = {
     ...paneToolbarDisabledCommands.value,
     [paneId]: state.disabledCommands,
@@ -419,7 +438,12 @@ onBeforeUnmount(() => {
           <div class="workspace-title-block">
             <p class="app-kicker">Folden</p>
             <h1>{{ workspace?.name ?? 'No workspace' }}</h1>
-            <p v-if="workspace" class="workspace-root" :title="workspace.rootPath" data-testid="workspace-root">
+            <p
+              v-if="workspace"
+              class="workspace-root"
+              :title="workspace.rootPath"
+              data-testid="workspace-root"
+            >
               {{ workspace.rootPath }}
             </p>
           </div>
@@ -450,11 +474,7 @@ onBeforeUnmount(() => {
             @select-document="(pane, documentId) => setActiveDocument(pane, documentId)"
           />
 
-          <div
-            v-if="workspace"
-            class="workspace-tree-shell"
-            @click.self="clearSidebarSelection"
-          >
+          <div v-if="workspace" class="workspace-tree-shell" @click.self="clearSidebarSelection">
             <div
               class="workspace-tree-actions"
               :class="{ 'compact-actions': layoutSettings.activityRailMode === 'compact' }"
@@ -549,13 +569,19 @@ onBeforeUnmount(() => {
         </div>
       </template>
 
-      <section v-else class="sidebar-placeholder" :aria-label="activeScreen.sidebar === 'search' ? 'Search' : 'Create'">
+      <section
+        v-else
+        class="sidebar-placeholder"
+        :aria-label="activeScreen.sidebar === 'search' ? 'Search' : 'Create'"
+      >
         <p class="app-kicker">Folden</p>
         <h1>{{ activeScreen.sidebar === 'search' ? 'Search' : 'Create' }}</h1>
         <p>
-          {{ activeScreen.sidebar === 'search'
-            ? 'Search will appear here in a future update.'
-            : 'Document templates will appear here in a future update.' }}
+          {{
+            activeScreen.sidebar === 'search'
+              ? 'Search will appear here in a future update.'
+              : 'Document templates will appear here in a future update.'
+          }}
         </p>
       </section>
 
@@ -592,7 +618,9 @@ onBeforeUnmount(() => {
     <section class="workbench" :class="{ 'settings-page': showSettingsView }">
       <header v-if="showEditorView" class="topbar">
         <div class="topbar-title">
-          <span class="document-title" data-testid="document-title">{{ activeDocument?.name ?? 'No document' }}</span>
+          <span class="document-title" data-testid="document-title">{{
+            activeDocument?.name ?? 'No document'
+          }}</span>
           <div
             v-if="showEditorView"
             class="mode-switch topbar-mode-switch"
@@ -605,7 +633,11 @@ onBeforeUnmount(() => {
               aria-label="Visual"
               :class="{ active: activeDocument && activeDocumentMode === 'visual' }"
               :disabled="!activeDocument || !isMarkdownDocument(activeDocument)"
-              @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'visual')"
+              @click="
+                activePane &&
+                activeDocument &&
+                setPaneDocumentMode(activePane, activeDocument, 'visual')
+              "
             >
               <Eye :size="uiIconSizes.toolbar" />
               <span>Visual</span>
@@ -617,7 +649,11 @@ onBeforeUnmount(() => {
               aria-label="Source"
               :class="{ active: activeDocument && activeDocumentMode === 'source' }"
               :disabled="!activeDocument"
-              @click="activePane && activeDocument && setPaneDocumentMode(activePane, activeDocument, 'source')"
+              @click="
+                activePane &&
+                activeDocument &&
+                setPaneDocumentMode(activePane, activeDocument, 'source')
+              "
             >
               <FileCode2 :size="uiIconSizes.toolbar" />
               <span>Source</span>
@@ -649,9 +685,9 @@ onBeforeUnmount(() => {
           </div>
           <button
             v-if="
-              activePaneDocument
-              && documentHasRemoteImages(activePaneDocument)
-              && !shouldLoadRemoteImages(activePaneDocument)
+              activePaneDocument &&
+              documentHasRemoteImages(activePaneDocument) &&
+              !shouldLoadRemoteImages(activePaneDocument)
             "
             type="button"
             class="load-remote-images-button labelled-icon-button"
@@ -734,11 +770,7 @@ onBeforeUnmount(() => {
         @export-diagnostics="executeCommand('diagnostics.export')"
       />
 
-      <div
-        v-if="errorMessage || watcherWarning"
-        class="toast-stack"
-        aria-live="polite"
-      >
+      <div v-if="errorMessage || watcherWarning" class="toast-stack" aria-live="polite">
         <p :class="errorMessage ? 'toast-message error-message' : 'toast-message warning-message'">
           {{ errorMessage ?? watcherWarning }}
         </p>
@@ -750,19 +782,24 @@ onBeforeUnmount(() => {
       >
         <div>
           <strong>External changes detected.</strong>
-          <span>{{ activeDocument.externalMessage ?? 'Compare Folden and disk versions before continuing.' }}</span>
+          <span>{{
+            activeDocument.externalMessage ?? 'Compare Folden and disk versions before continuing.'
+          }}</span>
         </div>
         <div class="document-warning-actions">
           <button
             type="button"
             data-testid="resolve-conflict"
-            @click="runFileTask(() => openConflictResolution(activeDocument!.id), 'Could not open conflict comparison')"
+            @click="
+              runFileTask(
+                () => openConflictResolution(activeDocument!.id),
+                'Could not open conflict comparison',
+              )
+            "
           >
             Resolve conflict
           </button>
-          <button type="button" @click="saveDocumentAsCopy(activeDocument!)">
-            Save As
-          </button>
+          <button type="button" @click="saveDocumentAsCopy(activeDocument!)">Save As</button>
           <button type="button" @click="clearDocumentExternalState(activeDocument!.id)">
             Later
           </button>
@@ -777,9 +814,7 @@ onBeforeUnmount(() => {
           <span>{{ activeDocument.externalMessage }}</span>
         </div>
         <div class="document-warning-actions">
-          <button type="button" @click="saveDocumentAsCopy(activeDocument)">
-            Save As
-          </button>
+          <button type="button" @click="saveDocumentAsCopy(activeDocument)">Save As</button>
           <button type="button" @click="reloadDocumentFromDisk(activeDocument.id)">
             Retry reload
           </button>
@@ -821,8 +856,13 @@ onBeforeUnmount(() => {
         @set-active-pane="setActivePane"
       />
 
-      <footer v-if="showEditorView && appSettings.appearance.showStatusBar && !layoutSettings.focusMode" class="statusbar">
-        <span data-testid="open-documents-status">{{ formatOpenDocumentsStatus(documents.length, dirtyDocuments.length) }}</span>
+      <footer
+        v-if="showEditorView && appSettings.appearance.showStatusBar && !layoutSettings.focusMode"
+        class="statusbar"
+      >
+        <span data-testid="open-documents-status">{{
+          formatOpenDocumentsStatus(documents.length, dirtyDocuments.length)
+        }}</span>
         <span
           class="path-status"
           :title="activeDocument?.path ? cleanDisplayPath(activeDocument.path) : 'Scratch document'"

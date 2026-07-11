@@ -13,9 +13,15 @@ test('shows toolbar labels only in comfortable density', async ({ page }) => {
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
 
-  await expect(page.locator('.workspace-tree-actions').getByRole('button', { name: 'New scratch document' })).toBeVisible()
-  await expect(page.locator('.workspace-tree-actions').getByRole('button', { name: 'New file' })).toBeVisible()
-  await expect(page.locator('.workspace-tree-actions').getByRole('button', { name: 'New folder' })).toBeVisible()
+  await expect(
+    page.locator('.workspace-tree-actions').getByRole('button', { name: 'New scratch document' }),
+  ).toBeVisible()
+  await expect(
+    page.locator('.workspace-tree-actions').getByRole('button', { name: 'New file' }),
+  ).toBeVisible()
+  await expect(
+    page.locator('.workspace-tree-actions').getByRole('button', { name: 'New folder' }),
+  ).toBeVisible()
 
   const splitLabel = page.locator('button[title="Toggle split view"] span')
   await expect(splitLabel).toBeHidden()
@@ -61,52 +67,98 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
 
   await expect(workspaceRailLabel).toBeHidden()
   await expect(page.locator('.activity-button[title="Settings"]')).toHaveCount(1)
-  await expect(page.locator('.activity-main-items .activity-button[title="Settings"]')).toHaveCount(1)
-  await expect.poll(async () => page.locator('.activity-button[title="Workspace"]').evaluate((element) => {
-    const box = element.getBoundingClientRect()
-    return Math.abs(Math.round(box.width) - Math.round(box.height))
-  })).toBeLessThanOrEqual(1)
+  await expect(page.locator('.activity-main-items .activity-button[title="Settings"]')).toHaveCount(
+    1,
+  )
+  await expect
+    .poll(async () =>
+      page.locator('.activity-button[title="Workspace"]').evaluate((element) => {
+        const box = element.getBoundingClientRect()
+        return Math.abs(Math.round(box.width) - Math.round(box.height))
+      }),
+    )
+    .toBeLessThanOrEqual(1)
   await expect(scratchButton).toHaveAttribute('title', 'New scratch document')
   await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Source' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Headings' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('button', { name: 'Headings' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
 
   await dragBy(page.getByTestId('activity-splitter'), 100)
-  await expect.poll(async () => page.locator('.activity-bar').evaluate((element) => (
-    Math.round(element.getBoundingClientRect().width)
-  ))).toBeGreaterThanOrEqual(layoutSettingLimits.activityExpandedWidth.min)
+  await expect
+    .poll(async () =>
+      page
+        .locator('.activity-bar')
+        .evaluate((element) => Math.round(element.getBoundingClientRect().width)),
+    )
+    .toBeGreaterThanOrEqual(layoutSettingLimits.activityExpandedWidth.min)
   await expect(workspaceRailLabel).toBeVisible()
-  await expect.poll(async () => page.evaluate((storageKey) => (
-    window.localStorage.getItem(storageKey)
-  ), applicationLayoutStorageKey)).toContain('"activityRailMode":"expanded"')
-  await expect.poll(async () => page.evaluate((storageKey) => (
-    window.localStorage.getItem(storageKey)
-  ), applicationLayoutStorageKey)).toContain('"activityExpandedWidth"')
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        (storageKey) => window.localStorage.getItem(storageKey),
+        applicationLayoutStorageKey,
+      ),
+    )
+    .toContain('"activityRailMode":"expanded"')
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        (storageKey) => window.localStorage.getItem(storageKey),
+        applicationLayoutStorageKey,
+      ),
+    )
+    .toContain('"activityExpandedWidth"')
 
-  await page.getByRole('navigation', { name: 'Activity' }).getByRole('button', { name: 'Search' }).click()
-  await expect(page.getByRole('complementary', { name: 'Search' })).toContainText('Search will appear here')
+  await page
+    .getByRole('navigation', { name: 'Activity' })
+    .getByRole('button', { name: 'Search' })
+    .click()
+  await expect(page.getByRole('complementary', { name: 'Search' })).toContainText(
+    'Search will appear here',
+  )
   await expect(page.getByTestId('document-title')).toHaveText('README.md')
 
-  await page.getByRole('navigation', { name: 'Activity' }).getByRole('button', { name: 'Create' }).click()
-  await expect(page.getByRole('complementary', { name: 'Create' })).toContainText('Document templates will appear here')
+  await page
+    .getByRole('navigation', { name: 'Activity' })
+    .getByRole('button', { name: 'Create' })
+    .click()
+  await expect(page.getByRole('complementary', { name: 'Create' })).toContainText(
+    'Document templates will appear here',
+  )
   await expect(page.getByTestId('document-title')).toHaveText('README.md')
 
-  await page.getByRole('navigation', { name: 'Activity' }).getByRole('button', { name: 'Workspace' }).click()
+  await page
+    .getByRole('navigation', { name: 'Activity' })
+    .getByRole('button', { name: 'Workspace' })
+    .click()
 
   await page.getByRole('button', { name: 'Collapse rail' }).click()
   await expect(workspaceRailLabel).toBeHidden()
   const closeSidebarButton = page.getByRole('button', { name: 'Close sidebar' })
   await expect(closeSidebarButton.locator('span')).toBeHidden()
-  await expect.poll(async () => closeSidebarButton.evaluate((button) => {
-    const sidebar = button.closest('.workspace-sidebar')!
-    const buttonRect = button.getBoundingClientRect()
-    const sidebarRect = sidebar.getBoundingClientRect()
-    return Math.abs(buttonRect.width - sidebarRect.width) <= 1
-      && Math.abs(buttonRect.bottom - sidebarRect.bottom) <= 1
-  })).toBe(true)
-  await expect.poll(async () => page.locator('.activity-bar').evaluate((element) => (
-    Math.round(element.getBoundingClientRect().width)
-  ))).toBeLessThanOrEqual(layoutSettingLimits.activityCompactWidth.max)
+  await expect
+    .poll(async () =>
+      closeSidebarButton.evaluate((button) => {
+        const sidebar = button.closest('.workspace-sidebar')!
+        const buttonRect = button.getBoundingClientRect()
+        const sidebarRect = sidebar.getBoundingClientRect()
+        return (
+          Math.abs(buttonRect.width - sidebarRect.width) <= 1 &&
+          Math.abs(buttonRect.bottom - sidebarRect.bottom) <= 1
+        )
+      }),
+    )
+    .toBe(true)
+  await expect
+    .poll(async () =>
+      page
+        .locator('.activity-bar')
+        .evaluate((element) => Math.round(element.getBoundingClientRect().width)),
+    )
+    .toBeLessThanOrEqual(layoutSettingLimits.activityCompactWidth.max)
 
   await dragBy(page.locator('.sidebar-splitter'), -160)
   await expect(scratchLabel).toBeHidden()
@@ -118,7 +170,9 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
   await expect(scratchLabel).toBeVisible()
 })
 
-test('switches sidebar screens and restores a closed sidebar from activity rail', async ({ page }) => {
+test('switches sidebar screens and restores a closed sidebar from activity rail', async ({
+  page,
+}) => {
   await openApp(page)
 
   const activity = page.getByRole('navigation', { name: 'Activity' })
@@ -127,15 +181,25 @@ test('switches sidebar screens and restores a closed sidebar from activity rail'
 
   await page.getByRole('button', { name: 'Close sidebar' }).click()
   await expect(page.locator('.workspace-sidebar')).toHaveCount(0)
-  await expect.poll(async () => page.evaluate((storageKey) => (
-    window.localStorage.getItem(storageKey)
-  ), applicationSettingsStorageKey)).toContain('"showSidebar":false')
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        (storageKey) => window.localStorage.getItem(storageKey),
+        applicationSettingsStorageKey,
+      ),
+    )
+    .toContain('"showSidebar":false')
 
   await activity.getByRole('button', { name: 'Create' }).click()
   await expect(page.getByRole('complementary', { name: 'Create' })).toBeVisible()
-  await expect.poll(async () => page.evaluate((storageKey) => (
-    window.localStorage.getItem(storageKey)
-  ), applicationSettingsStorageKey)).toContain('"showSidebar":true')
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        (storageKey) => window.localStorage.getItem(storageKey),
+        applicationSettingsStorageKey,
+      ),
+    )
+    .toContain('"showSidebar":true')
 
   await activity.getByRole('button', { name: 'Settings' }).click()
   await expect(page.getByRole('complementary', { name: 'Settings' })).toBeVisible()
@@ -162,18 +226,28 @@ test('keeps sidebar resize limits honest while compacting narrow windows', async
     },
   })
 
-  await expect.poll(async () => page.locator('.workspace-sidebar').evaluate((element) => (
-    Math.round(element.getBoundingClientRect().width)
-  ))).toBe(layoutSettingLimits.sidebarWidth.max)
+  await expect
+    .poll(async () =>
+      page
+        .locator('.workspace-sidebar')
+        .evaluate((element) => Math.round(element.getBoundingClientRect().width)),
+    )
+    .toBe(layoutSettingLimits.sidebarWidth.max)
 
   await page.setViewportSize({ width: 900, height: 620 })
-  await expect.poll(async () => page.locator('.workspace-sidebar').evaluate((element) => (
-    Math.round(element.getBoundingClientRect().width)
-  ))).toBeLessThanOrEqual(Math.round(900 * 0.3))
+  await expect
+    .poll(async () =>
+      page
+        .locator('.workspace-sidebar')
+        .evaluate((element) => Math.round(element.getBoundingClientRect().width)),
+    )
+    .toBeLessThanOrEqual(Math.round(900 * 0.3))
   await expect(page.locator('.topbar .labelled-icon-button span').first()).toBeHidden()
 })
 
-test('resizes layout separators with keyboard and exposes values to assistive tech', async ({ page }) => {
+test('resizes layout separators with keyboard and exposes values to assistive tech', async ({
+  page,
+}) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
@@ -181,27 +255,49 @@ test('resizes layout separators with keyboard and exposes values to assistive te
   const activitySeparator = page.getByRole('separator', { name: 'Resize activity bar' })
   await expect(activitySeparator).toHaveAttribute('tabindex', '0')
   await expect(activitySeparator).toHaveAttribute('aria-orientation', 'vertical')
-  await expect(activitySeparator).toHaveAttribute('aria-valuemin', String(layoutSettingLimits.activityCompactWidth.min))
-  await expect(activitySeparator).toHaveAttribute('aria-valuemax', String(layoutSettingLimits.activityCompactWidth.max))
-  await expect(activitySeparator).toHaveAttribute('aria-valuenow', String(layoutSettingLimits.activityCompactWidth.fallback))
+  await expect(activitySeparator).toHaveAttribute(
+    'aria-valuemin',
+    String(layoutSettingLimits.activityCompactWidth.min),
+  )
+  await expect(activitySeparator).toHaveAttribute(
+    'aria-valuemax',
+    String(layoutSettingLimits.activityCompactWidth.max),
+  )
+  await expect(activitySeparator).toHaveAttribute(
+    'aria-valuenow',
+    String(layoutSettingLimits.activityCompactWidth.fallback),
+  )
   await activitySeparator.focus()
   await page.keyboard.press('ArrowRight')
   await page.keyboard.press('ArrowRight')
-  await expect.poll(async () => readPersistedLayout(page)).toMatchObject({
-    activityRailMode: 'expanded',
-  })
-  await expect(activitySeparator).toHaveAttribute('aria-valuemin', String(layoutSettingLimits.activityExpandedWidth.min))
+  await expect
+    .poll(async () => readPersistedLayout(page))
+    .toMatchObject({
+      activityRailMode: 'expanded',
+    })
+  await expect(activitySeparator).toHaveAttribute(
+    'aria-valuemin',
+    String(layoutSettingLimits.activityExpandedWidth.min),
+  )
 
   const sidebarSeparator = page.getByRole('separator', { name: 'Resize sidebar' })
   await expect(sidebarSeparator).toHaveAttribute('tabindex', '0')
   await expect(sidebarSeparator).toHaveAttribute('aria-orientation', 'vertical')
-  await expect(sidebarSeparator).toHaveAttribute('aria-valuemin', String(layoutSettingLimits.sidebarWidth.min))
-  await expect(sidebarSeparator).toHaveAttribute('aria-valuemax', String(layoutSettingLimits.sidebarWidth.max))
+  await expect(sidebarSeparator).toHaveAttribute(
+    'aria-valuemin',
+    String(layoutSettingLimits.sidebarWidth.min),
+  )
+  await expect(sidebarSeparator).toHaveAttribute(
+    'aria-valuemax',
+    String(layoutSettingLimits.sidebarWidth.max),
+  )
   await sidebarSeparator.focus()
   await page.keyboard.press('Shift+ArrowLeft')
-  await expect.poll(async () => readPersistedLayout(page)).toMatchObject({
-    sidebarWidth: layoutSettingLimits.sidebarWidth.fallback - 48,
-  })
+  await expect
+    .poll(async () => readPersistedLayout(page))
+    .toMatchObject({
+      sidebarWidth: layoutSettingLimits.sidebarWidth.fallback - 48,
+    })
 
   await page.locator('button[title="Toggle split view"]').click()
   const splitSeparator = page.getByRole('separator', { name: 'Resize editor panes' })
@@ -212,8 +308,10 @@ test('resizes layout separators with keyboard and exposes values to assistive te
   await expect(splitSeparator).toHaveAttribute('aria-valuenow', '50')
   await splitSeparator.focus()
   await page.keyboard.press('ArrowRight')
-  await expect.poll(async () => readPersistedLayout(page)).toMatchObject({
-    splitRatio: 0.525,
-  })
+  await expect
+    .poll(async () => readPersistedLayout(page))
+    .toMatchObject({
+      splitRatio: 0.525,
+    })
   await expect(splitSeparator).toHaveAttribute('aria-valuenow', '53')
 })

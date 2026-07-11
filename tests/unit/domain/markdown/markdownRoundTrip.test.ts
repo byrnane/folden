@@ -120,7 +120,12 @@ type BlockSemanticNode =
   | { type: 'paragraph'; content: InlineSemanticNode[] }
   | { type: 'heading'; depth: number; content: InlineSemanticNode[] }
   | { type: 'blockquote'; content: BlockSemanticNode[] }
-  | { type: 'list'; ordered: boolean; start: number | null; items: { checked: boolean | null; content: BlockSemanticNode[] }[] }
+  | {
+      type: 'list'
+      ordered: boolean
+      start: number | null
+      items: { checked: boolean | null; content: BlockSemanticNode[] }[]
+    }
   | { type: 'table'; header: InlineSemanticNode[][]; rows: InlineSemanticNode[][][] }
   | { type: 'code'; lang: string | null; text: string }
   | { type: 'hr' }
@@ -213,7 +218,8 @@ function normalizeBlockTokens(tokens: Token[]): BlockSemanticNode[] {
         nodes.push({
           type: 'list',
           ordered: token.type === 'list' ? token.ordered : false,
-          start: token.type === 'list' && token.ordered ? (token.start === '' ? 1 : token.start) : null,
+          start:
+            token.type === 'list' && token.ordered ? (token.start === '' ? 1 : token.start) : null,
           items: token.items.map((item: Tokens.ListItem) => ({
             checked: typeof item.checked === 'boolean' ? item.checked : null,
             content: normalizeBlockTokens(item.tokens ?? []),
@@ -223,7 +229,9 @@ function normalizeBlockTokens(tokens: Token[]): BlockSemanticNode[] {
       case 'table':
         nodes.push({
           type: 'table',
-          header: (token.header as TableCellToken[]).map((cell) => normalizeInlineTokens(cell.tokens ?? [])),
+          header: (token.header as TableCellToken[]).map((cell) =>
+            normalizeInlineTokens(cell.tokens ?? []),
+          ),
           rows: (token.rows as TableCellToken[][]).map((row) =>
             row.map((cell) => normalizeInlineTokens(cell.tokens ?? [])),
           ),
@@ -326,10 +334,9 @@ function mergeAdjacentTextNodes(nodes: InlineSemanticNode[]) {
 describe('markdown round trip', () => {
   it('preserves supported fixtures semantically', () => {
     for (const fixture of supportedFixtures) {
-      expect(
-        normalizeMarkdownSemantics(roundTripMarkdown(fixture.source)),
-        fixture.name,
-      ).toEqual(normalizeMarkdownSemantics(fixture.source))
+      expect(normalizeMarkdownSemantics(roundTripMarkdown(fixture.source)), fixture.name).toEqual(
+        normalizeMarkdownSemantics(fixture.source),
+      )
     }
   })
 

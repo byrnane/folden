@@ -8,47 +8,53 @@ import {
 function entry(value: Omit<WorkspaceEntry, 'hasOpenableDescendants'>): WorkspaceEntry {
   return {
     ...value,
-    hasOpenableDescendants: value.kind === 'directory'
-      ? value.children.some((child) => child.kind === 'file' || child.hasOpenableDescendants)
-      : false,
+    hasOpenableDescendants:
+      value.kind === 'directory'
+        ? value.children.some((child) => child.kind === 'file' || child.hasOpenableDescendants)
+        : false,
   }
 }
 
 describe('workspace entry filters', () => {
   it('removes ignored entries recursively without touching other files', () => {
-    expect(filterWorkspaceEntriesByIgnoredNames([
-      entry({
-        name: '.git',
-        path: '.git',
-        kind: 'directory',
-        children: [],
-      }),
-      entry({
-        name: 'notes',
-        path: 'notes',
-        kind: 'directory',
-        children: [
+    expect(
+      filterWorkspaceEntriesByIgnoredNames(
+        [
           entry({
-            name: '.cache',
-            path: 'notes\\.cache',
+            name: '.git',
+            path: '.git',
             kind: 'directory',
             children: [],
           }),
           entry({
-            name: 'daily.md',
-            path: 'notes\\daily.md',
+            name: 'notes',
+            path: 'notes',
+            kind: 'directory',
+            children: [
+              entry({
+                name: '.cache',
+                path: 'notes\\.cache',
+                kind: 'directory',
+                children: [],
+              }),
+              entry({
+                name: 'daily.md',
+                path: 'notes\\daily.md',
+                kind: 'file',
+                children: [],
+              }),
+            ],
+          }),
+          entry({
+            name: 'README.md',
+            path: 'README.md',
             kind: 'file',
             children: [],
           }),
         ],
-      }),
-      entry({
-        name: 'README.md',
-        path: 'README.md',
-        kind: 'file',
-        children: [],
-      }),
-    ], ['.git', '.cache'])).toEqual([
+        ['.git', '.cache'],
+      ),
+    ).toEqual([
       entry({
         name: 'notes',
         path: 'notes',
@@ -72,27 +78,33 @@ describe('workspace entry filters', () => {
   })
 
   it('removes ignored workspace paths recursively', () => {
-    expect(filterWorkspaceEntries([
-      entry({
-        name: 'notes',
-        path: 'notes',
-        kind: 'directory',
-        children: [
+    expect(
+      filterWorkspaceEntries(
+        [
           entry({
-            name: 'daily.md',
-            path: 'notes\\daily.md',
+            name: 'notes',
+            path: 'notes',
+            kind: 'directory',
+            children: [
+              entry({
+                name: 'daily.md',
+                path: 'notes\\daily.md',
+                kind: 'file',
+                children: [],
+              }),
+            ],
+          }),
+          entry({
+            name: 'README.md',
+            path: 'README.md',
             kind: 'file',
             children: [],
           }),
         ],
-      }),
-      entry({
-        name: 'README.md',
-        path: 'README.md',
-        kind: 'file',
-        children: [],
-      }),
-    ], [], ['notes'])).toEqual([
+        [],
+        ['notes'],
+      ),
+    ).toEqual([
       entry({
         name: 'README.md',
         path: 'README.md',
@@ -103,21 +115,27 @@ describe('workspace entry filters', () => {
   })
 
   it('recomputes directory openable state after filtering ignored paths', () => {
-    expect(filterWorkspaceEntries([
-      entry({
-        name: 'notes',
-        path: 'notes',
-        kind: 'directory',
-        children: [
+    expect(
+      filterWorkspaceEntries(
+        [
           entry({
-            name: 'daily.md',
-            path: 'notes\\daily.md',
-            kind: 'file',
-            children: [],
+            name: 'notes',
+            path: 'notes',
+            kind: 'directory',
+            children: [
+              entry({
+                name: 'daily.md',
+                path: 'notes\\daily.md',
+                kind: 'file',
+                children: [],
+              }),
+            ],
           }),
         ],
-      }),
-    ], [], ['notes\\daily.md'])).toEqual([
+        [],
+        ['notes\\daily.md'],
+      ),
+    ).toEqual([
       {
         name: 'notes',
         path: 'notes',

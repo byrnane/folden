@@ -1,4 +1,3 @@
-import { convertFileSrc } from '@tauri-apps/api/core'
 import { isRelativeMarkdownUrl, isRemoteImageUrl } from './markdownSafety'
 
 export type ResolvedVisualImage =
@@ -11,7 +10,7 @@ export type ResolvedVisualImage =
       reason: string
     }
 
-type ResolveVisualImageSourceOptions = {
+export type ResolveVisualImageSourceOptions = {
   source: string | null | undefined
   documentPath: string | null
   workspaceRootPath: string | null
@@ -79,16 +78,6 @@ function splitPathSuffix(value: string) {
   }
 }
 
-function canUseAssetProtocol() {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  return typeof (window as Window & {
-    __TAURI_INTERNALS__?: { convertFileSrc?: (filePath: string, protocol?: string) => string }
-  }).__TAURI_INTERNALS__?.convertFileSrc === 'function'
-}
-
 export function resolveRelativeImagePath(
   source: string,
   documentPath: string | null,
@@ -114,12 +103,10 @@ export function resolveRelativeImagePath(
   return `${resolveWindowsPath(basePath, relativePath)}${suffix}`
 }
 
-export function resolveVisualImageSource({
-  source,
-  documentPath,
-  workspaceRootPath,
-  allowRemoteImages,
-}: ResolveVisualImageSourceOptions): ResolvedVisualImage {
+export function resolveVisualImageSource(
+  { source, documentPath, workspaceRootPath, allowRemoteImages }: ResolveVisualImageSourceOptions,
+  convertLocalPath: (path: string) => string = (path) => path,
+): ResolvedVisualImage {
   const normalizedSource = source?.trim() ?? ''
 
   if (!normalizedSource) {
@@ -166,6 +153,6 @@ export function resolveVisualImageSource({
 
   return {
     kind: 'image',
-    renderedSrc: canUseAssetProtocol() ? convertFileSrc(resolvedPath) : resolvedPath,
+    renderedSrc: convertLocalPath(resolvedPath),
   }
 }

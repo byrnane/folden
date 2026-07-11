@@ -68,12 +68,18 @@ export function createExternalChangesController() {
     }
 
     if (event.kind === 'remove') {
-      routes.markDocumentMissing(document.id, `${document.name} was moved or deleted outside Folden.`)
+      routes.markDocumentMissing(
+        document.id,
+        `${document.name} was moved or deleted outside Folden.`,
+      )
       return
     }
 
     if (isDocumentDirty(document)) {
-      routes.markDocumentConflict(document.id, `${document.name} changed on disk while you have unsaved edits.`)
+      routes.markDocumentConflict(
+        document.id,
+        `${document.name} changed on disk while you have unsaved edits.`,
+      )
       return
     }
 

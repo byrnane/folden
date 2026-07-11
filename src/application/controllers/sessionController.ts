@@ -37,10 +37,15 @@ export function createSessionController(hasNativeRuntime: boolean) {
   }
 
   function discardPendingRecoveryEntries(keys: Set<string>) {
-    pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter((entry) => !keys.has(entry.key))
+    pendingRecoveryEntries.value = pendingRecoveryEntries.value.filter(
+      (entry) => !keys.has(entry.key),
+    )
   }
 
-  function documentWorkspaceRootPath(document: OpenDocument, workspace: Pick<Workspace, 'id' | 'rootPath'> | null) {
+  function documentWorkspaceRootPath(
+    document: OpenDocument,
+    workspace: Pick<Workspace, 'id' | 'rootPath'> | null,
+  ) {
     if (document.workspaceId && workspace?.id === document.workspaceId) {
       return workspace.rootPath
     }
@@ -99,11 +104,11 @@ export function createSessionController(hasNativeRuntime: boolean) {
           .map((document) => buildSessionDocumentKey(document, input.normalizePath)),
         activeDocumentKey: pane.activeDocumentId
           ? (() => {
-            const activeDocumentRecord = input.getDocument(pane.activeDocumentId)
-            return activeDocumentRecord
-              ? buildSessionDocumentKey(activeDocumentRecord, input.normalizePath)
-              : null
-          })()
+              const activeDocumentRecord = input.getDocument(pane.activeDocumentId)
+              return activeDocumentRecord
+                ? buildSessionDocumentKey(activeDocumentRecord, input.normalizePath)
+                : null
+            })()
           : null,
       })),
       documents: documentRecords,
@@ -121,18 +126,21 @@ export function createSessionController(hasNativeRuntime: boolean) {
     const now = input.now ?? Date.now
     return input.documents
       .filter((document) => input.isDirty(document))
-      .map((document) => ({
-        key: buildSessionDocumentKey(document, input.normalizePath),
-        kind: sessionDocumentKind(document),
-        path: document.path,
-        workspaceRootPath: documentWorkspaceRootPath(document, input.workspace),
-        relativePath: document.relativePath,
-        name: document.name,
-        content: document.content,
-        fileFormat: document.fileFormat,
-        fingerprint: document.diskFingerprint,
-        updatedAtMs: now(),
-      } satisfies RecoverySnapshot))
+      .map(
+        (document) =>
+          ({
+            key: buildSessionDocumentKey(document, input.normalizePath),
+            kind: sessionDocumentKind(document),
+            path: document.path,
+            workspaceRootPath: documentWorkspaceRootPath(document, input.workspace),
+            relativePath: document.relativePath,
+            name: document.name,
+            content: document.content,
+            fileFormat: document.fileFormat,
+            fingerprint: document.diskFingerprint,
+            updatedAtMs: now(),
+          }) satisfies RecoverySnapshot,
+      )
   }
 
   function buildPersistedRecoverySnapshots(input: {
@@ -143,13 +151,14 @@ export function createSessionController(hasNativeRuntime: boolean) {
     excludedKeys?: Set<string>
   }) {
     const excludedKeys = input.excludedKeys ?? new Set<string>()
-    const currentEntries = buildCurrentRecoverySnapshots(input)
-      .filter((entry) => !excludedKeys.has(entry.key))
+    const currentEntries = buildCurrentRecoverySnapshots(input).filter(
+      (entry) => !excludedKeys.has(entry.key),
+    )
     const currentKeys = new Set(currentEntries.map((entry) => entry.key))
     const mergedEntries = [
-      ...pendingRecoveryEntries.value.filter((entry) => (
-        !excludedKeys.has(entry.key) && !currentKeys.has(entry.key)
-      )),
+      ...pendingRecoveryEntries.value.filter(
+        (entry) => !excludedKeys.has(entry.key) && !currentKeys.has(entry.key),
+      ),
       ...currentEntries,
     ]
 

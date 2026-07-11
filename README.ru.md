@@ -6,10 +6,10 @@ Folden — локальный настольный редактор Markdown и 
 
 В основе проекта простой контракт:
 
-* пользовательские данные остаются на машине пользователя;
-* обычные файлы остаются источником истины;
-* Markdown остаётся читаемым вне Folden;
-* основные сценарии должны быть прямыми и предсказуемыми.
+- пользовательские данные остаются на машине пользователя;
+- обычные файлы остаются источником истины;
+- Markdown остаётся читаемым вне Folden;
+- основные сценарии должны быть прямыми и предсказуемыми.
 
 ## Что умеет
 
@@ -19,10 +19,10 @@ Folden не является облачным сервисом заметок, �
 
 ## Требования
 
-* Node.js и npm.
-* Rust toolchain с Cargo.
-* Windows C++ Build Tools с workload `Desktop development with C++`.
-* Microsoft Edge WebView2 Runtime.
+- Node.js и npm.
+- Rust toolchain с Cargo.
+- Windows C++ Build Tools с workload `Desktop development with C++`.
+- Microsoft Edge WebView2 Runtime.
 
 ## Быстрый старт
 
@@ -51,9 +51,9 @@ cargo test
 
 ## Документация
 
-* [docs/PRODUCT.ru.md](docs/PRODUCT.ru.md) — продуктовые принципы, текущая функциональность и границы.
-* [docs/DEVELOPMENT.ru.md](docs/DEVELOPMENT.ru.md) — настройка, скрипты, проверки, CI, сборки и релизы.
-* [docs/ARCHITECTURE.ru.md](docs/ARCHITECTURE.ru.md) — владение кодом, направление зависимостей и карта тестов.
-* [docs/RELEASE.ru.md](docs/RELEASE.ru.md) — чек-лист релиза.
-* [docs/DOGFOODING.ru.md](docs/DOGFOODING.ru.md) — шаблон dogfooding.
-* [CHANGELOG.md](CHANGELOG.md) — история релизов.
+- [docs/PRODUCT.ru.md](docs/PRODUCT.ru.md) — продуктовые принципы, текущая функциональность и границы.
+- [docs/DEVELOPMENT.ru.md](docs/DEVELOPMENT.ru.md) — настройка, скрипты, проверки, CI, сборки и релизы.
+- [docs/ARCHITECTURE.ru.md](docs/ARCHITECTURE.ru.md) — владение кодом, направление зависимостей и карта тестов.
+- [docs/RELEASE.ru.md](docs/RELEASE.ru.md) — чек-лист релиза.
+- [docs/DOGFOODING.ru.md](docs/DOGFOODING.ru.md) — шаблон dogfooding.
+- [CHANGELOG.md](CHANGELOG.md) — история релизов.

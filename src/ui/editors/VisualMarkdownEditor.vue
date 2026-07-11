@@ -16,6 +16,7 @@ import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
 import { toVisualSelectionState } from '../../domain/documents/editorViewState'
 import { resolveVisualImageSource } from '../../domain/markdown/imageRendering'
+import { convertVisualImagePath } from '../../infrastructure/tauri/visualImageAssets'
 import { validateLinkTarget } from '../../domain/markdown/markdownSafety'
 import type { EditorCommand } from '../../application/types/shell'
 import {
@@ -87,7 +88,10 @@ function normalizeVisualMarkdownForComparison(value: string) {
 }
 
 function isVisuallyEquivalentMarkdown(firstValue: string, secondValue: string) {
-  return normalizeVisualMarkdownForComparison(firstValue) === normalizeVisualMarkdownForComparison(secondValue)
+  return (
+    normalizeVisualMarkdownForComparison(firstValue) ===
+    normalizeVisualMarkdownForComparison(secondValue)
+  )
 }
 
 function applyExternalContent(value: string, revision: number, preserveViewState: boolean) {
@@ -139,12 +143,15 @@ function createImageNodeView(
     dom.contentEditable = 'false'
 
     function renderImage() {
-      const resolvedImage = resolveVisualImageSource({
-        source,
-        documentPath,
-        workspaceRootPath,
-        allowRemoteImages,
-      })
+      const resolvedImage = resolveVisualImageSource(
+        {
+          source,
+          documentPath,
+          workspaceRootPath,
+          allowRemoteImages,
+        },
+        convertVisualImagePath,
+      )
 
       dom.replaceChildren()
 
@@ -179,25 +186,29 @@ function createImageNodeView(
       image.alt = ''
       image.loading = 'lazy'
 
-      image.addEventListener('error', () => {
-        dom.dataset.imageState = 'error'
-        dom.replaceChildren()
+      image.addEventListener(
+        'error',
+        () => {
+          dom.dataset.imageState = 'error'
+          dom.replaceChildren()
 
-        const placeholder = document.createElement('div')
-        placeholder.className = 'visual-image-placeholder visual-image-placeholder-error'
+          const placeholder = document.createElement('div')
+          placeholder.className = 'visual-image-placeholder visual-image-placeholder-error'
 
-        const title = document.createElement('strong')
-        title.textContent = 'Image could not be loaded'
-        placeholder.append(title)
+          const title = document.createElement('strong')
+          title.textContent = 'Image could not be loaded'
+          placeholder.append(title)
 
-        const message = document.createElement('span')
-        message.textContent = source?.trim()
-          ? `Folden kept the Markdown unchanged, but the preview failed for ${source.trim()}.`
-          : 'Folden kept the Markdown unchanged, but the preview failed.'
-        placeholder.append(message)
+          const message = document.createElement('span')
+          message.textContent = source?.trim()
+            ? `Folden kept the Markdown unchanged, but the preview failed for ${source.trim()}.`
+            : 'Folden kept the Markdown unchanged, but the preview failed.'
+          placeholder.append(message)
 
-        dom.append(placeholder)
-      }, { once: true })
+          dom.append(placeholder)
+        },
+        { once: true },
+      )
 
       dom.append(image)
     }
@@ -220,12 +231,13 @@ function createImageNodeView(
 function createEditor(element: HTMLDivElement) {
   const VisualImage = Image.extend({
     addNodeView() {
-      return ({ node }) => createImageNodeView(
-        node.attrs.src as string | null,
-        props.allowRemoteImages,
-        props.documentPath,
-        props.workspaceRootPath,
-      )()
+      return ({ node }) =>
+        createImageNodeView(
+          node.attrs.src as string | null,
+          props.allowRemoteImages,
+          props.documentPath,
+          props.workspaceRootPath,
+        )()
     },
   })
 
@@ -322,16 +334,19 @@ function findAnchorTarget(hash: string) {
     return null
   }
 
-  const exactIdTarget = Array.from(root.querySelectorAll<HTMLElement>('[id]'))
-    .find((element) => element.id === anchor)
+  const exactIdTarget = Array.from(root.querySelectorAll<HTMLElement>('[id]')).find(
+    (element) => element.id === anchor,
+  )
 
   if (exactIdTarget) {
     return exactIdTarget
   }
 
-  return Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'))
-    .find((element) => slugifyHeading(element.textContent ?? '') === anchor)
-    ?? null
+  return (
+    Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')).find(
+      (element) => slugifyHeading(element.textContent ?? '') === anchor,
+    ) ?? null
+  )
 }
 
 function openVisualLink(href: string) {
@@ -366,12 +381,16 @@ function updateMapViewport() {
   const scrollHeight = scrollElement.scrollHeight
   const clientHeight = scrollElement.clientHeight
 
-  mapLinePositions.value = Object.fromEntries(headings.value.map((heading) => {
-    const element = findAnchorTarget(`#${encodeURIComponent(heading.id)}`)
-    const rect = element?.getBoundingClientRect()
-    const position = rect ? rect.top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop : 0
-    return [heading.line - 1, Math.min(Math.max((position / scrollHeight) * 100, 0), 100)]
-  }))
+  mapLinePositions.value = Object.fromEntries(
+    headings.value.map((heading) => {
+      const element = findAnchorTarget(`#${encodeURIComponent(heading.id)}`)
+      const rect = element?.getBoundingClientRect()
+      const position = rect
+        ? rect.top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop
+        : 0
+      return [heading.line - 1, Math.min(Math.max((position / scrollHeight) * 100, 0), 100)]
+    }),
+  )
 
   if (scrollHeight <= 0 || clientHeight <= 0 || scrollHeight <= clientHeight) {
     mapViewport.value = { top: 0, height: 100 }
@@ -394,11 +413,16 @@ function updateActiveHeading() {
 
   const scrollElement = scrollHost.value
   const scrollRect = scrollElement.getBoundingClientRect()
-  const positions = Object.fromEntries(headings.value.map((heading) => {
-    const element = findAnchorTarget(`#${encodeURIComponent(heading.id)}`)
-    const rect = element?.getBoundingClientRect()
-    return [heading.id, rect ? rect.top - scrollRect.top + scrollElement.scrollTop : Number.POSITIVE_INFINITY]
-  }))
+  const positions = Object.fromEntries(
+    headings.value.map((heading) => {
+      const element = findAnchorTarget(`#${encodeURIComponent(heading.id)}`)
+      const rect = element?.getBoundingClientRect()
+      return [
+        heading.id,
+        rect ? rect.top - scrollRect.top + scrollElement.scrollTop : Number.POSITIVE_INFINITY,
+      ]
+    }),
+  )
   activeHeadingId.value = findActiveHeading(headings.value, positions, scrollElement.scrollTop)
 }
 
@@ -407,7 +431,8 @@ function scrollMapToRatio(ratio: number) {
     return
   }
 
-  scrollHost.value.scrollTop = ratio * (scrollHost.value.scrollHeight - scrollHost.value.clientHeight)
+  scrollHost.value.scrollTop =
+    ratio * (scrollHost.value.scrollHeight - scrollHost.value.clientHeight)
   updateMapViewport()
 }
 
@@ -549,12 +574,7 @@ async function setLink() {
   }
 
   runCommand(() =>
-    editor.value
-      ?.chain()
-      .focus()
-      .extendMarkRange('link')
-      .setLink({ href: url.trim() })
-      .run(),
+    editor.value?.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run(),
   )
 }
 
@@ -588,7 +608,9 @@ function captureViewState() {
   }
 }
 
-function restoreViewState(viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>) {
+function restoreViewState(
+  viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>,
+) {
   if (editor.value) {
     const nextMaxPosition = editor.value.state.doc.content.size
     const selection = toVisualSelectionState(viewState.selectionState, nextMaxPosition)
@@ -612,28 +634,46 @@ function restoreViewState(viewState: Pick<EditorViewSession, 'scrollTop' | 'sele
 
 function runEditorCommand(command: EditorCommand) {
   const commands: Record<EditorCommand, () => void | Promise<void>> = {
-    'heading-1': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 1 }).run()),
-    'heading-2': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 2 }).run()),
-    'heading-3': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 3 }).run()),
-    'heading-4': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 4 }).run()),
-    'heading-5': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 5 }).run()),
-    'heading-6': () => runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 6 }).run()),
+    'heading-1': () =>
+      runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 1 }).run()),
+    'heading-2': () =>
+      runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 2 }).run()),
+    'heading-3': () =>
+      runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 3 }).run()),
+    'heading-4': () =>
+      runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 4 }).run()),
+    'heading-5': () =>
+      runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 5 }).run()),
+    'heading-6': () =>
+      runCommand(() => editor.value?.chain().focus().toggleHeading({ level: 6 }).run()),
     bold: () => runCommand(() => editor.value?.chain().focus().toggleBold().run()),
     italic: () => runCommand(() => editor.value?.chain().focus().toggleItalic().run()),
     strike: () => runCommand(() => editor.value?.chain().focus().toggleStrike().run()),
     'inline-code': () => runCommand(() => editor.value?.chain().focus().toggleCode().run()),
-    'clear-formatting': () => runCommand(() => editor.value?.chain().focus().unsetAllMarks().clearNodes().run()),
+    'clear-formatting': () =>
+      runCommand(() => editor.value?.chain().focus().unsetAllMarks().clearNodes().run()),
     'bullet-list': () => runCommand(() => editor.value?.chain().focus().toggleBulletList().run()),
     'ordered-list': () => runCommand(() => editor.value?.chain().focus().toggleOrderedList().run()),
-    'task-list': () => runCommand(() => (editor.value?.chain().focus() as unknown as {
-      toggleTaskList: () => { run: () => boolean }
-    }).toggleTaskList().run()),
+    'task-list': () =>
+      runCommand(() =>
+        (
+          editor.value?.chain().focus() as unknown as {
+            toggleTaskList: () => { run: () => boolean }
+          }
+        )
+          .toggleTaskList()
+          .run(),
+      ),
     quote: () => runCommand(() => editor.value?.chain().focus().toggleBlockquote().run()),
     'code-block': () => runCommand(() => editor.value?.chain().focus().toggleCodeBlock().run()),
     link: () => setLink(),
     image: () => setImage(),
-    'horizontal-rule': () => runCommand(() => editor.value?.chain().focus().setHorizontalRule().run()),
-    'insert-table': () => runTableCommand((chain) => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()),
+    'horizontal-rule': () =>
+      runCommand(() => editor.value?.chain().focus().setHorizontalRule().run()),
+    'insert-table': () =>
+      runTableCommand((chain) =>
+        chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+      ),
     'add-row-before': () => runTableCommand((chain) => chain.addRowBefore().run()),
     'add-row-after': () => runTableCommand((chain) => chain.addRowAfter().run()),
     'delete-row': () => runTableCommand((chain) => chain.deleteRow().run()),
@@ -647,7 +687,9 @@ function runEditorCommand(command: EditorCommand) {
 }
 
 type TableCommandChain = {
-  insertTable: (options: { rows: number, cols: number, withHeaderRow: boolean }) => { run: () => boolean }
+  insertTable: (options: { rows: number; cols: number; withHeaderRow: boolean }) => {
+    run: () => boolean
+  }
   addRowBefore: () => { run: () => boolean }
   addRowAfter: () => { run: () => boolean }
   deleteRow: () => { run: () => boolean }

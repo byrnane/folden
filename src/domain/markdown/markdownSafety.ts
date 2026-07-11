@@ -54,8 +54,7 @@ function findLineMatches(
 }
 
 export function isRelativeMarkdownUrl(value: string) {
-  return /^(#|\/|\.{1,2}\/|[^:?#\s][^:\s]*)/.test(value)
-    && !/^[a-z][a-z0-9+.-]*:/i.test(value)
+  return /^(#|\/|\.{1,2}\/|[^:?#\s][^:\s]*)/.test(value) && !/^[a-z][a-z0-9+.-]*:/i.test(value)
 }
 
 export function normalizeLinkTarget(value: string) {
@@ -128,7 +127,12 @@ export function analyzeMarkdownSafety(source: string): MarkdownSafetyReport {
     const firstLine = source.split(/\r?\n/)[0] ?? ''
 
     if (/^(---|\+\+\+)\s*$/.test(firstLine)) {
-      addFeature(unsupportedFeatures, 'frontmatter', 1, 'Frontmatter is not supported in Visual mode.')
+      addFeature(
+        unsupportedFeatures,
+        'frontmatter',
+        1,
+        'Frontmatter is not supported in Visual mode.',
+      )
     }
   }
 

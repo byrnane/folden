@@ -13,12 +13,20 @@ test('exports a local diagnostics report from settings', async ({ page }) => {
   await page.getByRole('button', { name: 'Appearance' }).click()
   await page.getByTestId('export-diagnostics').click()
 
-  await expect(page.locator('.warning-message')).toContainText('Diagnostics exported to C:\\FoldenAppData\\folden-diagnostics.txt')
-  await expect.poll(async () => page.evaluate(() => (
-    (window as Window & {
-      __FOLDEN_TAURI_MOCK__?: { getDiagnosticExportCount: () => number }
-    }).__FOLDEN_TAURI_MOCK__?.getDiagnosticExportCount()
-  ))).toBe(1)
+  await expect(page.locator('.warning-message')).toContainText(
+    'Diagnostics exported to C:\\FoldenAppData\\folden-diagnostics.txt',
+  )
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        (
+          window as Window & {
+            __FOLDEN_TAURI_MOCK__?: { getDiagnosticExportCount: () => number }
+          }
+        ).__FOLDEN_TAURI_MOCK__?.getDiagnosticExportCount(),
+      ),
+    )
+    .toBe(1)
 })
 
 test('loads persisted settings before opening a workspace', async ({ page }) => {
@@ -52,12 +60,19 @@ test('loads persisted settings before opening a workspace', async ({ page }) => 
   await page.locator('button[title="Settings"]').click()
   await page.getByRole('button', { name: 'Files' }).click()
   await page.getByRole('checkbox', { name: /^Autosave / }).uncheck()
-  await expect.poll(async () => page.evaluate((storageKey) => (
-    window.localStorage.getItem(storageKey)
-  ), applicationSettingsStorageKey)).toContain('"enabled":false')
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        (storageKey) => window.localStorage.getItem(storageKey),
+        applicationSettingsStorageKey,
+      ),
+    )
+    .toContain('"enabled":false')
 })
 
-test('keeps settings number input editable and stores autosave delay as milliseconds', async ({ page }) => {
+test('keeps settings number input editable and stores autosave delay as milliseconds', async ({
+  page,
+}) => {
   await openApp(page)
   await page.locator('button[title="Settings"]').click()
   await expect(page.locator('.topbar')).toHaveCount(0)
@@ -73,13 +88,20 @@ test('keeps settings number input editable and stores autosave delay as millisec
 
   await page.getByRole('button', { name: 'Files' }).click()
   const autosaveDelay = page.getByLabel('Autosave delay')
-  await expect(autosaveDelay).toHaveValue(String(applicationSettingLimits.autosaveDebounceMs.fallback / 1000))
+  await expect(autosaveDelay).toHaveValue(
+    String(applicationSettingLimits.autosaveDebounceMs.fallback / 1000),
+  )
   await autosaveDelay.fill('2.5')
   await autosaveDelay.blur()
 
-  await expect.poll(async () => page.evaluate((storageKey) => (
-    window.localStorage.getItem(storageKey)
-  ), applicationSettingsStorageKey)).toContain('"debounceMs":2500')
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        (storageKey) => window.localStorage.getItem(storageKey),
+        applicationSettingsStorageKey,
+      ),
+    )
+    .toContain('"debounceMs":2500')
 })
 
 test('autosaves existing files but does not autosave scratch documents', async ({ page }) => {
@@ -98,15 +120,26 @@ test('autosaves existing files but does not autosave scratch documents', async (
   await page.keyboard.type('\nAutosaved change.\n')
 
   await expect(page.getByTestId('open-documents-status')).toContainText('1 unsaved')
-  await expect(page.getByTestId('open-documents-status')).not.toContainText('unsaved', { timeout: 5000 })
+  await expect(page.getByTestId('open-documents-status')).not.toContainText('unsaved', {
+    timeout: 5000,
+  })
 
-  await expect.poll(async () => page.evaluate(() => (
-    (window as Window & {
-      __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
-    }).__FOLDEN_TAURI_MOCK__?.readFile('README.md')
-  ))).toContain('Autosaved change.')
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        (
+          window as Window & {
+            __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
+          }
+        ).__FOLDEN_TAURI_MOCK__?.readFile('README.md'),
+      ),
+    )
+    .toContain('Autosaved change.')
 
-  await page.locator('.workspace-tree-actions').getByRole('button', { name: 'New scratch document' }).click()
+  await page
+    .locator('.workspace-tree-actions')
+    .getByRole('button', { name: 'New scratch document' })
+    .click()
   await page.getByRole('button', { name: 'Source' }).click()
 
   const scratchEditor = sourceEditor(page)

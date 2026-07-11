@@ -26,20 +26,26 @@ describe('native contracts', () => {
   })
 
   it('rejects drifted native wire shapes', () => {
-    expect(isOpenedDocument({
-      ...contracts.openedDocument,
-      fileFormat: {
-        lineEnding: 'lf',
-        hasUtf8Bom: 'yes',
-      },
-    })).toBe(false)
-    expect(isPersistedSessionState({
-      ...contracts.persistedSessionState,
-      activePaneId: 'middle',
-    })).toBe(false)
-    expect(isNativeError({
-      ...contracts.nativeError,
-      code: 'brand_new_error',
-    })).toBe(false)
+    expect(
+      isOpenedDocument({
+        ...contracts.openedDocument,
+        fileFormat: {
+          lineEnding: 'lf',
+          hasUtf8Bom: 'yes',
+        },
+      }),
+    ).toBe(false)
+    expect(
+      isPersistedSessionState({
+        ...contracts.persistedSessionState,
+        activePaneId: 'middle',
+      }),
+    ).toBe(false)
+    expect(
+      isNativeError({
+        ...contracts.nativeError,
+        code: 'brand_new_error',
+      }),
+    ).toBe(false)
   })
 })

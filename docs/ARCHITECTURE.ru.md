@@ -34,11 +34,12 @@ Tauri infrastructure adapters
 
 Здесь находится orchestration приложения:
 
-* `applicationShell.ts` объединяет controllers, infrastructure adapters, lifecycle hooks и facade, возвращаемый UI;
-* `controllers/` владеет состоянием приложения, workflows, диалогами, командами, persistence сессии, внешними изменениями и lifecycle;
-* `settings/` владеет типами, значениями по умолчанию, ограничениями и нормализацией настроек приложения и раскладки;
-* `ports/nativePorts.ts` определяет application-side контракты нативных возможностей;
-* helpers и shell types хранят application-specific форматирование и типы facade рядом с shell.
+- `applicationShell.ts` объединяет controllers, infrastructure adapters, lifecycle hooks и facade, возвращаемый UI;
+- `controllers/` владеет состоянием приложения, workflows, диалогами, командами, layout settings, persistence сессии, внешними изменениями и lifecycle;
+- `state/` содержит Vue-backed stores приложения; чистые типы и правила документов остаются в `domain`;
+- `settings/` владеет типами, значениями по умолчанию, ограничениями и нормализацией настроек приложения и раскладки;
+- `ports/nativePorts.ts` определяет application-side контракты нативных возможностей;
+- helpers и shell types хранят application-specific форматирование и типы facade рядом с shell.
 
 Application workflows могут использовать доменные правила и application ports. Они не должны напрямую импортировать Tauri API.
 
@@ -46,11 +47,11 @@ Application workflows могут использовать доменные пр�
 
 Здесь находятся независимые от фреймворка правила и типы:
 
-* helpers ревизий документов и dirty-state;
-* состояние документов, история, синхронизация editor sessions и очередь сохранения;
-* безопасность Markdown, разрешение изображений, diff конфликтов, извлечение оглавления и построение карты документа;
-* guards нативных DTO и форма нативных ошибок;
-* правила фильтрации рабочего пространства.
+- helpers ревизий документов и dirty-state;
+- типы документов, история, синхронизация editor sessions и очередь сохранения;
+- безопасность Markdown, разрешение путей изображений, diff конфликтов, извлечение оглавления и построение карты документа;
+- guards нативных DTO и форма нативных ошибок;
+- правила фильтрации рабочего пространства.
 
 `domain` не должен зависеть от Vue, Tauri, UI-компонентов, browser storage или infrastructure adapters.
 
@@ -58,21 +59,22 @@ Application workflows могут использовать доменные пр�
 
 Infrastructure реализует application contracts:
 
-* `infrastructure/tauri/nativePorts.ts` группирует реализации native ports на основе Tauri;
-* `infrastructure/tauri/files.ts` содержит низкоуровневые helpers вызова Tauri-команд;
-* `infrastructure/settings/settings.ts` сохраняет browser-side настройки приложения и раскладки и выполняет миграцию устаревшего layout.
+- `infrastructure/tauri/nativePorts.ts` группирует реализации native ports на основе Tauri;
+- `infrastructure/tauri/files.ts` содержит низкоуровневые helpers вызова Tauri-команд;
+- `infrastructure/tauri/visualImageAssets.ts` преобразует разрешённые локальные пути изображений через Tauri asset protocol;
+- `infrastructure/settings/settings.ts` сохраняет browser-side настройки приложения и раскладки и выполняет миграцию устаревшего layout.
 
 Infrastructure может зависеть от application port types и domain DTO. Он не должен владеть продуктовыми workflows.
 
 ## Разрешённые зависимости
 
-* `domain` — чистая TypeScript-логика без зависимостей от Vue, Tauri, UI и infrastructure;
-* `application` использует доменные правила и application port contracts;
-* application workflows не импортируют Tauri API напрямую;
-* `infrastructure` реализует application ports;
-* `ui` вызывает application facade, возвращаемый `useApplicationShell`;
-* UI-компоненты раскладки, например `ActivityRail.vue`, `OpenEditors.vue`, `DocumentToolbar.vue` и `EditorPaneGrid.vue`, владеют отображением и непосредственными деталями взаимодействия, но не application workflows;
-* `applicationShell` является composition root: он связывает зависимости и предоставляет state/actions, но не должен становиться местом для новой доменной логики или крупных workflows.
+- `domain` — чистая TypeScript-логика без зависимостей от Vue, Tauri, UI и infrastructure;
+- `application` использует доменные правила и application port contracts;
+- application workflows не импортируют Tauri API напрямую;
+- `infrastructure` реализует application ports;
+- `ui` вызывает application facade, возвращаемый `useApplicationShell`;
+- UI-компоненты раскладки, например `ActivityRail.vue`, `OpenEditors.vue`, `DocumentToolbar.vue` и `EditorPaneGrid.vue`, владеют отображением и непосредственными деталями взаимодействия, но не application workflows;
+- `applicationShell` является composition root: он связывает зависимости и предоставляет state/actions, но не должен становиться местом для новой доменной логики или крупных workflows.
 
 ## Владение состоянием
 
@@ -80,21 +82,22 @@ Controllers владеют состоянием. Внешний код полу�
 
 Ответственность state controllers:
 
-* `documentController` владеет открытыми документами, ревизиями, dirty-state, внешними состояниями, состоянием сохранения и обновлениями содержимого;
-* `paneController` владеет панелями, активной панелью, split-state, размещением документов по панелям, editor sessions и режимами документов для каждой панели;
-* `workspaceController` владеет открытым рабочим пространством, состоянием раскрытия/загрузки/ошибок дерева, выбором, недавними рабочими пространствами и remapping путей;
-* `sessionController` владеет ожидающими recovery entries, сборкой snapshots сессии и восстановления, debounced persistence и очисткой своего persistence timer;
-* `externalChangesController` владеет предупреждениями watcher, debounced refresh рабочего пространства, debounced reload документов и маршрутизацией нативных filesystem events;
-* `visualSafetyController` владеет решениями безопасности Visual-режима и разрешениями удалённых изображений для отдельных документов;
-* `dialogController` владеет состоянием prompt-, confirm-, unsaved-, Markdown safety-, conflict- и recovery-диалогов;
-* `commandController` и `applicationCommandController` владеют регистрацией и выполнением команд;
-* настройки приложения и раскладки нормализуются в `src/application/settings`, а browser persistence остаётся в `src/infrastructure/settings/settings.ts`.
+- `documentController` владеет открытыми документами, ревизиями, dirty-state, внешними состояниями, состоянием сохранения и обновлениями содержимого;
+- `paneController` владеет панелями, активной панелью, split-state, размещением документов по панелям, editor sessions и режимами документов для каждой панели;
+- `workspaceController` владеет открытым рабочим пространством, состоянием раскрытия/загрузки/ошибок дерева, выбором, недавними рабочими пространствами и remapping путей;
+- `sessionController` владеет ожидающими recovery entries, сборкой snapshots сессии и восстановления, debounced persistence и очисткой своего persistence timer;
+- `externalChangesController` владеет предупреждениями watcher, debounced refresh рабочего пространства, debounced reload документов и маршрутизацией нативных filesystem events;
+- `visualSafetyController` владеет решениями безопасности Visual-режима и разрешениями удалённых изображений для отдельных документов;
+- `dialogController` владеет состоянием prompt-, confirm-, unsaved-, Markdown safety-, conflict- и recovery-диалогов;
+- `commandController` и `applicationCommandController` владеют регистрацией и выполнением команд;
+- `layoutController` владеет layout state, границами размеров, visibility actions, reset и координацией persistence;
+- настройки приложения и раскладки нормализуются в `src/application/settings`, а доступ к browser storage остаётся в `src/infrastructure/settings/settings.ts`.
 
 Ответственность workflow controllers:
 
-* `documentWorkflowController` координирует открытие, сохранение, сохранение копии, закрытие, autosave, reload, обработку конфликтов, flush редакторов панелей и undo/redo;
-* `workspaceWorkflowController` координирует открытие и восстановление рабочего пространства, загрузку дерева, создание файлов/папок, rename, trash, открытие в split и refresh веток после файловых изменений;
-* `applicationLifecycleController` владеет mount/dispose, восстановлением при запуске, recovery prompt, подписками на нативные события, закрытием окна, финальным сохранением session/recovery и очисткой listeners.
+- `documentWorkflowController` координирует открытие, сохранение, сохранение копии, закрытие, autosave, reload, обработку конфликтов, flush редакторов панелей и undo/redo;
+- `workspaceWorkflowController` координирует открытие и восстановление рабочего пространства, загрузку дерева, создание файлов/папок, rename, trash, открытие в split и refresh веток после файловых изменений;
+- `applicationLifecycleController` владеет mount/dispose, восстановлением при запуске, recovery prompt, подписками на нативные события, закрытием окна, финальным сохранением session/recovery и очисткой listeners.
 
 Lifecycle-код должен находиться в `applicationLifecycleController`. Controllers, создающие timers или listeners, должны предоставлять `dispose`.
 
@@ -104,11 +107,11 @@ Application-код взаимодействует с нативными возм
 
 Группы ports:
 
-* `DocumentFilePort`: открытие текстовых файлов, открытие файлов рабочего пространства по пути, сохранение текста и закрытие нативных handles документов;
-* `WorkspaceFilePort`: открытие или восстановление каталогов рабочего пространства, listing каталогов, открытие файлов, создание файлов/каталогов, rename путей и перемещение в корзину;
-* `SessionStoragePort`: загрузка/сохранение состояния сессии и recovery snapshots;
-* `DiagnosticsPort`: логирование frontend events, открытие папки логов и экспорт диагностики;
-* `NativeEventPort`: подписка на нативные события и доступ к операциям close/destroy текущего нативного окна.
+- `DocumentFilePort`: открытие текстовых файлов, открытие файлов рабочего пространства по пути, сохранение текста и закрытие нативных handles документов;
+- `WorkspaceFilePort`: открытие или восстановление каталогов рабочего пространства, listing каталогов, открытие файлов, создание файлов/каталогов, rename путей и перемещение в корзину;
+- `SessionStoragePort`: загрузка/сохранение состояния сессии и recovery snapshots;
+- `DiagnosticsPort`: логирование frontend events, открытие папки логов и экспорт диагностики;
+- `NativeEventPort`: подписка на нативные события и доступ к операциям close/destroy текущего нативного окна.
 
 При добавлении новой возможности Tauri сначала добавьте application port contract, затем реализуйте его в infrastructure. Application controllers должны получать port через dependency injection, а не импортировать Tauri API.
 
@@ -118,15 +121,15 @@ Application-код взаимодействует с нативными возм
 
 Ответственность модулей:
 
-* `native/types.rs`: стабильные сериализуемые DTO, общие с TypeScript contracts;
-* `native/errors.rs`: коды нативных ошибок, retryability, пользовательские сообщения и техническая диагностика;
-* `native/state.rs`: авторизованное состояние нативных документов и рабочих пространств;
-* `native/paths.rs`: нормализация и проверка путей, защита корня и безопасные helpers путей рабочего пространства;
-* `native/watcher.rs`: настройка filesystem watcher, фильтрация событий и подавление временных сохранений Folden;
-* `native/documents.rs`: открытие/сохранение текстовых файлов, определение формата, атомарная запись, защита stale fingerprint и lifecycle нативных документов;
-* `native/workspace.rs`: авторизация рабочего пространства, listing каталогов, открытие/создание/rename/trash файлов рабочего пространства;
-* `native/persistence.rs`: хранение session и recovery snapshots;
-* `native/diagnostics.rs`: логирование frontend events, открытие папки логов и экспорт диагностики с редактированием чувствительных данных.
+- `native/types.rs`: стабильные сериализуемые DTO, общие с TypeScript contracts;
+- `native/errors.rs`: коды нативных ошибок, retryability, пользовательские сообщения и техническая диагностика;
+- `native/state.rs`: авторизованное состояние нативных документов и рабочих пространств;
+- `native/paths.rs`: нормализация и проверка путей, защита корня и безопасные helpers путей рабочего пространства;
+- `native/watcher.rs`: настройка filesystem watcher, фильтрация событий и подавление временных сохранений Folden;
+- `native/documents.rs`: открытие/сохранение текстовых файлов, определение формата, атомарная запись, защита stale fingerprint и lifecycle нативных документов;
+- `native/workspace.rs`: авторизация рабочего пространства, listing каталогов, открытие/создание/rename/trash файлов рабочего пространства;
+- `native/persistence.rs`: хранение session и recovery snapshots;
+- `native/diagnostics.rs`: логирование frontend events, открытие папки логов и экспорт диагностики с редактированием чувствительных данных.
 
 `lib.rs` регистрирует Tauri-команды, настраивает нативное состояние и логирование, устанавливает panic hook и собирает нативный слой. Новые нативные модули должны подключаться через `lib.rs`, но модуль не должен становиться местом для специфической логики отдельных подсистем.
 
@@ -254,41 +257,41 @@ Application-код взаимодействует с нативными возм
 
 ## Правила, которые нельзя нарушать
 
-* Не добавляйте доменную логику в Vue-компоненты.
-* Не добавляйте крупные workflows в `applicationShell`.
-* Не импортируйте Tauri API напрямую из application controllers.
-* Не изменяйте состояние другого controller вне его методов.
-* Не обходите очередь сохранения или координацию persistence сессии.
-* Не дублируйте нативные DTO без contract tests.
-* Не храните содержимое сохранённого пользовательского документа как каноническую копию в скрытых данных приложения.
-* Не меняйте контракты нативных команд без обновления TypeScript/Rust contract tests.
+- Не добавляйте доменную логику в Vue-компоненты.
+- Не добавляйте крупные workflows в `applicationShell`.
+- Не импортируйте Tauri API напрямую из application controllers.
+- Не изменяйте состояние другого controller вне его методов.
+- Не обходите очередь сохранения или координацию persistence сессии.
+- Не дублируйте нативные DTO без contract tests.
+- Не храните содержимое сохранённого пользовательского документа как каноническую копию в скрытых данных приложения.
+- Не меняйте контракты нативных команд без обновления TypeScript/Rust contract tests.
 
 ## Карта тестирования
 
-| Тип изменения | Обязательные тесты |
-| --- | --- |
-| Чистое правило документа/workspace/Markdown | Domain unit tests |
-| Владение состоянием controller | Controller unit tests |
-| Workflow orchestration | Workflow/controller unit tests с fakes |
-| Форма native port adapter | Application-port или infrastructure tests, если доступны |
-| Native DTO или command contract | TypeScript/Rust contract tests |
-| Поведение Rust для paths/filesystem/persistence | Rust module tests |
-| Пользовательский editing/workspace flow | Playwright E2E smoke и целевые unit tests |
-| Close, save, recovery или watcher behavior | Unit tests, Rust tests при изменении нативного поведения и ручной desktop smoke |
+| Тип изменения                                   | Обязательные тесты                                                              |
+| ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| Чистое правило документа/workspace/Markdown     | Domain unit tests                                                               |
+| Владение состоянием controller                  | Controller unit tests                                                           |
+| Workflow orchestration                          | Workflow/controller unit tests с fakes                                          |
+| Форма native port adapter                       | Application-port или infrastructure tests, если доступны                        |
+| Native DTO или command contract                 | TypeScript/Rust contract tests                                                  |
+| Поведение Rust для paths/filesystem/persistence | Rust module tests                                                               |
+| Пользовательский editing/workspace flow         | Playwright E2E smoke и целевые unit tests                                       |
+| Close, save, recovery или watcher behavior      | Unit tests, Rust tests при изменении нативного поведения и ручной desktop smoke |
 
 Текущие Playwright E2E specs находятся в `tests/e2e`:
 
-* `panes-tabs.spec.ts`: split panes, reorder/transfer вкладок, Open Editors и malformed drag payloads;
-* `recovery-conflict.spec.ts`: recovery, внешние изменения, отсутствующие файлы и конфликты;
-* `settings-autosave.spec.ts`: persistence настроек, экспорт диагностики и поведение autosave;
-* `shell-layout.spec.ts`: activity rail, toolbar, persistence layout, fit labels и reset layout;
-* `visual-safety.spec.ts`: безопасность Visual-режима и поведение локальных/удалённых изображений;
-* `workspace-save.spec.ts`: открытие/создание/rename/trash в workspace и refresh после сохранения.
+- `panes-tabs.spec.ts`: split panes, reorder/transfer вкладок, Open Editors и malformed drag payloads;
+- `recovery-conflict.spec.ts`: recovery, внешние изменения, отсутствующие файлы и конфликты;
+- `settings-autosave.spec.ts`: persistence настроек, экспорт диагностики и поведение autosave;
+- `shell-layout.spec.ts`: activity rail, toolbar, persistence layout, fit labels и reset layout;
+- `visual-safety.spec.ts`: безопасность Visual-режима и поведение локальных/удалённых изображений;
+- `workspace-save.spec.ts`: открытие/создание/rename/trash в workspace и refresh после сохранения.
 
 ## Lifecycle и очистка
 
-* Controllers, владеющие timers, debounced work или listeners, должны предоставлять `dispose`.
-* У каждой подписки должен быть один явный владелец.
-* Асинхронная регистрация listener должна корректно переживать ранний dispose.
-* Финальная persistence session и recovery должна завершаться до уничтожения нативного окна.
-* Нативные handles документов должны закрываться при финализации приложения или удалении документов.
+- Controllers, владеющие timers, debounced work или listeners, должны предоставлять `dispose`.
+- У каждой подписки должен быть один явный владелец.
+- Асинхронная регистрация listener должна корректно переживать ранний dispose.
+- Финальная persistence session и recovery должна завершаться до уничтожения нативного окна.
+- Нативные handles документов должны закрываться при финализации приложения или удалении документов.

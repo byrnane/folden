@@ -14,7 +14,10 @@ export function clampEditorPosition(position: number, min: number, max: number) 
   return Math.min(Math.max(position, min), max)
 }
 
-export function toSourceSelectionState(value: unknown, maxPosition: number): SourceSelectionState | null {
+export function toSourceSelectionState(
+  value: unknown,
+  maxPosition: number,
+): SourceSelectionState | null {
   if (!isRecord(value)) {
     return null
   }
@@ -38,7 +41,10 @@ export function toSourceSelectionState(value: unknown, maxPosition: number): Sou
   return null
 }
 
-export function toVisualSelectionState(value: unknown, maxPosition: number): VisualSelectionState | null {
+export function toVisualSelectionState(
+  value: unknown,
+  maxPosition: number,
+): VisualSelectionState | null {
   if (!isRecord(value) || maxPosition < 1) {
     return null
   }

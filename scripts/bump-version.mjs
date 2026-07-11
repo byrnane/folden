@@ -51,10 +51,7 @@ async function writeText(relativePath, value) {
 }
 
 function replaceCargoVersion(source, nextVersion) {
-  const nextSource = source.replace(
-    /^(\s*version\s*=\s*")([^"]+)(")/m,
-    `$1${nextVersion}$3`,
-  )
+  const nextSource = source.replace(/^(\s*version\s*=\s*")([^"]+)(")/m, `$1${nextVersion}$3`)
 
   if (nextSource === source) {
     throw new Error('Could not find package version in src-tauri/Cargo.toml')

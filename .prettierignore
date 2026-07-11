@@ -1,0 +1,8 @@
+build/
+coverage/
+dist/
+node_modules/
+src-tauri/gen/
+src-tauri/target/
+test-results/
+test_files/

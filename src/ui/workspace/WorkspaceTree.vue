@@ -139,7 +139,11 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
         <FileText v-else class="tree-icon" :size="uiIconSizes.workspaceTreeIcon" />
         <span class="tree-name">{{ entry.name }}</span>
         <span v-if="isDirectory(entry) && isLoading(entry)" class="tree-meta">Loading...</span>
-        <span v-else-if="loadErrors[entry.path]" class="tree-meta danger-text" :title="loadErrors[entry.path]">
+        <span
+          v-else-if="loadErrors[entry.path]"
+          class="tree-meta danger-text"
+          :title="loadErrors[entry.path]"
+        >
           Error
         </span>
 

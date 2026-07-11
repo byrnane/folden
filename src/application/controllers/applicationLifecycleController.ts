@@ -1,20 +1,13 @@
 import type { Ref } from 'vue'
 import type { OpenDocument, EditorMode } from '../../domain/documents/documentState'
-import type {
-  NativeFsEvent,
-  OpenedDocument,
-  WorkspaceDescriptor,
-} from '../../domain/native'
+import type { NativeFsEvent, OpenedDocument, WorkspaceDescriptor } from '../../domain/native'
 import {
   buildSessionDocumentKey,
   type PersistedSessionState,
   type RecoverySnapshot,
 } from '../sessionRecovery'
 import { formatError } from '../helpers/errorHelpers'
-import {
-  normalizePath,
-  recoveredCopyName,
-} from '../helpers/pathHelpers'
+import { normalizePath, recoveredCopyName } from '../helpers/pathHelpers'
 import type {
   DocumentFilePort,
   NativeEventPort,
@@ -46,7 +39,7 @@ type LifecycleDeps = {
   hasNativeRuntime: boolean
   windowTarget: WindowLike
   errorMessage: Ref<string | null>
-  workspace: ReadonlyValue<{ id: string, rootPath: string } | null>
+  workspace: ReadonlyValue<{ id: string; rootPath: string } | null>
   documents: ReadonlyValue<OpenDocument[]>
   dirtyDocuments: ReadonlyValue<OpenDocument[]>
   paneDocumentModes: ReadonlyValue<Record<string, EditorMode>>
@@ -62,7 +55,11 @@ type LifecycleDeps = {
   createDocumentDraft: (content: string, fallbackName?: string) => OpenDocument
   openDocumentState: (document: OpenedDocument) => OpenDocument
   getDocument: (documentId: string) => OpenDocument | null
-  applyDocumentUpdate: (documentId: string, baseRevision: number, nextContent: string) => OpenDocument | null
+  applyDocumentUpdate: (
+    documentId: string,
+    baseRevision: number,
+    nextContent: string,
+  ) => OpenDocument | null
   enforceDocumentVisualSafety: (document: OpenDocument) => void
   setFallbackDocument: (document: OpenDocument) => void
   restoreLayout: (
@@ -146,7 +143,9 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       normalizePath(deps.workspace.value.rootPath) === normalizePath(record.workspaceRootPath) &&
       record.relativePath
     ) {
-      return deps.openDocumentState(await deps.documentFiles.openTextFileByPath(deps.workspace.value.id, record.relativePath))
+      return deps.openDocumentState(
+        await deps.documentFiles.openTextFileByPath(deps.workspace.value.id, record.relativePath),
+      )
     }
 
     if (!record.path) {
@@ -191,7 +190,9 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
 
     if (session.workspaceRootPath) {
       try {
-        await deps.loadWorkspace(await deps.workspaceFiles.restoreWorkspaceByPath(session.workspaceRootPath))
+        await deps.loadWorkspace(
+          await deps.workspaceFiles.restoreWorkspaceByPath(session.workspaceRootPath),
+        )
       } catch (error) {
         diagnostics.push(`Could not restore workspace: ${formatError(error)}`)
       }
@@ -235,8 +236,8 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
           id: paneRecord.id,
           documentIds,
           activeDocumentId: paneRecord.activeDocumentKey
-            ? documentIdByKey.get(paneRecord.activeDocumentKey) ?? documentIds.at(-1) ?? null
-            : documentIds.at(-1) ?? null,
+            ? (documentIdByKey.get(paneRecord.activeDocumentKey) ?? documentIds.at(-1) ?? null)
+            : (documentIds.at(-1) ?? null),
         }
       }),
       nextPaneModes,
@@ -266,7 +267,10 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
     await persistSessionAndRecoveryState()
   }
 
-  async function ensureRecoveryDocument(entry: RecoverySnapshot, documentIdByKey: Map<string, string>) {
+  async function ensureRecoveryDocument(
+    entry: RecoverySnapshot,
+    documentIdByKey: Map<string, string>,
+  ) {
     const knownDocumentId = documentIdByKey.get(entry.key)
 
     if (knownDocumentId) {
@@ -286,7 +290,9 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       normalizePath(deps.workspace.value.rootPath) === normalizePath(entry.workspaceRootPath) &&
       entry.relativePath
     ) {
-      const document = deps.openDocumentState(await deps.documentFiles.openTextFileByPath(deps.workspace.value.id, entry.relativePath))
+      const document = deps.openDocumentState(
+        await deps.documentFiles.openTextFileByPath(deps.workspace.value.id, entry.relativePath),
+      )
       deps.addDocumentToPane(document, 'left')
       documentIdByKey.set(entry.key, document.id)
       return document
@@ -351,7 +357,8 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
         continue
       }
 
-      const targetDocument = currentDocument ?? await ensureRecoveryDocument(entry, documentIdByKey)
+      const targetDocument =
+        currentDocument ?? (await ensureRecoveryDocument(entry, documentIdByKey))
 
       if (!targetDocument) {
         const copyDocument = deps.createDocumentDraft('', recoveredCopyName(entry.name))
@@ -404,11 +411,15 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
     try {
       if (closeDecision === 'discard') {
         const discardedKeys = new Set(
-          deps.dirtyDocuments.value.map((document) => buildSessionDocumentKey(document, normalizePath)),
+          deps.dirtyDocuments.value.map((document) =>
+            buildSessionDocumentKey(document, normalizePath),
+          ),
         )
         deps.discardPendingRecoveryEntries(discardedKeys)
         await deps.sessionStorage.saveSessionState(buildPersistedSessionState())
-        await deps.sessionStorage.saveRecoverySnapshots(buildPersistedRecoverySnapshots(discardedKeys))
+        await deps.sessionStorage.saveRecoverySnapshots(
+          buildPersistedRecoverySnapshots(discardedKeys),
+        )
       } else {
         await deps.sessionStorage.saveSessionState(buildPersistedSessionState())
         await deps.sessionStorage.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
@@ -463,36 +474,43 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       deps.errorMessage.value = `Could not restore the previous session: ${formatError(error)}`
     })
 
-    void deps.nativeEvents.listen<NativeFsEvent>('folden://fs-event', (event) => {
-      deps.handleExternalFileEvent(event.payload)
-    }).then((unlisten) => {
-      if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
-        unlisten()
-        return
-      }
+    void deps.nativeEvents
+      .listen<NativeFsEvent>('folden://fs-event', (event) => {
+        deps.handleExternalFileEvent(event.payload)
+      })
+      .then((unlisten) => {
+        if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
+          unlisten()
+          return
+        }
 
-      fsEventUnlisten = unlisten
-    })
+        fsEventUnlisten = unlisten
+      })
 
-    void deps.nativeEvents.listen<string | null>('folden://watcher-warning', (event) => {
-      deps.setWatcherWarning(event.payload)
-    }).then((unlisten) => {
-      if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
-        unlisten()
-        return
-      }
+    void deps.nativeEvents
+      .listen<string | null>('folden://watcher-warning', (event) => {
+        deps.setWatcherWarning(event.payload)
+      })
+      .then((unlisten) => {
+        if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
+          unlisten()
+          return
+        }
 
-      watcherWarningUnlisten = unlisten
-    })
+        watcherWarningUnlisten = unlisten
+      })
 
-    void deps.nativeEvents.getCurrentWindow().onCloseRequested(handleWindowCloseRequested).then((unlisten) => {
-      if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
-        unlisten()
-        return
-      }
+    void deps.nativeEvents
+      .getCurrentWindow()
+      .onCloseRequested(handleWindowCloseRequested)
+      .then((unlisten) => {
+        if (disposed || currentSubscriptionEpoch !== subscriptionEpoch) {
+          unlisten()
+          return
+        }
 
-      tauriWindowCloseUnlisten = unlisten
-    })
+        tauriWindowCloseUnlisten = unlisten
+      })
   }
 
   function dispose() {

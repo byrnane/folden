@@ -9,9 +9,7 @@ export type {
   SessionDocumentKind,
   SessionPaneId,
 } from '../domain/native'
-import type {
-  RecoverySnapshot,
-} from '../domain/native'
+import type { RecoverySnapshot } from '../domain/native'
 
 export const MAX_RECOVERY_ENTRIES = 64
 

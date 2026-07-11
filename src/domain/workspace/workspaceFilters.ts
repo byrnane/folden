@@ -15,15 +15,21 @@ export function filterWorkspaceEntriesByIgnoredNames(
       return [entry]
     }
 
-    return [{
-      ...entry,
-      children: filterWorkspaceEntriesByIgnoredNames(entry.children, ignoredNames),
-    }]
+    return [
+      {
+        ...entry,
+        children: filterWorkspaceEntriesByIgnoredNames(entry.children, ignoredNames),
+      },
+    ]
   })
 }
 
 function normalizeWorkspacePath(path: string) {
-  return path.replaceAll('/', '\\').replace(/\\+/gu, '\\').replace(/^\\|\\$/gu, '').toLowerCase()
+  return path
+    .replaceAll('/', '\\')
+    .replace(/\\+/gu, '\\')
+    .replace(/^\\|\\$/gu, '')
+    .toLowerCase()
 }
 
 function isSameOrChildPath(path: string, parent: string) {
@@ -55,10 +61,14 @@ export function filterWorkspaceEntries(
 
     const children = filterWorkspaceEntries(entry.children, ignoredNames, ignoredPaths)
 
-    return [{
-      ...entry,
-      hasOpenableDescendants: children.some((child) => child.kind === 'file' || child.hasOpenableDescendants),
-      children,
-    }]
+    return [
+      {
+        ...entry,
+        hasOpenableDescendants: children.some(
+          (child) => child.kind === 'file' || child.hasOpenableDescendants,
+        ),
+        children,
+      },
+    ]
   })
 }

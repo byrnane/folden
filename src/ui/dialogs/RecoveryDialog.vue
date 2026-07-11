@@ -2,14 +2,17 @@
 import { onBeforeUnmount, watch } from 'vue'
 import AppDialog from './AppDialog.vue'
 
-const props = withDefaults(defineProps<{
-  open: boolean
-  title: string
-  message: string
-  details?: string | null
-}>(), {
-  details: null,
-})
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    message: string
+    details?: string | null
+  }>(),
+  {
+    details: null,
+  },
+)
 
 const emit = defineEmits<{
   restore: []
@@ -53,18 +56,10 @@ onBeforeUnmount(() => {
     <p v-if="details" class="dialog-details">{{ details }}</p>
 
     <template #actions>
-      <button type="button" @click="emit('later')">
-        Later
-      </button>
-      <button type="button" class="danger" @click="emit('discard')">
-        Discard
-      </button>
-      <button type="button" @click="emit('openCopy')">
-        Open as copy
-      </button>
-      <button type="button" @click="emit('restore')">
-        Restore
-      </button>
+      <button type="button" @click="emit('later')">Later</button>
+      <button type="button" class="danger" @click="emit('discard')">Discard</button>
+      <button type="button" @click="emit('openCopy')">Open as copy</button>
+      <button type="button" @click="emit('restore')">Restore</button>
     </template>
   </AppDialog>
 </template>

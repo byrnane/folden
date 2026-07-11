@@ -21,7 +21,9 @@ function directory(path: string, children: WorkspaceEntry[] = []): WorkspaceEntr
     name: path.split('\\').at(-1) ?? path,
     path,
     kind: 'directory',
-    hasOpenableDescendants: children.some((entry) => entry.kind === 'file' || entry.hasOpenableDescendants),
+    hasOpenableDescendants: children.some(
+      (entry) => entry.kind === 'file' || entry.hasOpenableDescendants,
+    ),
     children,
   }
 }
@@ -52,11 +54,13 @@ function createDocument(overrides: Partial<OpenDocument> = {}): OpenDocument {
   }
 }
 
-function createHarness(options: {
-  workspace?: { id: string, rootPath: string } | null
-  documents?: OpenDocument[]
-  activePaneId?: EditorPane['id']
-} = {}) {
+function createHarness(
+  options: {
+    workspace?: { id: string; rootPath: string } | null
+    documents?: OpenDocument[]
+    activePaneId?: EditorPane['id']
+  } = {},
+) {
   const workspace = ref(options.workspace ?? { id: 'workspace-1', rootPath: 'C:\\Docs' })
   const documents = ref<OpenDocument[]>(options.documents ?? [])
   const expandedWorkspacePaths = ref(new Set<string>())
@@ -102,12 +106,14 @@ function createHarness(options: {
     openConfirmDialog: vi.fn(),
     openPromptDialog: vi.fn(),
     setWatcherWarning: vi.fn(),
-    setWatcherVisibleWorkspace: vi.fn((descriptor: WorkspaceDescriptor, entries: WorkspaceEntry[]) => {
-      workspace.value = { id: descriptor.id, rootPath: descriptor.rootPath }
-      loadedPaths.clear()
-      loadedPaths.add('')
-      void entries
-    }),
+    setWatcherVisibleWorkspace: vi.fn(
+      (descriptor: WorkspaceDescriptor, entries: WorkspaceEntry[]) => {
+        workspace.value = { id: descriptor.id, rootPath: descriptor.rootPath }
+        loadedPaths.clear()
+        loadedPaths.add('')
+        void entries
+      },
+    ),
     setWorkspaceSettings: vi.fn(),
     addIgnoredWorkspacePath: vi.fn((path: string) => ({ ignoredPaths: [path] })),
     clearWorkspaceLoadError: vi.fn(),
@@ -120,13 +126,14 @@ function createHarness(options: {
     applyWorkspaceBranch: vi.fn((path: string) => {
       loadedPaths.add(path)
     }),
-    loadedDescendantPaths: vi.fn((path: string) => (
-      path === '' ? ['src', 'src\\nested'] : []
-    )),
+    loadedDescendantPaths: vi.fn((path: string) => (path === '' ? ['src', 'src\\nested'] : [])),
     shouldLoadBranch: vi.fn((path: string) => !loadedPaths.has(path)),
     nearestLoadedWorkspaceBranch: vi.fn((path: string | null) => path ?? ''),
     scheduleWorkspaceRefreshDebounced: vi.fn(),
-    getDocument: vi.fn((documentId: string) => documents.value.find((document) => document.id === documentId) ?? null),
+    getDocument: vi.fn(
+      (documentId: string) =>
+        documents.value.find((document) => document.id === documentId) ?? null,
+    ),
     saveDirtyDocuments: vi.fn().mockResolvedValue(true),
     removeDocumentsFromPanes: vi.fn((documentIds: string[]) => {
       documents.value = documents.value.filter((document) => !documentIds.includes(document.id))
@@ -190,15 +197,25 @@ describe('workspace workflow controller', () => {
 
     await controller.renameWorkspacePath(file('drafts\\a.md'))
 
-    expect(workspaceFiles.renamePath).toHaveBeenCalledWith('workspace-1', 'drafts\\a.md', 'archive.md')
+    expect(workspaceFiles.renamePath).toHaveBeenCalledWith(
+      'workspace-1',
+      'drafts\\a.md',
+      'archive.md',
+    )
     expect(deps.remapWorkspacePathState).toHaveBeenCalledWith('drafts\\a.md', 'drafts\\archive.md')
-    expect(deps.updateDocumentPaths).toHaveBeenCalledWith('drafts\\a.md', 'drafts\\archive.md', 'C:\\Docs')
+    expect(deps.updateDocumentPaths).toHaveBeenCalledWith(
+      'drafts\\a.md',
+      'drafts\\archive.md',
+      'C:\\Docs',
+    )
     expect(deps.setSelectedPath).toHaveBeenCalledWith('drafts\\archive.md')
     expect(workspaceFiles.listDirectory).toHaveBeenCalledWith('workspace-1', 'drafts')
   })
 
   it('handles trash cancel and confirmation paths', async () => {
-    const dirtyHarness = createHarness({ documents: [createDocument({ revision: 2, persistedRevision: 1 })] })
+    const dirtyHarness = createHarness({
+      documents: [createDocument({ revision: 2, persistedRevision: 1 })],
+    })
     dirtyHarness.deps.openUnsavedDialog.mockResolvedValueOnce('cancel')
 
     await dirtyHarness.controller.trashWorkspacePath(directory('drafts'))
@@ -239,7 +256,9 @@ describe('workspace workflow controller', () => {
     expect(workspaceFiles.listDirectory).toHaveBeenNthCalledWith(3, 'workspace-1', 'src\\nested')
     expect(deps.applyWorkspaceBranch).toHaveBeenCalledWith('', [directory('src')])
     expect(deps.applyWorkspaceBranch).toHaveBeenCalledWith('src', [directory('src\\nested')])
-    expect(deps.applyWorkspaceBranch).toHaveBeenCalledWith('src\\nested', [file('src\\nested\\note.md')])
+    expect(deps.applyWorkspaceBranch).toHaveBeenCalledWith('src\\nested', [
+      file('src\\nested\\note.md'),
+    ])
   })
 
   it('records lazy loading errors in workspace load errors', async () => {
@@ -252,7 +271,9 @@ describe('workspace workflow controller', () => {
     expect(deps.setWorkspacePathLoading).toHaveBeenCalledWith('src', true)
     expect(deps.setWorkspaceLoadError).toHaveBeenCalledWith('src', 'permission denied')
     expect(deps.setWorkspacePathLoading).toHaveBeenCalledWith('src', false)
-    expect(deps.setWatcherWarning).toHaveBeenCalledWith('Could not load folder src: permission denied')
+    expect(deps.setWatcherWarning).toHaveBeenCalledWith(
+      'Could not load folder src: permission denied',
+    )
   })
 
   it('hides workspace paths without closing open documents', async () => {
@@ -261,7 +282,9 @@ describe('workspace workflow controller', () => {
     await controller.hideWorkspacePath(directory('drafts'))
 
     expect(deps.addIgnoredWorkspacePath).toHaveBeenCalledWith('drafts')
-    expect(workspaceFiles.saveWorkspaceSettings).toHaveBeenCalledWith('workspace-1', { ignoredPaths: ['drafts'] })
+    expect(workspaceFiles.saveWorkspaceSettings).toHaveBeenCalledWith('workspace-1', {
+      ignoredPaths: ['drafts'],
+    })
     expect(deps.removeWorkspacePathState).toHaveBeenCalledWith('drafts')
     expect(deps.removeDocumentsFromPanes).not.toHaveBeenCalled()
     expect(deps.setSelectedPath).toHaveBeenCalledWith(null)

@@ -72,12 +72,19 @@ export function buildDocumentMapLines(content: string): DocumentMapLine[] {
     const leadingSpaces = line.match(/^\s*/u)?.[0].length ?? 0
     const kind = /^(#{1,6})\s+/u.test(line)
       ? 'heading'
-      : /^\s*(?:[-*+]|\d+[.)])\s+/u.test(line) ? 'list' : trimmedLine ? 'text' : 'empty'
+      : /^\s*(?:[-*+]|\d+[.)])\s+/u.test(line)
+        ? 'list'
+        : trimmedLine
+          ? 'text'
+          : 'empty'
 
     return {
       index,
       kind,
-      width: kind === 'heading' ? 92 : Math.min(Math.max(trimmedLine.length * 2.2, 18), kind === 'list' ? 72 : 88),
+      width:
+        kind === 'heading'
+          ? 92
+          : Math.min(Math.max(trimmedLine.length * 2.2, 18), kind === 'list' ? 72 : 88),
       indent: Math.min(leadingSpaces * 3, 24),
     }
   })

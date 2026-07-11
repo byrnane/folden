@@ -6,13 +6,12 @@ import type {
   WorkspaceEntry,
   WorkspaceSettings,
 } from '../../domain/native'
-import type {
-  PersistedSessionState,
-  RecoverySnapshot,
-} from '../sessionRecovery'
+import type { PersistedSessionState, RecoverySnapshot } from '../sessionRecovery'
 
 export type TauriWindowPort = {
-  onCloseRequested: (handler: (event: { preventDefault: () => void }) => Promise<void> | void) => Promise<() => void>
+  onCloseRequested: (
+    handler: (event: { preventDefault: () => void }) => Promise<void> | void,
+  ) => Promise<() => void>
   destroy: () => Promise<void>
 }
 
@@ -46,7 +45,7 @@ export type WorkspaceFilePort = {
 export type SessionStoragePort = {
   loadSessionState: () => Promise<PersistedSessionState | null>
   saveSessionState: (session: PersistedSessionState | null) => Promise<void>
-  loadRecoverySnapshots: () => Promise<{ entries: RecoverySnapshot[], diagnostics: string[] }>
+  loadRecoverySnapshots: () => Promise<{ entries: RecoverySnapshot[]; diagnostics: string[] }>
   saveRecoverySnapshots: (entries: RecoverySnapshot[]) => Promise<void>
 }
 

@@ -28,17 +28,21 @@ function isDocumentDragPayload(value: unknown): value is DocumentDragPayload {
   const candidate = value as Partial<DocumentDragPayload>
 
   if (candidate.kind === 'tab' || candidate.kind === 'open-editor') {
-    return typeof candidate.documentId === 'string'
-      && candidate.documentId.trim().length > 0
-      && (candidate.paneId === 'left' || candidate.paneId === 'right')
-      && (candidate.label === undefined || typeof candidate.label === 'string')
+    return (
+      typeof candidate.documentId === 'string' &&
+      candidate.documentId.trim().length > 0 &&
+      (candidate.paneId === 'left' || candidate.paneId === 'right') &&
+      (candidate.label === undefined || typeof candidate.label === 'string')
+    )
   }
 
-  return (candidate.kind === 'workspace-file' || candidate.kind === 'external-path')
-    && typeof candidate.path === 'string'
-    && candidate.path.trim().length > 0
-    && typeof candidate.label === 'string'
-    && candidate.label.trim().length > 0
+  return (
+    (candidate.kind === 'workspace-file' || candidate.kind === 'external-path') &&
+    typeof candidate.path === 'string' &&
+    candidate.path.trim().length > 0 &&
+    typeof candidate.label === 'string' &&
+    candidate.label.trim().length > 0
+  )
 }
 
 export function parseDocumentDragPayload(rawValue: unknown) {

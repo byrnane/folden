@@ -13,7 +13,9 @@ function keyboardEvent(init: Partial<KeyboardEvent> & { code: string }) {
   } as unknown as KeyboardEvent
 }
 
-function controllerDeps(overrides: Partial<Parameters<typeof createApplicationCommandController>[0]> = {}) {
+function controllerDeps(
+  overrides: Partial<Parameters<typeof createApplicationCommandController>[0]> = {},
+) {
   return {
     hasNativeRuntime: true,
     isFileBusy: ref(false),

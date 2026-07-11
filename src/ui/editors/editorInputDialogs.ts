@@ -1,7 +1,4 @@
-import {
-  validateImageTarget,
-  validateLinkTarget,
-} from '../../domain/markdown/markdownSafety'
+import { validateImageTarget, validateLinkTarget } from '../../domain/markdown/markdownSafety'
 
 export type EditorInputDialogState = {
   title: string
@@ -30,7 +27,8 @@ export function createLinkInputDialog(initialValue = ''): EditorInputDialogState
 export function createImageInputDialog(initialValue = ''): EditorInputDialogState {
   return {
     title: 'Insert image',
-    message: 'Enter a relative, asset:, data:, http:, or https: image URL to insert into the document.',
+    message:
+      'Enter a relative, asset:, data:, http:, or https: image URL to insert into the document.',
     initialValue,
     placeholder: './image.png',
     confirmLabel: 'Insert',

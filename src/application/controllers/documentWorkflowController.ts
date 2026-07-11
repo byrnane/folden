@@ -5,16 +5,10 @@ import { shouldPromptToDiscardDocument } from '../../domain/documents/closeProte
 import type { EditorMode, OpenDocument } from '../../domain/documents/documentState'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import { createDocumentSaveQueue, type SaveJob } from '../../domain/documents/saveQueue'
-import type {
-  OpenedDocument,
-  WorkspaceEntry,
-} from '../../domain/native'
+import type { OpenedDocument, WorkspaceEntry } from '../../domain/native'
 import type { NativeError } from '../../domain/nativeError'
 import type { DocumentFilePort } from '../ports/nativePorts'
-import {
-  parentPath,
-  suggestFileName,
-} from '../helpers/pathHelpers'
+import { parentPath, suggestFileName } from '../helpers/pathHelpers'
 import type { EditorPane } from '../types/shell'
 import type { ConflictDialogDecision } from './dialogController'
 
@@ -39,7 +33,7 @@ type DocumentWorkflowDeps = {
   activePaneId: Ref<EditorPane['id']>
   visiblePanes: ComputedRef<EditorPane[]>
   paneEditors: Ref<Partial<Record<EditorPane['id'], { flushContent: () => string } | null>>>
-  workspace: ReadonlyValue<{ id: string, rootPath: string } | null>
+  workspace: ReadonlyValue<{ id: string; rootPath: string } | null>
   isFileBusy: Ref<boolean>
   errorMessage: Ref<string | null>
   isDirty: (document: OpenDocument) => boolean
@@ -47,7 +41,10 @@ type DocumentWorkflowDeps = {
   enforceDocumentVisualSafety: (document: OpenDocument) => void
   clearRemoteImagePermissions: (documentIds: string[]) => void
   setSelectedPath: (path: string | null) => void
-  refreshWorkspaceBranch: (branchPath: string | null, preserveDescendants?: boolean) => Promise<void>
+  refreshWorkspaceBranch: (
+    branchPath: string | null,
+    preserveDescendants?: boolean,
+  ) => Promise<void>
   runFileTask: (task: () => Promise<void>, message: string) => Promise<void>
   openUnsavedDialog: (options: {
     title: string
@@ -87,17 +84,28 @@ type DocumentWorkflowDeps = {
   createDocumentDraft: (content: string, fallbackName?: string) => OpenDocument
   openDocumentState: (document: OpenedDocument) => OpenDocument
   getDocument: (documentId: string) => OpenDocument | null
-  applyDocumentUpdate: (documentId: string, baseRevision: number, nextContent: string) => OpenDocument | null
+  applyDocumentUpdate: (
+    documentId: string,
+    baseRevision: number,
+    nextContent: string,
+  ) => OpenDocument | null
   undoDocument: (documentId: string) => OpenDocument | null
   redoDocument: (documentId: string) => OpenDocument | null
   markDocumentQueued: (documentId: string) => OpenDocument | null
   markDocumentSaving: (documentId: string) => OpenDocument | null
-  markDocumentSaved: (documentId: string, revision: number, savedDocument: OpenedDocument) => OpenDocument | null
+  markDocumentSaved: (
+    documentId: string,
+    revision: number,
+    savedDocument: OpenedDocument,
+  ) => OpenDocument | null
   markDocumentSaveError: (documentId: string, error: NativeError) => OpenDocument | null
   replaceDocumentFromDisk: (documentId: string, document: OpenedDocument) => OpenDocument | null
   markDocumentConflict: (documentId: string, message: string) => OpenDocument | null
   markDocumentMissing: (documentId: string, message: string) => OpenDocument | null
-  acknowledgeDocumentConflict: (documentId: string, fingerprint: FileFingerprint | null) => OpenDocument | null
+  acknowledgeDocumentConflict: (
+    documentId: string,
+    fingerprint: FileFingerprint | null,
+  ) => OpenDocument | null
   removeDocuments: (documentIds: string[]) => void
   openWorkspaceFileByPath: (workspaceId: string, path: string) => Promise<OpenedDocument>
   openAbsoluteTextFile: (path: string) => Promise<OpenedDocument>
@@ -106,13 +114,14 @@ type DocumentWorkflowDeps = {
 export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
   const pendingAutosaves = new Map<string, ReturnType<typeof globalThis.setTimeout>>()
   const saveQueue = createDocumentSaveQueue({
-    performSave: (job) => deps.files.saveTextFile(
-      job.documentNativeId,
-      job.contentSnapshot,
-      job.expectedFingerprint,
-      job.fileFormat,
-      job.suggestedFileName,
-    ),
+    performSave: (job) =>
+      deps.files.saveTextFile(
+        job.documentNativeId,
+        job.contentSnapshot,
+        job.expectedFingerprint,
+        job.fileFormat,
+        job.suggestedFileName,
+      ),
     onQueued: (job) => {
       deps.markDocumentQueued(job.documentId)
     },
@@ -130,9 +139,10 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
         deps.setSelectedPath(nextDocument.relativePath)
       }
 
-      const didPathChange = job.pathBeforeSave !== savedDocument.path
-        || job.relativePathBeforeSave !== savedDocument.relativePath
-        || job.workspaceIdBeforeSave !== savedDocument.workspaceId
+      const didPathChange =
+        job.pathBeforeSave !== savedDocument.path ||
+        job.relativePathBeforeSave !== savedDocument.relativePath ||
+        job.workspaceIdBeforeSave !== savedDocument.workspaceId
 
       if (didPathChange && nextDocument.workspaceId === deps.workspace.value?.id) {
         void deps.refreshWorkspaceBranch(parentPath(nextDocument.relativePath ?? '') ?? '')
@@ -194,7 +204,11 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
       return
     }
 
-    const nextDocument = deps.applyDocumentUpdateToSessions(update, document, deps.applyDocumentUpdate)
+    const nextDocument = deps.applyDocumentUpdateToSessions(
+      update,
+      document,
+      deps.applyDocumentUpdate,
+    )
 
     if (!nextDocument) {
       return
@@ -301,7 +315,10 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     }, 'Could not open workspace file')
   }
 
-  async function saveDocument(document = deps.activeDocument.value, reason: SaveJob['reason'] = 'manual') {
+  async function saveDocument(
+    document = deps.activeDocument.value,
+    reason: SaveJob['reason'] = 'manual',
+  ) {
     if (!document) {
       return
     }
@@ -315,7 +332,8 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
         return
       }
 
-      deps.errorMessage.value = 'Resolve the external file conflict before saving to the original path.'
+      deps.errorMessage.value =
+        'Resolve the external file conflict before saving to the original path.'
       return
     }
 
@@ -337,14 +355,17 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
         contentSnapshot: currentDocument.content,
         expectedFingerprint: currentDocument.diskFingerprint,
         fileFormat: currentDocument.fileFormat ?? createTextFileFormat(),
-        suggestedFileName: currentDocument.nativeId ? undefined : suggestFileName(currentDocument.content),
+        suggestedFileName: currentDocument.nativeId
+          ? undefined
+          : suggestFileName(currentDocument.content),
         reason,
       })
     }, 'Could not save file')
   }
 
   function canAutosaveDocument(document: OpenDocument) {
-    return deps.appSettings.value.autosave.enabled &&
+    return (
+      deps.appSettings.value.autosave.enabled &&
       deps.isDirty(document) &&
       document.nativeId !== null &&
       document.externalState === 'idle' &&
@@ -352,6 +373,7 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
       document.saveState !== 'saving' &&
       document.saveState !== 'error' &&
       !deps.hasUnsafeUnacknowledgedVisualState(document)
+    )
   }
 
   function clearPendingAutosave(documentId: string) {
@@ -524,7 +546,9 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
       return
     }
 
-    if (!shouldPromptToDiscardDocument(deps.getPaneSnapshot(), documentId, deps.isDirty(document))) {
+    if (
+      !shouldPromptToDiscardDocument(deps.getPaneSnapshot(), documentId, deps.isDirty(document))
+    ) {
       removeDocumentView(pane, documentId)
       return
     }
@@ -567,11 +591,9 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
       return Promise.resolve(null)
     }
 
-    return (
-      deps.workspace.value &&
+    return deps.workspace.value &&
       document.workspaceId === deps.workspace.value.id &&
       document.relativePath
-    )
       ? deps.openWorkspaceFileByPath(deps.workspace.value.id, document.relativePath)
       : deps.openAbsoluteTextFile(document.path)
   }
@@ -579,7 +601,10 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
   function openConflictCopy(document: OpenDocument) {
     const previousActivePane = deps.activePane.value
     const previousActiveDocumentId = previousActivePane?.activeDocumentId ?? null
-    const copyDocument = deps.createDocumentDraft(document.content, conflictedCopyName(document.name))
+    const copyDocument = deps.createDocumentDraft(
+      document.content,
+      conflictedCopyName(document.name),
+    )
     copyDocument.fileFormat = document.fileFormat
     addDocumentToPane(copyDocument, 'left')
 
@@ -600,7 +625,10 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     return `${name.slice(0, extensionIndex)} (conflict copy)${name.slice(extensionIndex)}`
   }
 
-  function resolveConflictWithCurrentContent(documentId: string, fingerprint: FileFingerprint | null) {
+  function resolveConflictWithCurrentContent(
+    documentId: string,
+    fingerprint: FileFingerprint | null,
+  ) {
     const document = deps.acknowledgeDocumentConflict(documentId, fingerprint)
 
     if (document) {
@@ -693,7 +721,11 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
       return
     }
 
-    const nextDocument = deps.applyDocumentUpdate(latestDocument.id, latestDocument.revision, decision.content)
+    const nextDocument = deps.applyDocumentUpdate(
+      latestDocument.id,
+      latestDocument.revision,
+      decision.content,
+    )
 
     if (nextDocument) {
       nextDocument.diskFingerprint = diskDocument.fingerprint

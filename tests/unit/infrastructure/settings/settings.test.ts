@@ -19,18 +19,20 @@ import {
 describe('application settings', () => {
   it('falls back to conservative defaults for malformed settings', () => {
     expect(normalizeApplicationSettings(null)).toEqual(defaultApplicationSettings)
-    expect(normalizeApplicationSettings({
-      autosave: {
-        enabled: true,
-        debounceMs: applicationSettingLimits.autosaveDebounceMs.min - 1,
-      },
-      remoteImages: {
-        policy: 'always-load',
-      },
-      workspace: {
-        ignoredNames: ['.git', 42, ''],
-      },
-    })).toEqual({
+    expect(
+      normalizeApplicationSettings({
+        autosave: {
+          enabled: true,
+          debounceMs: applicationSettingLimits.autosaveDebounceMs.min - 1,
+        },
+        remoteImages: {
+          policy: 'always-load',
+        },
+        workspace: {
+          ignoredNames: ['.git', 42, ''],
+        },
+      }),
+    ).toEqual({
       ...defaultApplicationSettings,
       autosave: {
         ...defaultApplicationSettings.autosave,
@@ -47,16 +49,18 @@ describe('application settings', () => {
   })
 
   it('normalizes persisted layout state without document ownership', () => {
-    expect(normalizeLayoutSettings({
-      activeActivitySection: 'settings',
-      activityRailMode: 'expanded',
-      activityCompactWidth: 900,
-      activityExpandedWidth: 900,
-      sidebarWidth: 900,
-      splitRatio: 0.1,
-      focusMode: true,
-      documents: ['not-layout'],
-    })).toEqual({
+    expect(
+      normalizeLayoutSettings({
+        activeActivitySection: 'settings',
+        activityRailMode: 'expanded',
+        activityCompactWidth: 900,
+        activityExpandedWidth: 900,
+        sidebarWidth: 900,
+        splitRatio: 0.1,
+        focusMode: true,
+        documents: ['not-layout'],
+      }),
+    ).toEqual({
       ...defaultLayoutSettings,
       activeActivitySection: 'settings',
       activityRailMode: 'expanded',
@@ -71,45 +75,57 @@ describe('application settings', () => {
   it.each(['workspace', 'search', 'create', 'settings'] as const)(
     'keeps supported activity section %s',
     (activeActivitySection) => {
-      expect(normalizeLayoutSettings({ activeActivitySection }).activeActivitySection).toBe(activeActivitySection)
+      expect(normalizeLayoutSettings({ activeActivitySection }).activeActivitySection).toBe(
+        activeActivitySection,
+      )
     },
   )
 
   it('falls back to workspace for an unknown activity section', () => {
-    expect(normalizeLayoutSettings({ activeActivitySection: 'templates' }).activeActivitySection).toBe('workspace')
+    expect(
+      normalizeLayoutSettings({ activeActivitySection: 'templates' }).activeActivitySection,
+    ).toBe('workspace')
   })
 
   it('defaults document navigation visibility when persisted layout is older', () => {
-    expect(normalizeLayoutSettings({
-      showDocumentOutline: false,
-      showDocumentMap: false,
-    })).toEqual({
+    expect(
+      normalizeLayoutSettings({
+        showDocumentOutline: false,
+        showDocumentMap: false,
+      }),
+    ).toEqual({
       ...defaultLayoutSettings,
       showDocumentOutline: false,
       showDocumentMap: false,
     })
 
-    expect(normalizeLayoutSettings({
-      showDocumentOutline: 'yes',
-      showDocumentMap: null,
-    })).toEqual(defaultLayoutSettings)
+    expect(
+      normalizeLayoutSettings({
+        showDocumentOutline: 'yes',
+        showDocumentMap: null,
+      }),
+    ).toEqual(defaultLayoutSettings)
   })
 
   it('migrates missing activity rail widths to defaults', () => {
-    expect(normalizeLayoutSettings({
-      activeActivitySection: 'workspace',
-      sidebarWidth: layoutSettingLimits.sidebarWidth.fallback,
-      splitRatio: layoutSettingLimits.splitRatio.fallback,
-      focusMode: false,
-    })).toEqual(defaultLayoutSettings)
+    expect(
+      normalizeLayoutSettings({
+        activeActivitySection: 'workspace',
+        sidebarWidth: layoutSettingLimits.sidebarWidth.fallback,
+        splitRatio: layoutSettingLimits.splitRatio.fallback,
+        focusMode: false,
+      }),
+    ).toEqual(defaultLayoutSettings)
   })
 
   it('keeps compact and expanded rail widths independent and clamped', () => {
-    expect(normalizeLayoutSettings({
-      activityRailMode: 'compact',
-      activityCompactWidth: layoutSettingLimits.activityCompactWidth.min - 1,
-      activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.max + 1,
-    })).toEqual({
+    expect(
+      normalizeLayoutSettings({
+        activityRailMode: 'compact',
+        activityCompactWidth: layoutSettingLimits.activityCompactWidth.min - 1,
+        activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.max + 1,
+      }),
+    ).toEqual({
       ...defaultLayoutSettings,
       activityCompactWidth: layoutSettingLimits.activityCompactWidth.min,
       activityExpandedWidth: layoutSettingLimits.activityExpandedWidth.max,
@@ -164,12 +180,13 @@ describe('application settings', () => {
 
   it('loads legacy persisted activity rail width through infrastructure migration', () => {
     const storage = {
-      getItem: () => JSON.stringify({
-        activityWidth: 132,
-        sidebarWidth: layoutSettingLimits.sidebarWidth.fallback,
-        splitRatio: layoutSettingLimits.splitRatio.fallback,
-        focusMode: false,
-      }),
+      getItem: () =>
+        JSON.stringify({
+          activityWidth: 132,
+          sidebarWidth: layoutSettingLimits.sidebarWidth.fallback,
+          splitRatio: layoutSettingLimits.splitRatio.fallback,
+          focusMode: false,
+        }),
     }
 
     expect(loadLayoutSettings(storage)).toEqual({
@@ -182,10 +199,11 @@ describe('application settings', () => {
 
   it('derives legacy activity rail mode when persisted mode is invalid', () => {
     const storage = {
-      getItem: () => JSON.stringify({
-        activityRailMode: 'wide',
-        activityWidth: 132,
-      }),
+      getItem: () =>
+        JSON.stringify({
+          activityRailMode: 'wide',
+          activityWidth: 132,
+        }),
     }
 
     expect(loadLayoutSettings(storage)).toEqual({
@@ -221,9 +239,10 @@ describe('application settings', () => {
     'loads and clamps legacy persisted activity width %s to expanded %s',
     (activityWidth, activityExpandedWidth, activityCompactWidth) => {
       const storage = {
-        getItem: () => JSON.stringify({
-          activityWidth,
-        }),
+        getItem: () =>
+          JSON.stringify({
+            activityWidth,
+          }),
       }
 
       expect(loadLayoutSettings(storage)).toEqual({
@@ -237,11 +256,12 @@ describe('application settings', () => {
 
   it('loads partially filled persisted layout state with normalized defaults', () => {
     const storage = {
-      getItem: () => JSON.stringify({
-        activeActivitySection: 'settings',
-        activityRailMode: 'expanded',
-        splitRatio: layoutSettingLimits.splitRatio.max + 1,
-      }),
+      getItem: () =>
+        JSON.stringify({
+          activeActivitySection: 'settings',
+          activityRailMode: 'expanded',
+          splitRatio: layoutSettingLimits.splitRatio.max + 1,
+        }),
     }
 
     expect(loadLayoutSettings(storage)).toEqual({
@@ -284,15 +304,20 @@ describe('application settings', () => {
       },
     }
 
-    saveApplicationSettings({
-      ...defaultApplicationSettings,
-      autosave: {
-        ...defaultApplicationSettings.autosave,
-        enabled: true,
-        debounceMs: applicationSettingLimits.autosaveDebounceMs.fallback + applicationSettingLimits.autosaveDebounceMs.step,
-        saveOnWindowBlur: true,
+    saveApplicationSettings(
+      {
+        ...defaultApplicationSettings,
+        autosave: {
+          ...defaultApplicationSettings.autosave,
+          enabled: true,
+          debounceMs:
+            applicationSettingLimits.autosaveDebounceMs.fallback +
+            applicationSettingLimits.autosaveDebounceMs.step,
+          saveOnWindowBlur: true,
+        },
       },
-    }, storage)
+      storage,
+    )
 
     expect(persistedValue).toContain('"autosave"')
     expect(persistedValue).not.toContain('content')

@@ -11,7 +11,7 @@ describe('dialog controller', () => {
       placeholder: 'Name',
       confirmLabel: 'Rename',
       inputLabel: 'Name',
-      validate: (value) => value.trim() ? null : 'Name required',
+      validate: (value) => (value.trim() ? null : 'Name required'),
       normalize: (value) => value.trim(),
     })
 

@@ -1,7 +1,7 @@
 {
   "name": "folden",
   "private": true,
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Local-first desktop Markdown and text editor.",
   "author": "byrnane",
   "license": "UNLICENSED",
@@ -11,7 +11,7 @@
   },
   "type": "module",
   "scripts": {
-    "quality": "npm run version:check && npm run vue:typecheck && npm run vue:unused && npm run deps:cycles && npm run lint && npm run test:unit",
+    "quality": "npm run version:check && npm run format:check && npm run vue:typecheck && npm run vue:unused && npm run deps:cycles && npm run lint && npm run test:unit",
     "app:dev": "node scripts/tauri.mjs dev",
     "app:build": "node scripts/tauri.mjs build --no-bundle",
     "app:run": "node scripts/run-app.mjs",
@@ -24,6 +24,8 @@
     "version:bump": "node scripts/bump-version.mjs",
     "version:check": "node scripts/check-version.mjs",
     "deps:cycles": "node scripts/check-dependency-cycles.mjs",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
     "lint": "eslint .",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -35,6 +37,7 @@
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.3",
+    "@lezer/highlight": "^1.2.3",
     "@tauri-apps/api": "^2.11.1",
     "@tiptap/extension-image": "^3.27.1",
     "@tiptap/extension-link": "^3.27.1",
@@ -47,7 +50,6 @@
     "@tiptap/markdown": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
     "@tiptap/vue-3": "^3.27.1",
-    "@lezer/highlight": "^1.2.3",
     "codemirror": "^6.0.2",
     "lucide-vue-next": "^1.0.0",
     "vue": "^3.5.38"
@@ -60,7 +62,9 @@
     "@vitejs/plugin-vue": "^6.0.7",
     "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^10.6.0",
+    "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^10.9.2",
+    "prettier": "^3.9.5",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.1",
     "vite": "^8.1.0",

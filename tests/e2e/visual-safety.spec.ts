@@ -1,8 +1,5 @@
 import { expect, test } from '@playwright/test'
-import {
-  openApp,
-  sourceEditor,
-} from './helpers'
+import { openApp, sourceEditor } from './helpers'
 
 test('keeps remote images blocked until the document explicitly allows them', async ({ page }) => {
   const remoteRequests: string[] = []
@@ -43,7 +40,9 @@ test('keeps remote images blocked until the document explicitly allows them', as
   await expect(page.locator('img[src="https://example.com/preview.png"]')).toBeVisible()
 })
 
-test('opens visual links with Ctrl click without hijacking normal editing clicks', async ({ page }) => {
+test('opens visual links with Ctrl click without hijacking normal editing clicks', async ({
+  page,
+}) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
@@ -52,17 +51,19 @@ test('opens visual links with Ctrl click without hijacking normal editing clicks
   const editor = sourceEditor(page)
   await editor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
-  await page.keyboard.insertText([
-    '',
-    '[Jump](#target-heading)',
-    '',
-    ...Array.from({ length: 24 }, (_, index) => `filler line ${index + 1}`),
-    '',
-    '## Target Heading',
-    '',
-    '[Example](https://example.com/docs)',
-    '',
-  ].join('\n'))
+  await page.keyboard.insertText(
+    [
+      '',
+      '[Jump](#target-heading)',
+      '',
+      ...Array.from({ length: 24 }, (_, index) => `filler line ${index + 1}`),
+      '',
+      '## Target Heading',
+      '',
+      '[Example](https://example.com/docs)',
+      '',
+    ].join('\n'),
+  )
   await page.evaluate(() => {
     Object.assign(window, {
       __FOLDEN_OPENED_LINK__: null,
@@ -83,12 +84,22 @@ test('opens visual links with Ctrl click without hijacking normal editing clicks
 
   const link = page.locator('.visual-editor-content a[href="https://example.com/docs"]')
   await link.click()
-  await expect.poll(async () => page.evaluate(() => (
-    (window as Window & { __FOLDEN_OPENED_LINK__?: string | null }).__FOLDEN_OPENED_LINK__
-  ))).toBe(null)
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          (window as Window & { __FOLDEN_OPENED_LINK__?: string | null }).__FOLDEN_OPENED_LINK__,
+      ),
+    )
+    .toBe(null)
 
   await link.click({ modifiers: ['Control'] })
-  await expect.poll(async () => page.evaluate(() => (
-    (window as Window & { __FOLDEN_OPENED_LINK__?: string | null }).__FOLDEN_OPENED_LINK__
-  ))).toBe('https://example.com/docs')
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          (window as Window & { __FOLDEN_OPENED_LINK__?: string | null }).__FOLDEN_OPENED_LINK__,
+      ),
+    )
+    .toBe('https://example.com/docs')
 })

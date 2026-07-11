@@ -42,12 +42,16 @@ type ResizeStart = {
 
 const resizeStart = ref<ResizeStart | null>(null)
 
-const modeLabel = computed(() => props.mode === 'expanded' ? 'Collapse rail' : 'Expand rail')
-const modeIcon = computed(() => props.mode === 'expanded' ? PanelRightOpen : PanelLeftOpen)
-const currentWidth = computed(() => props.mode === 'expanded' ? props.expandedWidth : props.compactWidth)
-const currentWidthLimits = computed(() => props.mode === 'expanded'
-  ? layoutSettingLimits.activityExpandedWidth
-  : layoutSettingLimits.activityCompactWidth)
+const modeLabel = computed(() => (props.mode === 'expanded' ? 'Collapse rail' : 'Expand rail'))
+const modeIcon = computed(() => (props.mode === 'expanded' ? PanelRightOpen : PanelLeftOpen))
+const currentWidth = computed(() =>
+  props.mode === 'expanded' ? props.expandedWidth : props.compactWidth,
+)
+const currentWidthLimits = computed(() =>
+  props.mode === 'expanded'
+    ? layoutSettingLimits.activityExpandedWidth
+    : layoutSettingLimits.activityCompactWidth,
+)
 
 function toggleMode() {
   emit('setMode', props.mode === 'expanded' ? 'compact' : 'expanded')
@@ -116,9 +120,9 @@ function resizeWithKeyboard(event: KeyboardEvent) {
   const nextWidth = currentWidth.value + direction * step
 
   if (
-    props.mode === 'compact'
-    && direction > 0
-    && nextWidth >= layoutSettingLimits.activityCompactWidth.max
+    props.mode === 'compact' &&
+    direction > 0 &&
+    nextWidth >= layoutSettingLimits.activityCompactWidth.max
   ) {
     emit('setMode', 'expanded')
     emit('setWidth', layoutSettingLimits.activityExpandedWidth.min)

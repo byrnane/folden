@@ -75,9 +75,9 @@ describe('external changes controller', () => {
     const cleanDocument = createDocument()
     const dirtyDocument = createDocument({ revision: 2, persistedRevision: 1 })
     const routes = {
-      findDocumentByPath: vi.fn((path: string) => (
-        path.endsWith('dirty.md') ? dirtyDocument : cleanDocument
-      )),
+      findDocumentByPath: vi.fn((path: string) =>
+        path.endsWith('dirty.md') ? dirtyDocument : cleanDocument,
+      ),
       workspaceRelativePathFromAbsolute: vi.fn(() => 'doc.md'),
       scheduleWorkspaceRefresh: vi.fn(),
       scheduleDocumentReload: vi.fn(),
@@ -91,8 +91,14 @@ describe('external changes controller', () => {
     controller.handleExternalFileEvent({ kind: 'modify', path: 'C:\\Docs\\doc.md' }, routes)
 
     expect(routes.scheduleWorkspaceRefresh).toHaveBeenCalledTimes(3)
-    expect(routes.markDocumentMissing).toHaveBeenCalledWith(cleanDocument.id, 'doc.md was moved or deleted outside Folden.')
-    expect(routes.markDocumentConflict).toHaveBeenCalledWith(dirtyDocument.id, 'doc.md changed on disk while you have unsaved edits.')
+    expect(routes.markDocumentMissing).toHaveBeenCalledWith(
+      cleanDocument.id,
+      'doc.md was moved or deleted outside Folden.',
+    )
+    expect(routes.markDocumentConflict).toHaveBeenCalledWith(
+      dirtyDocument.id,
+      'doc.md changed on disk while you have unsaved edits.',
+    )
     expect(routes.clearDocumentExternalState).toHaveBeenCalledWith(cleanDocument.id)
     expect(routes.scheduleDocumentReload).toHaveBeenCalledWith(cleanDocument.id)
   })

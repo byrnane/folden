@@ -3,15 +3,18 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { buildConflictDiffRows } from '../../domain/markdown/conflictDiff'
 import AppDialog from './AppDialog.vue'
 
-const props = withDefaults(defineProps<{
-  open: boolean
-  title: string
-  path?: string | null
-  foldenContent: string
-  diskContent: string
-}>(), {
-  path: null,
-})
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    path?: string | null
+    foldenContent: string
+    diskContent: string
+  }>(),
+  {
+    path: null,
+  },
+)
 
 const emit = defineEmits<{
   keepFolden: []
@@ -129,21 +132,11 @@ onBeforeUnmount(() => {
     </section>
 
     <template #actions>
-      <button type="button" @click="emit('later')">
-        Later
-      </button>
-      <button type="button" @click="emit('saveAs')">
-        Save As
-      </button>
-      <button type="button" @click="emit('reloadDisk')">
-        Reload disk version
-      </button>
-      <button type="button" @click="emit('keepFolden')">
-        Keep Folden version
-      </button>
-      <button type="button" @click="emit('applyMerged', mergedContent)">
-        Apply merged result
-      </button>
+      <button type="button" @click="emit('later')">Later</button>
+      <button type="button" @click="emit('saveAs')">Save As</button>
+      <button type="button" @click="emit('reloadDisk')">Reload disk version</button>
+      <button type="button" @click="emit('keepFolden')">Keep Folden version</button>
+      <button type="button" @click="emit('applyMerged', mergedContent)">Apply merged result</button>
     </template>
   </AppDialog>
 </template>

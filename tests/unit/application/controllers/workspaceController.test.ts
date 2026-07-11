@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import { createWorkspaceController } from '../../../../src/application/controllers/workspaceController'
-import { defaultApplicationSettings, type ApplicationSettings } from '../../../../src/application/settings'
+import {
+  defaultApplicationSettings,
+  type ApplicationSettings,
+} from '../../../../src/application/settings'
 import type { WorkspaceEntry } from '../../../../src/domain/native'
 
 const appSettings = ref<ApplicationSettings>({
@@ -34,7 +37,9 @@ function directory(path: string, children: WorkspaceEntry[] = []): WorkspaceEntr
     name: path.split('\\').at(-1) ?? path,
     path,
     kind: 'directory',
-    hasOpenableDescendants: children.some((entry) => entry.kind === 'file' || entry.hasOpenableDescendants),
+    hasOpenableDescendants: children.some(
+      (entry) => entry.kind === 'file' || entry.hasOpenableDescendants,
+    ),
     children,
   }
 }

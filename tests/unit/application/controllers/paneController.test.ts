@@ -122,10 +122,11 @@ describe('pane controller', () => {
     expect(controller.splitEnabled.value).toBe(true)
     expect(controller.activePaneId.value).toBe('right')
     expect(controller.getDocumentMode(controller.getPane('right')!, second)).toBe('source')
-    expect(Object.values(controller.viewSessions.value).map((session) => session.documentId).sort()).toEqual([
-      first.id,
-      second.id,
-    ])
+    expect(
+      Object.values(controller.viewSessions.value)
+        .map((session) => session.documentId)
+        .sort(),
+    ).toEqual([first.id, second.id])
   })
 
   it('applies accepted document updates to synchronized sessions', () => {
@@ -152,6 +153,10 @@ describe('pane controller', () => {
     )
 
     expect(updated?.content).toBe('after')
-    expect(Object.values(controller.viewSessions.value).every((session) => session.lastAppliedRevision === 1)).toBe(true)
+    expect(
+      Object.values(controller.viewSessions.value).every(
+        (session) => session.lastAppliedRevision === 1,
+      ),
+    ).toBe(true)
   })
 })

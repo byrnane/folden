@@ -25,9 +25,12 @@ function migratePersistedLayoutSettings(value: unknown) {
 
   return {
     ...candidate,
-    activityRailMode: candidate.activityRailMode === 'compact' || candidate.activityRailMode === 'expanded'
-      ? candidate.activityRailMode
-      : legacyActivityWidth > layoutSettingLimits.activityCompactWidth.max ? 'expanded' : 'compact',
+    activityRailMode:
+      candidate.activityRailMode === 'compact' || candidate.activityRailMode === 'expanded'
+        ? candidate.activityRailMode
+        : legacyActivityWidth > layoutSettingLimits.activityCompactWidth.max
+          ? 'expanded'
+          : 'compact',
     activityCompactWidth: candidate.activityCompactWidth ?? legacyActivityWidth,
     activityExpandedWidth: candidate.activityExpandedWidth ?? legacyActivityWidth,
   }

@@ -1,16 +1,9 @@
 import type { ComputedRef } from 'vue'
 import type { OpenDocument } from '../../domain/documents/documentState'
-import type {
-  OpenedDocument,
-  WorkspaceDescriptor,
-  WorkspaceEntry,
-} from '../../domain/native'
+import type { OpenedDocument, WorkspaceDescriptor, WorkspaceEntry } from '../../domain/native'
 import type { WorkspaceFilePort } from '../ports/nativePorts'
 import { formatError } from '../helpers/errorHelpers'
-import {
-  normalizePath,
-  parentPath,
-} from '../helpers/pathHelpers'
+import { normalizePath, parentPath } from '../helpers/pathHelpers'
 import type { EditorPane } from '../types/shell'
 
 type WorkspaceEntryRef = Pick<WorkspaceEntry, 'name' | 'path' | 'kind'> & {
@@ -23,7 +16,7 @@ type ReadonlyValue<T> = {
 
 type WorkspaceWorkflowDeps = {
   workspaceFiles: WorkspaceFilePort
-  workspace: ReadonlyValue<{ id: string, rootPath: string } | null>
+  workspace: ReadonlyValue<{ id: string; rootPath: string } | null>
   documents: ReadonlyValue<OpenDocument[]>
   expandedWorkspacePaths: ReadonlyValue<ReadonlySet<string>>
   activeDocument: ComputedRef<OpenDocument | null>
@@ -68,9 +61,15 @@ type WorkspaceWorkflowDeps = {
   remapWorkspacePathState: (previousPath: string, nextPath: string) => void
   setSelectedPath: (path: string | null) => void
   applyWorkspaceBranch: (path: string, entries: WorkspaceEntry[]) => void
-  loadedDescendantPaths: (path: string, isSameOrChildPath: (path: string, parent: string) => boolean) => string[]
+  loadedDescendantPaths: (
+    path: string,
+    isSameOrChildPath: (path: string, parent: string) => boolean,
+  ) => string[]
   shouldLoadBranch: (path: string) => boolean
-  nearestLoadedWorkspaceBranch: (path: string | null, parentPath: (path: string) => string | null) => string
+  nearestLoadedWorkspaceBranch: (
+    path: string | null,
+    parentPath: (path: string) => string | null,
+  ) => string
   scheduleWorkspaceRefreshDebounced: (key: string, refresh: () => void) => void
   getDocument: (documentId: string) => OpenDocument | null
   saveDirtyDocuments: (documentIds: string[]) => Promise<boolean>
@@ -80,7 +79,11 @@ type WorkspaceWorkflowDeps = {
   openLoadedDocument: (document: OpenedDocument, paneId?: EditorPane['id']) => Promise<OpenDocument>
   openWorkspaceFile: (entry: WorkspaceEntryRef, paneId?: EditorPane['id']) => Promise<void>
   setSplitEnabled: (enabled: boolean) => void
-  moveDocumentToPane: (document: OpenDocument, sourcePaneId: EditorPane['id'], targetPaneId: EditorPane['id']) => void
+  moveDocumentToPane: (
+    document: OpenDocument,
+    sourcePaneId: EditorPane['id'],
+    targetPaneId: EditorPane['id'],
+  ) => void
 }
 
 export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
@@ -110,7 +113,10 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }
 
     deps.setWorkspaceSettings(settings)
-    deps.setWatcherVisibleWorkspace(descriptor, await deps.workspaceFiles.listDirectory(descriptor.id, ''))
+    deps.setWatcherVisibleWorkspace(
+      descriptor,
+      await deps.workspaceFiles.listDirectory(descriptor.id, ''),
+    )
   }
 
   function getWorkspaceDocumentIds(workspaceId: string) {
@@ -122,7 +128,10 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
   async function prepareWorkspaceSwitch(nextRootPath: string) {
     const currentWorkspace = deps.workspace.value
 
-    if (!currentWorkspace || normalizePath(currentWorkspace.rootPath) === normalizePath(nextRootPath)) {
+    if (
+      !currentWorkspace ||
+      normalizePath(currentWorkspace.rootPath) === normalizePath(nextRootPath)
+    ) {
       return true
     }
 
@@ -146,7 +155,9 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
       }
 
       if (decision === 'save') {
-        const saved = await deps.saveDirtyDocuments(dirtyWorkspaceDocuments.map((document) => document.id))
+        const saved = await deps.saveDirtyDocuments(
+          dirtyWorkspaceDocuments.map((document) => document.id),
+        )
 
         if (!saved) {
           return false
@@ -222,7 +233,9 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     const key = deps.nearestLoadedWorkspaceBranch(branchPath, parentPath)
     deps.scheduleWorkspaceRefreshDebounced(key, () => {
       void refreshWorkspaceBranch(key).catch((error) => {
-        deps.setWatcherWarning(`Could not refresh workspace after external changes: ${formatError(error)}`)
+        deps.setWatcherWarning(
+          `Could not refresh workspace after external changes: ${formatError(error)}`,
+        )
       })
     })
   }
@@ -319,7 +332,11 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }
 
     await deps.runFileTask(async () => {
-      const nextPath = await deps.workspaceFiles.renamePath(deps.workspace.value!.id, entry.path, newName)
+      const nextPath = await deps.workspaceFiles.renamePath(
+        deps.workspace.value!.id,
+        entry.path,
+        newName,
+      )
       deps.remapWorkspacePathState(entry.path, nextPath)
       deps.updateDocumentPaths(entry.path, nextPath, deps.workspace.value!.rootPath)
       deps.setSelectedPath(nextPath)
@@ -334,8 +351,9 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
 
     const workspaceId = deps.workspace.value.id
     const affectedDocuments = deps.documents.value.filter((document) =>
-      document.workspaceId === workspaceId &&
-      document.relativePath ? isSameOrChildPath(document.relativePath, entry.path) : false,
+      document.workspaceId === workspaceId && document.relativePath
+        ? isSameOrChildPath(document.relativePath, entry.path)
+        : false,
     )
     const hasDirtyDocument = affectedDocuments.some(deps.isDirty)
     if (hasDirtyDocument) {
@@ -353,7 +371,9 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
       }
 
       if (decision === 'save') {
-        const saved = await deps.saveDirtyDocuments(affectedDocuments.map((document) => document.id))
+        const saved = await deps.saveDirtyDocuments(
+          affectedDocuments.map((document) => document.id),
+        )
 
         if (!saved) {
           return
@@ -400,10 +420,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     const normalizedPath = normalizePath(path)
     const normalizedParent = normalizePath(parent)
 
-    return (
-      normalizedPath === normalizedParent ||
-      normalizedPath.startsWith(`${normalizedParent}\\`)
-    )
+    return normalizedPath === normalizedParent || normalizedPath.startsWith(`${normalizedParent}\\`)
   }
 
   function validateEntryName(value: string) {

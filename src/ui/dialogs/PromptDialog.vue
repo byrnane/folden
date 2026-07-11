@@ -2,24 +2,27 @@
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import AppDialog from './AppDialog.vue'
 
-const props = withDefaults(defineProps<{
-  open: boolean
-  title: string
-  message: string
-  initialValue?: string
-  placeholder?: string
-  confirmLabel?: string
-  cancelLabel?: string
-  error?: string | null
-  inputLabel?: string
-}>(), {
-  initialValue: '',
-  placeholder: '',
-  confirmLabel: 'Save',
-  cancelLabel: 'Cancel',
-  error: null,
-  inputLabel: 'Value',
-})
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    message: string
+    initialValue?: string
+    placeholder?: string
+    confirmLabel?: string
+    cancelLabel?: string
+    error?: string | null
+    inputLabel?: string
+  }>(),
+  {
+    initialValue: '',
+    placeholder: '',
+    confirmLabel: 'Save',
+    cancelLabel: 'Cancel',
+    error: null,
+    inputLabel: 'Value',
+  },
+)
 
 const emit = defineEmits<{
   submit: [value: string]
@@ -86,7 +89,7 @@ onBeforeUnmount(() => {
           v-model="localValue"
           class="dialog-input"
           :placeholder="placeholder"
-        >
+        />
       </label>
       <p v-if="error" class="dialog-error">{{ error }}</p>
 

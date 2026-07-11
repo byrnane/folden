@@ -177,30 +177,33 @@ export function isPersistedSessionState(value: unknown): value is PersistedSessi
     typeof value.splitEnabled === 'boolean' &&
     isSessionPaneId(value.activePaneId) &&
     Array.isArray(value.panes) &&
-    value.panes.every((pane) => (
-      isRecord(pane) &&
-      isSessionPaneId(pane.id) &&
-      Array.isArray(pane.documentKeys) &&
-      pane.documentKeys.every((key) => typeof key === 'string') &&
-      isStringOrNull(pane.activeDocumentKey)
-    )) &&
+    value.panes.every(
+      (pane) =>
+        isRecord(pane) &&
+        isSessionPaneId(pane.id) &&
+        Array.isArray(pane.documentKeys) &&
+        pane.documentKeys.every((key) => typeof key === 'string') &&
+        isStringOrNull(pane.activeDocumentKey),
+    ) &&
     Array.isArray(value.documents) &&
-    value.documents.every((document) => (
-      isRecord(document) &&
-      typeof document.key === 'string' &&
-      isSessionDocumentKind(document.kind) &&
-      typeof document.name === 'string' &&
-      isStringOrNull(document.path) &&
-      isStringOrNull(document.workspaceRootPath) &&
-      isStringOrNull(document.relativePath)
-    )) &&
+    value.documents.every(
+      (document) =>
+        isRecord(document) &&
+        typeof document.key === 'string' &&
+        isSessionDocumentKind(document.kind) &&
+        typeof document.name === 'string' &&
+        isStringOrNull(document.path) &&
+        isStringOrNull(document.workspaceRootPath) &&
+        isStringOrNull(document.relativePath),
+    ) &&
     Array.isArray(value.paneModes) &&
-    value.paneModes.every((paneMode) => (
-      isRecord(paneMode) &&
-      isSessionPaneId(paneMode.paneId) &&
-      typeof paneMode.documentKey === 'string' &&
-      (paneMode.mode === 'visual' || paneMode.mode === 'source')
-    ))
+    value.paneModes.every(
+      (paneMode) =>
+        isRecord(paneMode) &&
+        isSessionPaneId(paneMode.paneId) &&
+        typeof paneMode.documentKey === 'string' &&
+        (paneMode.mode === 'visual' || paneMode.mode === 'source'),
+    )
   )
 }
 

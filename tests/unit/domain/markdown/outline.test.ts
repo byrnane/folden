@@ -7,14 +7,11 @@ import {
 
 describe('markdown outline', () => {
   it('extracts headings and ignores fenced code blocks', () => {
-    expect(extractMarkdownHeadings([
-      '# Title',
-      '```',
-      '# Ignored',
-      '```',
-      '## Section',
-      '###### Deep',
-    ].join('\n'))).toEqual([
+    expect(
+      extractMarkdownHeadings(
+        ['# Title', '```', '# Ignored', '```', '## Section', '###### Deep'].join('\n'),
+      ),
+    ).toEqual([
       { id: 'title', level: 1, text: 'Title', line: 1 },
       { id: 'section', level: 2, text: 'Section', line: 5 },
       { id: 'deep', level: 6, text: 'Deep', line: 6 },
@@ -22,31 +19,27 @@ describe('markdown outline', () => {
   })
 
   it('keeps duplicate heading ids stable', () => {
-    expect(extractMarkdownHeadings('# Same\n## Same').map((heading) => heading.id)).toEqual(['same', 'same-1'])
+    expect(extractMarkdownHeadings('# Same\n## Same').map((heading) => heading.id)).toEqual([
+      'same',
+      'same-1',
+    ])
   })
 
   it('ignores empty headings and supports tilde fences', () => {
-    expect(extractMarkdownHeadings([
-      '#',
-      '~~~',
-      '## Hidden',
-      '~~~',
-      '### Visible ###',
-    ].join('\n'))).toEqual([
-      { id: 'visible', level: 3, text: 'Visible', line: 5 },
-    ])
+    expect(
+      extractMarkdownHeadings(['#', '~~~', '## Hidden', '~~~', '### Visible ###'].join('\n')),
+    ).toEqual([{ id: 'visible', level: 3, text: 'Visible', line: 5 }])
   })
 
   it('builds a map for every non-empty document', () => {
     expect(buildDocumentMapLines('Short\nfile')).toHaveLength(2)
     expect(buildDocumentMapLines('')).toEqual([])
 
-    const lines = buildDocumentMapLines([
-      '# Heading',
-      '  - List item',
-      '',
-      ...Array.from({ length: 22 }, () => 'Paragraph'),
-    ].join('\n'))
+    const lines = buildDocumentMapLines(
+      ['# Heading', '  - List item', '', ...Array.from({ length: 22 }, () => 'Paragraph')].join(
+        '\n',
+      ),
+    )
 
     expect(lines.slice(0, 3)).toEqual([
       expect.objectContaining({ kind: 'heading', width: 92 }),

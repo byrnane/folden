@@ -1,9 +1,5 @@
 import { expect, test } from '@playwright/test'
-import {
-  documentDragMimeType,
-  openApp,
-  sourceEditor,
-} from './helpers'
+import { documentDragMimeType, openApp, sourceEditor } from './helpers'
 
 test('keeps split source and visual panes in sync for the same document', async ({ page }) => {
   await openApp(page)
@@ -59,7 +55,9 @@ test('reorders tabs with drag and drop', async ({ page }) => {
 
   await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2)
   await page.mouse.down()
-  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, { steps: 8 })
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2, {
+    steps: 8,
+  })
   await page.mouse.up()
 
   await expect(leftTabs.nth(1)).toContainText('daily.md')
@@ -105,11 +103,13 @@ test('ignores malformed document drag payloads', async ({ page }) => {
   await leftTabs.nth(1).evaluate((target, mimeType) => {
     const dataTransfer = new DataTransfer()
     dataTransfer.setData(mimeType, '{"kind":"tab","documentId":42,"paneId":"left"}')
-    target.dispatchEvent(new DragEvent('drop', {
-      bubbles: true,
-      cancelable: true,
-      dataTransfer,
-    }))
+    target.dispatchEvent(
+      new DragEvent('drop', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer,
+      }),
+    )
   }, documentDragMimeType)
 
   await expect(leftTabs).toHaveCount(3)
@@ -131,12 +131,23 @@ test('shows split open editors and marks the active pane document', async ({ pag
 
   const openEditors = page.locator('.open-editors')
   await expect(openEditors.locator('.open-editor-row.active')).toHaveCount(2)
-  await expect(openEditors.locator('.open-editor-row.active-pane-document')).toContainText('daily.md')
-  await expect(openEditors.locator('.open-editor-row.active-pane-document .open-editor-dirty-dot')).toHaveCount(1)
+  await expect(openEditors.locator('.open-editor-row.active-pane-document')).toContainText(
+    'daily.md',
+  )
+  await expect(
+    openEditors.locator('.open-editor-row.active-pane-document .open-editor-dirty-dot'),
+  ).toHaveCount(1)
 
   await page.locator('.editor-pane').nth(1).click()
-  await expect(openEditors.locator('.open-editor-row.active-pane-document')).toContainText('README.md')
-  await expect(openEditors.locator('.open-editor-row').filter({ hasText: 'daily.md' }).locator('.open-editor-dirty-dot')).toHaveCount(1)
+  await expect(openEditors.locator('.open-editor-row.active-pane-document')).toContainText(
+    'README.md',
+  )
+  await expect(
+    openEditors
+      .locator('.open-editor-row')
+      .filter({ hasText: 'daily.md' })
+      .locator('.open-editor-dirty-dot'),
+  ).toHaveCount(1)
 })
 
 test('asks before closing a dirty document tab', async ({ page }) => {

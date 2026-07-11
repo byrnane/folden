@@ -7,7 +7,10 @@ export type DocumentDisplayLabel = {
 }
 
 function cleanPath(value: string) {
-  return value.replaceAll('\\', '/').replace(/\/+/gu, '/').replace(/^\/|\/$/gu, '')
+  return value
+    .replaceAll('\\', '/')
+    .replace(/\/+/gu, '/')
+    .replace(/^\/|\/$/gu, '')
 }
 
 function documentPathParts(document: OpenDocument, cleanDisplayPath: (path: string) => string) {
@@ -52,10 +55,9 @@ export function buildDocumentDisplayLabels(
       continue
     }
 
-    const partsByDocument = new Map(group.map((document) => [
-      document.id,
-      documentPathParts(document, cleanDisplayPath),
-    ]))
+    const partsByDocument = new Map(
+      group.map((document) => [document.id, documentPathParts(document, cleanDisplayPath)]),
+    )
     const maxDepth = Math.max(...[...partsByDocument.values()].map((parts) => parts.length))
     let depth = 1
 

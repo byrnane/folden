@@ -17,7 +17,9 @@ import {
 describe('path helpers', () => {
   it('normalizes Windows display paths and file names', () => {
     expect(cleanDisplayPath('\\\\?\\C:\\Notes\\draft.md')).toBe('C:\\Notes\\draft.md')
-    expect(cleanDisplayPath('\\\\?\\UNC\\server\\share\\draft.md')).toBe('\\\\server\\share\\draft.md')
+    expect(cleanDisplayPath('\\\\?\\UNC\\server\\share\\draft.md')).toBe(
+      '\\\\server\\share\\draft.md',
+    )
     expect(fileNameFromPath('\\\\?\\C:\\Notes\\draft.md')).toBe('draft.md')
     expect(workspaceNameFromPath('C:\\Projects\\Folden')).toBe('Folden')
   })

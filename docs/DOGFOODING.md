@@ -18,24 +18,24 @@ Notes:
 
 Required coverage:
 
-* several full work sessions;
-* real Markdown project;
-* folder with many files;
-* long session with multiple tabs;
-* one document open in split view with Source and Visual modes;
-* Visual/Source switching;
-* autosave in real work;
-* recovery after forced app close;
-* external change of an open file;
-* conflict during simultaneous editing;
-* workspace rename, create, delete, and move scenarios;
-* large Markdown files;
-* outline active-section tracking, keyboard navigation, and document-map click/drag in both editor modes;
-* workspace-level hiding through `.folden/workspace.json`, including reopen and restart;
-* local and remote images;
-* layout and settings persistence between launches;
-* several hours of use;
-* memory use and visible slowdown check.
+- several full work sessions;
+- real Markdown project;
+- folder with many files;
+- long session with multiple tabs;
+- one document open in split view with Source and Visual modes;
+- Visual/Source switching;
+- autosave in real work;
+- recovery after forced app close;
+- external change of an open file;
+- conflict during simultaneous editing;
+- workspace rename, create, delete, and move scenarios;
+- large Markdown files;
+- outline active-section tracking, keyboard navigation, and document-map click/drag in both editor modes;
+- workspace-level hiding through `.folden/workspace.json`, including reopen and restart;
+- local and remote images;
+- layout and settings persistence between launches;
+- several hours of use;
+- memory use and visible slowdown check.
 
 ## 0.7 Automated Closeout
 

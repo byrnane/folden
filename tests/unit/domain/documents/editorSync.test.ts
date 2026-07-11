@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { acceptDocumentUpdate, createEditorViewSession, getSynchronizedSessionIds } from '../../../../src/domain/documents/editorSync'
+import {
+  acceptDocumentUpdate,
+  createEditorViewSession,
+  getSynchronizedSessionIds,
+} from '../../../../src/domain/documents/editorSync'
 import { createTextFileFormat } from '../../../../src/domain/document'
 import { createDocumentHistoryState } from '../../../../src/domain/documents/documentHistory'
 import type { OpenDocument } from '../../../../src/domain/documents/documentState'

@@ -49,9 +49,7 @@ describe('visual safety controller', () => {
     await expect(controller.confirmVisualMode(document)).resolves.toBe(true)
     expect(openMarkdownSafetyDialog).toHaveBeenCalledWith({
       title: 'Visual mode may rewrite draft.md',
-      features: expect.arrayContaining([
-        expect.objectContaining({ kind: 'html' }),
-      ]),
+      features: expect.arrayContaining([expect.objectContaining({ kind: 'html' })]),
     })
     expect(controller.hasUnsafeUnacknowledgedVisualState(document)).toBe(false)
   })

@@ -24,7 +24,7 @@ export function isMarkdownPath(path: string | null) {
   return /\.(md|markdown)$/i.test(path)
 }
 
-export function isMarkdownDocument(document: { path: string | null, name: string }) {
+export function isMarkdownDocument(document: { path: string | null; name: string }) {
   return isMarkdownPath(document.path ?? document.name)
 }
 

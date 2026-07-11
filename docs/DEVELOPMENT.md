@@ -6,10 +6,10 @@ This document covers setup, commands, checks, CI, build artifacts, and release w
 
 Folden uses:
 
-* Node.js and npm;
-* Rust toolchain with Cargo;
-* Windows C++ Build Tools with the `Desktop development with C++` workload;
-* Microsoft Edge WebView2 runtime.
+- Node.js and npm;
+- Rust toolchain with Cargo;
+- Windows C++ Build Tools with the `Desktop development with C++` workload;
+- Microsoft Edge WebView2 runtime.
 
 On Windows, install Rust with Rustup:
 
@@ -106,12 +106,13 @@ npm run quality
 
 `quality` runs:
 
-* `npm run version:check`;
-* `npm run vue:typecheck`;
-* `npm run vue:unused`;
-* `npm run deps:cycles`;
-* `npm run lint`;
-* `npm run test:unit`.
+- `npm run version:check`;
+- `npm run format:check`;
+- `npm run vue:typecheck`;
+- `npm run vue:unused`;
+- `npm run deps:cycles`;
+- `npm run lint`;
+- `npm run test:unit`.
 
 Run individual frontend checks:
 
@@ -189,22 +190,23 @@ build/desktop/release/app.exe
 
 `scripts/tauri.mjs` sets `CARGO_TARGET_DIR=build/desktop` so Rust build artifacts stay out of `src-tauri/target`. `vite.config.ts` ignores both `src-tauri/target` and `build/desktop` to avoid Windows watcher conflicts with locked Cargo files.
 
+The Source and Visual editors are loaded as separate chunks. The 0.8.5 closeout baseline is about 240 KB for the startup chunk, 530 KB for Visual, and 609 KB for Source before gzip. Vite's 500 KB warning remains expected for the editor chunks because CodeMirror and Tiptap load only when their editor is opened; do not hide it by raising the global warning limit.
+
 ## Windows CI
 
 `.github/workflows/windows.yml` runs on pushes to `master` and `main`, and on pull requests. It currently performs:
 
-* checkout;
-* Node setup with npm cache;
-* Rust setup with `rustfmt` and `clippy`;
-* Rust cache;
-* `npm ci`;
-* `npm run quality`;
-* Playwright Chromium install;
-* `npm run test:e2e`;
-* `cargo fmt --check`;
-* `cargo clippy -- -D warnings`;
-* `cargo test`;
-* `npm run app:build`.
+- checkout;
+- Node setup with npm cache;
+- Rust setup with `rustfmt` and `clippy`;
+- Rust cache;
+- `npm ci`;
+- `npm run quality`;
+- `cargo fmt --check`;
+- `cargo clippy -- -D warnings`;
+- `cargo test`.
+
+Browser E2E and desktop builds stay in the release gate and are not run on every push.
 
 ## Version and Release Workflow
 

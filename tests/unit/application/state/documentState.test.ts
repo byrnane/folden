@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createDocumentState } from '../../../../src/domain/documents/documentState'
+import { createDocumentState } from '../../../../src/application/state/documentState'
 import { createTextFileFormat } from '../../../../src/domain/document'
 
-function createLoadedDocument(overrides: Partial<Parameters<ReturnType<typeof createState>['openLoadedDocument']>[0]>) {
+function createLoadedDocument(
+  overrides: Partial<Parameters<ReturnType<typeof createState>['openLoadedDocument']>[0]>,
+) {
   return {
     id: 'document-default',
     path: 'C:\\Docs\\Draft.md',
@@ -30,15 +32,19 @@ describe('document state', () => {
   it('reuses one document model for the same file path', () => {
     const state = createState()
 
-    const first = state.openLoadedDocument(createLoadedDocument({
-      id: 'document-1',
-      path: 'C:\\Docs\\Draft.md',
-    }))
-    const second = state.openLoadedDocument(createLoadedDocument({
-      id: 'document-2',
-      path: 'c:/docs/draft.md',
-      content: '# Draft changed elsewhere',
-    }))
+    const first = state.openLoadedDocument(
+      createLoadedDocument({
+        id: 'document-1',
+        path: 'C:\\Docs\\Draft.md',
+      }),
+    )
+    const second = state.openLoadedDocument(
+      createLoadedDocument({
+        id: 'document-2',
+        path: 'c:/docs/draft.md',
+        content: '# Draft changed elsewhere',
+      }),
+    )
 
     expect(second.id).toBe(first.id)
     expect(first.nativeId).toBe('document-2')
@@ -102,20 +108,24 @@ describe('document state', () => {
 
   it('updates renamed document paths across descendants', () => {
     const state = createState()
-    const root = state.openLoadedDocument(createLoadedDocument({
-      id: 'document-a',
-      path: 'C:\\Docs\\folder\\note.md',
-      content: 'A',
-      workspaceId: 'workspace-1',
-      relativePath: 'folder\\note.md',
-    }))
-    const child = state.openLoadedDocument(createLoadedDocument({
-      id: 'document-b',
-      path: 'C:\\Docs\\folder\\nested\\deep.md',
-      content: 'B',
-      workspaceId: 'workspace-1',
-      relativePath: 'folder\\nested\\deep.md',
-    }))
+    const root = state.openLoadedDocument(
+      createLoadedDocument({
+        id: 'document-a',
+        path: 'C:\\Docs\\folder\\note.md',
+        content: 'A',
+        workspaceId: 'workspace-1',
+        relativePath: 'folder\\note.md',
+      }),
+    )
+    const child = state.openLoadedDocument(
+      createLoadedDocument({
+        id: 'document-b',
+        path: 'C:\\Docs\\folder\\nested\\deep.md',
+        content: 'B',
+        workspaceId: 'workspace-1',
+        relativePath: 'folder\\nested\\deep.md',
+      }),
+    )
 
     state.updateDocumentPaths('folder', 'archive', 'C:\\Docs')
 
@@ -124,13 +134,15 @@ describe('document state', () => {
     expect(child.relativePath).toBe('archive\\nested\\deep.md')
     expect(child.path).toBe('C:\\Docs\\archive\\nested\\deep.md')
 
-    const reopened = state.openLoadedDocument(createLoadedDocument({
-      id: 'document-c',
-      path: 'C:\\Docs\\archive\\nested\\deep.md',
-      content: 'C',
-      workspaceId: 'workspace-1',
-      relativePath: 'archive\\nested\\deep.md',
-    }))
+    const reopened = state.openLoadedDocument(
+      createLoadedDocument({
+        id: 'document-c',
+        path: 'C:\\Docs\\archive\\nested\\deep.md',
+        content: 'C',
+        workspaceId: 'workspace-1',
+        relativePath: 'archive\\nested\\deep.md',
+      }),
+    )
 
     expect(reopened.id).toBe(child.id)
     expect(state.documents.value).toHaveLength(2)
@@ -138,11 +150,13 @@ describe('document state', () => {
 
   it('replaces a clean document from disk and keeps it non-dirty', () => {
     const state = createState()
-    const document = state.openLoadedDocument(createLoadedDocument({
-      id: 'document-clean',
-      path: 'C:\\Docs\\Draft.md',
-      content: 'before',
-    }))
+    const document = state.openLoadedDocument(
+      createLoadedDocument({
+        id: 'document-clean',
+        path: 'C:\\Docs\\Draft.md',
+        content: 'before',
+      }),
+    )
 
     const reloaded = state.replaceDocumentFromDisk(document.id, {
       id: 'document-clean',
@@ -179,11 +193,13 @@ describe('document state', () => {
 
   it('creates an explicit revision when acknowledging a conflict without changing content', () => {
     const state = createState()
-    const document = state.openLoadedDocument(createLoadedDocument({
-      id: 'document-conflict',
-      path: 'C:\\Docs\\Draft.md',
-      content: 'draft',
-    }))
+    const document = state.openLoadedDocument(
+      createLoadedDocument({
+        id: 'document-conflict',
+        path: 'C:\\Docs\\Draft.md',
+        content: 'draft',
+      }),
+    )
 
     state.updateDocumentContent(document.id, 'draft + local')
     state.markDocumentConflict(document.id, 'changed outside Folden')

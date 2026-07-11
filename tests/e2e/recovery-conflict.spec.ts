@@ -1,8 +1,5 @@
 import { expect, test } from '@playwright/test'
-import {
-  openApp,
-  sourceEditor,
-} from './helpers'
+import { openApp, sourceEditor } from './helpers'
 
 test('restores recovery snapshots into the original document on startup', async ({ page }) => {
   await openApp(page, {
@@ -39,7 +36,9 @@ test('restores recovery snapshots into the original document on startup', async 
   await expect(page.getByTestId('open-documents-status')).toContainText('1 unsaved')
 })
 
-test('shows a readable conflict diff and preserves the dirty copy when reloading disk content', async ({ page }) => {
+test('shows a readable conflict diff and preserves the dirty copy when reloading disk content', async ({
+  page,
+}) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
@@ -50,13 +49,15 @@ test('shows a readable conflict diff and preserves the dirty copy when reloading
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
   await page.keyboard.type('\nLocal conflict line.\n')
 
-  await page.evaluate(() => (
-    (window as Window & {
-      __FOLDEN_TAURI_MOCK__?: {
-        emitFsChange: (path: string, content: string) => void
+  await page.evaluate(() =>
+    (
+      window as Window & {
+        __FOLDEN_TAURI_MOCK__?: {
+          emitFsChange: (path: string, content: string) => void
+        }
       }
-    }).__FOLDEN_TAURI_MOCK__?.emitFsChange('README.md', '# E2E Note\n\nDisk version wins.\n')
-  ))
+    ).__FOLDEN_TAURI_MOCK__?.emitFsChange('README.md', '# E2E Note\n\nDisk version wins.\n'),
+  )
 
   await expect(page.getByTestId('conflict-warning')).toBeVisible()
   await page.getByTestId('resolve-conflict').click()
@@ -69,5 +70,7 @@ test('shows a readable conflict diff and preserves the dirty copy when reloading
 
   await expect(page.getByTestId('document-title')).toHaveText('README.md')
   await expect(page.getByTestId('source-editor')).toContainText('Disk version wins.')
-  await expect(page.locator('.pane-tabs').getByRole('button', { name: 'README (conflict copy).md' })).toBeVisible()
+  await expect(
+    page.locator('.pane-tabs').getByRole('button', { name: 'README (conflict copy).md' }),
+  ).toBeVisible()
 })

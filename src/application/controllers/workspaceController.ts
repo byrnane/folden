@@ -30,7 +30,9 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
 
     try {
       const parsedValue = JSON.parse(rawValue)
-      return Array.isArray(parsedValue) ? parsedValue.filter((value) => typeof value === 'string') : []
+      return Array.isArray(parsedValue)
+        ? parsedValue.filter((value) => typeof value === 'string')
+        : []
     } catch {
       return []
     }
@@ -38,7 +40,10 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
 
   function saveRecentWorkspaces(paths: string[]) {
     recentWorkspaces.value = [...new Set(paths)].slice(0, 6)
-    recentWorkspaceStorage()?.setItem(recentWorkspaceStorageKey, JSON.stringify(recentWorkspaces.value))
+    recentWorkspaceStorage()?.setItem(
+      recentWorkspaceStorageKey,
+      JSON.stringify(recentWorkspaces.value),
+    )
   }
 
   function clonePathSet(source: Set<string>) {
@@ -87,7 +92,9 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
 
   function setWorkspaceSettings(settings: WorkspaceSettings) {
     workspaceSettings.value = {
-      ignoredPaths: [...new Set(settings.ignoredPaths.map(normalizeWorkspaceSettingsPath).filter(Boolean))],
+      ignoredPaths: [
+        ...new Set(settings.ignoredPaths.map(normalizeWorkspaceSettingsPath).filter(Boolean)),
+      ],
     }
 
     if (workspace.value) {
@@ -96,7 +103,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
   }
 
   function setWatcherVisibleWorkspace(
-    descriptor: { id: string, rootPath: string, name: string },
+    descriptor: { id: string; rootPath: string; name: string },
     entries: WorkspaceEntry[],
     settings: WorkspaceSettings = workspaceSettings.value,
   ) {
@@ -161,45 +168,52 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     loadedWorkspacePaths.value = new Set(
       [...loadedWorkspacePaths.value].filter((value) => {
         const normalizedValue = normalizePath(value)
-        return normalizedValue !== normalizedTargetPath
-          && !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+        return (
+          normalizedValue !== normalizedTargetPath &&
+          !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+        )
       }),
     )
     loadingWorkspacePaths.value = new Set(
       [...loadingWorkspacePaths.value].filter((value) => {
         const normalizedValue = normalizePath(value)
-        return normalizedValue !== normalizedTargetPath
-          && !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+        return (
+          normalizedValue !== normalizedTargetPath &&
+          !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+        )
       }),
     )
     expandedWorkspacePaths.value = new Set(
       [...expandedWorkspacePaths.value].filter((value) => {
         const normalizedValue = normalizePath(value)
-        return normalizedValue !== normalizedTargetPath
-          && !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+        return (
+          normalizedValue !== normalizedTargetPath &&
+          !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+        )
       }),
     )
     workspaceLoadErrors.value = Object.fromEntries(
       Object.entries(workspaceLoadErrors.value).filter(([value]) => {
         const normalizedValue = normalizePath(value)
-        return normalizedValue !== normalizedTargetPath
-          && !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+        return (
+          normalizedValue !== normalizedTargetPath &&
+          !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+        )
       }),
     )
   }
 
   function remapWorkspacePathState(previousPath: string, nextPath: string) {
     const normalizedPreviousPath = normalizePath(previousPath)
-    const remapPath = (value: string) => (
+    const remapPath = (value: string) =>
       normalizePath(value) === normalizedPreviousPath
         ? nextPath
         : `${nextPath}${value.slice(previousPath.length)}`
-    )
     loadedWorkspacePaths.value = new Set(
       [...loadedWorkspacePaths.value].map((value) => {
         const normalizedValue = normalizePath(value)
-        return normalizedValue === normalizedPreviousPath
-          || normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+        return normalizedValue === normalizedPreviousPath ||
+          normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
           ? remapPath(value)
           : value
       }),
@@ -207,8 +221,8 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     loadingWorkspacePaths.value = new Set(
       [...loadingWorkspacePaths.value].map((value) => {
         const normalizedValue = normalizePath(value)
-        return normalizedValue === normalizedPreviousPath
-          || normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+        return normalizedValue === normalizedPreviousPath ||
+          normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
           ? remapPath(value)
           : value
       }),
@@ -216,8 +230,8 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     expandedWorkspacePaths.value = new Set(
       [...expandedWorkspacePaths.value].map((value) => {
         const normalizedValue = normalizePath(value)
-        return normalizedValue === normalizedPreviousPath
-          || normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+        return normalizedValue === normalizedPreviousPath ||
+          normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
           ? remapPath(value)
           : value
       }),
@@ -225,8 +239,8 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     workspaceLoadErrors.value = Object.fromEntries(
       Object.entries(workspaceLoadErrors.value).map(([value, message]) => {
         const normalizedValue = normalizePath(value)
-        return normalizedValue === normalizedPreviousPath
-          || normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+        return normalizedValue === normalizedPreviousPath ||
+          normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
           ? [remapPath(value), message]
           : [value, message]
       }),
@@ -324,14 +338,13 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     setWorkspacePathLoaded(normalizedBranchPath, true)
   }
 
-  function loadedDescendantPaths(branchPath: string, isSameOrChildPath: (path: string, parent: string) => boolean) {
+  function loadedDescendantPaths(
+    branchPath: string,
+    isSameOrChildPath: (path: string, parent: string) => boolean,
+  ) {
     return [...loadedWorkspacePaths.value]
       .filter((value) => value !== branchPath && value !== '')
-      .filter((value) => (
-        branchPath === ''
-          ? true
-          : isSameOrChildPath(value, branchPath)
-      ))
+      .filter((value) => (branchPath === '' ? true : isSameOrChildPath(value, branchPath)))
       .sort((left, right) => left.split('\\').length - right.split('\\').length)
   }
 
@@ -343,7 +356,10 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     )
   }
 
-  function nearestLoadedWorkspaceBranch(branchPath: string | null, parentPath: (path: string) => string | null) {
+  function nearestLoadedWorkspaceBranch(
+    branchPath: string | null,
+    parentPath: (path: string) => string | null,
+  ) {
     let currentPath = branchPath ?? ''
 
     while (currentPath) {
@@ -357,7 +373,10 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     return ''
   }
 
-  function workspaceRelativePathFromAbsolute(path: string, cleanDisplayPath: (path: string) => string) {
+  function workspaceRelativePathFromAbsolute(
+    path: string,
+    cleanDisplayPath: (path: string) => string,
+  ) {
     if (!workspace.value) {
       return null
     }

@@ -1,10 +1,7 @@
-import { createDocumentState, type OpenDocument } from '../../domain/documents/documentState'
+import type { OpenDocument } from '../../domain/documents/documentState'
 import { isDocumentDirty } from '../../domain/document'
-import {
-  fileNameFromPath,
-  isMarkdownPath,
-  normalizePath,
-} from '../helpers/pathHelpers'
+import { createDocumentState } from '../state/documentState'
+import { fileNameFromPath, isMarkdownPath, normalizePath } from '../helpers/pathHelpers'
 
 export function createDocumentController(initialText: string) {
   const documentState = createDocumentState({

@@ -67,7 +67,9 @@ const checks = [
 const mismatches = checks.filter(([, version]) => version !== expectedVersion)
 
 if (mismatches.length > 0) {
-  const lines = mismatches.map(([label, version]) => `- ${label}: expected ${expectedVersion}, found ${version}`)
+  const lines = mismatches.map(
+    ([label, version]) => `- ${label}: expected ${expectedVersion}, found ${version}`,
+  )
   console.error(`Version mismatch detected:\n${lines.join('\n')}`)
   process.exit(1)
 }

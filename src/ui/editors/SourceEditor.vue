@@ -56,35 +56,38 @@ let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
 
-const sourceTheme = EditorView.theme({
-  '&': {
-    backgroundColor: '#15181d',
-    color: '#d9dee7',
-    height: '100%',
+const sourceTheme = EditorView.theme(
+  {
+    '&': {
+      backgroundColor: '#15181d',
+      color: '#d9dee7',
+      height: '100%',
+    },
+    '.cm-scroller': {
+      fontFamily: 'var(--source-font-family)',
+      lineHeight: '1.65',
+    },
+    '.cm-content': {
+      caretColor: '#f2c572',
+      padding: '20px 24px',
+    },
+    '.cm-gutters': {
+      backgroundColor: '#15181d',
+      color: '#687383',
+      borderRight: '1px solid #2b313a',
+    },
+    '.cm-activeLine, .cm-activeLineGutter': {
+      backgroundColor: '#20252d',
+    },
+    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
+      backgroundColor: '#41506a',
+    },
+    '.cm-cursor': {
+      borderLeftColor: '#f2c572',
+    },
   },
-  '.cm-scroller': {
-    fontFamily: 'var(--source-font-family)',
-    lineHeight: '1.65',
-  },
-  '.cm-content': {
-    caretColor: '#f2c572',
-    padding: '20px 24px',
-  },
-  '.cm-gutters': {
-    backgroundColor: '#15181d',
-    color: '#687383',
-    borderRight: '1px solid #2b313a',
-  },
-  '.cm-activeLine, .cm-activeLineGutter': {
-    backgroundColor: '#20252d',
-  },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
-    backgroundColor: '#41506a',
-  },
-  '.cm-cursor': {
-    borderLeftColor: '#f2c572',
-  },
-}, { dark: true })
+  { dark: true },
+)
 
 const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.heading, color: '#f2c572', fontWeight: '700' },
@@ -95,9 +98,9 @@ const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.quote, color: '#aeb7c5', fontStyle: 'italic' },
 ])
 
-const headings = computed(() => props.isMarkdown ? extractMarkdownHeadings(props.modelValue) : [])
+const headings = computed(() => (props.isMarkdown ? extractMarkdownHeadings(props.modelValue) : []))
 const showOutline = computed(() => props.showDocumentOutline && headings.value.length > 0)
-const mapLines = computed(() => props.isMarkdown ? buildDocumentMapLines(props.modelValue) : [])
+const mapLines = computed(() => (props.isMarkdown ? buildDocumentMapLines(props.modelValue) : []))
 const showDocumentMap = computed(() => props.showDocumentMap && mapLines.value.length > 0)
 
 function clampPosition(position: number) {
@@ -114,7 +117,13 @@ function selectedText() {
   return editorView.state.doc.sliceString(selection.from, selection.to)
 }
 
-function dispatchReplacement(from: number, to: number, insert: string, anchor: number, head = anchor) {
+function dispatchReplacement(
+  from: number,
+  to: number,
+  insert: string,
+  anchor: number,
+  head = anchor,
+) {
   editorView?.dispatch({
     changes: { from, to, insert },
     selection: EditorSelection.single(anchor, head),
@@ -129,7 +138,13 @@ function replaceCurrentSelection(insert: string, selectFrom: number, selectTo = 
   }
 
   const selection = editorView.state.selection.main
-  dispatchReplacement(selection.from, selection.to, insert, selection.from + selectFrom, selection.from + selectTo)
+  dispatchReplacement(
+    selection.from,
+    selection.to,
+    insert,
+    selection.from + selectFrom,
+    selection.from + selectTo,
+  )
 }
 
 function surroundSelection(prefix: string, suffix = prefix, placeholder = 'text') {
@@ -138,7 +153,9 @@ function surroundSelection(prefix: string, suffix = prefix, placeholder = 'text'
   }
 
   const selection = editorView.state.selection.main
-  const text = selection.empty ? placeholder : editorView.state.doc.sliceString(selection.from, selection.to)
+  const text = selection.empty
+    ? placeholder
+    : editorView.state.doc.sliceString(selection.from, selection.to)
   const insert = `${prefix}${text}${suffix}`
   dispatchReplacement(
     selection.from,
@@ -160,7 +177,13 @@ function replaceSelectedLines(transform: (line: string, index: number) => string
   const text = editorView.state.doc.sliceString(startLine.from, endLine.to)
   const insert = text.split('\n').map(transform).join('\n')
 
-  dispatchReplacement(startLine.from, endLine.to, insert, startLine.from, startLine.from + insert.length)
+  dispatchReplacement(
+    startLine.from,
+    endLine.to,
+    insert,
+    startLine.from,
+    startLine.from + insert.length,
+  )
 }
 
 function normalizeBlockLine(line: string) {
@@ -180,7 +203,9 @@ function scrollToLine(lineNumber: number) {
     return
   }
 
-  const line = editorView.state.doc.line(Math.min(Math.max(lineNumber, 1), editorView.state.doc.lines))
+  const line = editorView.state.doc.line(
+    Math.min(Math.max(lineNumber, 1), editorView.state.doc.lines),
+  )
   editorView.dispatch({
     selection: EditorSelection.cursor(line.from),
     scrollIntoView: true,
@@ -204,11 +229,15 @@ function updateMapViewport() {
   const scrollHeight = scrollElement.scrollHeight
   const clientHeight = scrollElement.clientHeight
 
-  mapLinePositions.value = Object.fromEntries(headings.value.map((heading) => {
-    const line = editorView!.state.doc.line(Math.min(Math.max(heading.line, 1), editorView!.state.doc.lines))
-    const position = editorView!.lineBlockAt(line.from).top
-    return [heading.line - 1, Math.min(Math.max((position / scrollHeight) * 100, 0), 100)]
-  }))
+  mapLinePositions.value = Object.fromEntries(
+    headings.value.map((heading) => {
+      const line = editorView!.state.doc.line(
+        Math.min(Math.max(heading.line, 1), editorView!.state.doc.lines),
+      )
+      const position = editorView!.lineBlockAt(line.from).top
+      return [heading.line - 1, Math.min(Math.max((position / scrollHeight) * 100, 0), 100)]
+    }),
+  )
 
   if (scrollHeight <= 0 || clientHeight <= 0 || scrollHeight <= clientHeight) {
     mapViewport.value = { top: 0, height: 100 }
@@ -230,10 +259,14 @@ function updateActiveHeading() {
   }
 
   const scrollElement = editorView.scrollDOM
-  const positions = Object.fromEntries(headings.value.map((heading) => {
-    const line = editorView!.state.doc.line(Math.min(Math.max(heading.line, 1), editorView!.state.doc.lines))
-    return [heading.id, editorView!.lineBlockAt(line.from).top]
-  }))
+  const positions = Object.fromEntries(
+    headings.value.map((heading) => {
+      const line = editorView!.state.doc.line(
+        Math.min(Math.max(heading.line, 1), editorView!.state.doc.lines),
+      )
+      return [heading.id, editorView!.lineBlockAt(line.from).top]
+    }),
+  )
   activeHeadingId.value = findActiveHeading(headings.value, positions, scrollElement.scrollTop)
 }
 
@@ -242,7 +275,8 @@ function scrollMapToRatio(ratio: number) {
     return
   }
 
-  editorView.scrollDOM.scrollTop = ratio * (editorView.scrollDOM.scrollHeight - editorView.scrollDOM.clientHeight)
+  editorView.scrollDOM.scrollTop =
+    ratio * (editorView.scrollDOM.scrollHeight - editorView.scrollDOM.clientHeight)
   updateMapViewport()
 }
 
@@ -404,7 +438,13 @@ async function setLink() {
 
   if (existingLink) {
     const insert = url ? `[${existingLink.text}](${url})` : existingLink.text
-    dispatchReplacement(existingLink.from, existingLink.to, insert, existingLink.from, existingLink.from + insert.length)
+    dispatchReplacement(
+      existingLink.from,
+      existingLink.to,
+      insert,
+      existingLink.from,
+      existingLink.from + insert.length,
+    )
     return
   }
 
@@ -443,15 +483,24 @@ function runCommand(command: EditorCommand) {
     italic: () => surroundSelection('_'),
     strike: () => surroundSelection('~~'),
     'inline-code': () => surroundSelection('`'),
-    'clear-formatting': () => replaceSelectedLines((line) => normalizeBlockLine(line)
-      .replace(/\*\*([^*]+)\*\*/gu, '$1')
-      .replace(/~~([^~]+)~~/gu, '$1')
-      .replace(/_([^_]+)_/gu, '$1')
-      .replace(/`([^`]+)`/gu, '$1')),
-    'bullet-list': () => replaceSelectedLines((line) => `- ${normalizeBlockLine(line) || 'List item'}`),
-    'ordered-list': () => replaceSelectedLines((line, index) => `${index + 1}. ${normalizeBlockLine(line) || 'List item'}`),
-    'task-list': () => replaceSelectedLines((line) => `- [ ] ${normalizeBlockLine(line) || 'Task item'}`),
-    quote: () => replaceSelectedLines((line) => `> ${line.replace(/^\s{0,3}>\s?/u, '') || 'Quote'}`),
+    'clear-formatting': () =>
+      replaceSelectedLines((line) =>
+        normalizeBlockLine(line)
+          .replace(/\*\*([^*]+)\*\*/gu, '$1')
+          .replace(/~~([^~]+)~~/gu, '$1')
+          .replace(/_([^_]+)_/gu, '$1')
+          .replace(/`([^`]+)`/gu, '$1'),
+      ),
+    'bullet-list': () =>
+      replaceSelectedLines((line) => `- ${normalizeBlockLine(line) || 'List item'}`),
+    'ordered-list': () =>
+      replaceSelectedLines(
+        (line, index) => `${index + 1}. ${normalizeBlockLine(line) || 'List item'}`,
+      ),
+    'task-list': () =>
+      replaceSelectedLines((line) => `- [ ] ${normalizeBlockLine(line) || 'Task item'}`),
+    quote: () =>
+      replaceSelectedLines((line) => `> ${line.replace(/^\s{0,3}>\s?/u, '') || 'Quote'}`),
     'code-block': () => {
       const text = selectedText() || 'code'
       replaceCurrentSelection(`\`\`\`\n${text}\n\`\`\``, 4, 4 + text.length)
@@ -572,7 +621,9 @@ function captureViewState() {
   }
 }
 
-function restoreViewState(viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>) {
+function restoreViewState(
+  viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>,
+) {
   if (!editorView) {
     return
   }
@@ -581,7 +632,10 @@ function restoreViewState(viewState: Pick<EditorViewSession, 'scrollTop' | 'sele
 
   if (selection) {
     editorView.dispatch({
-      selection: EditorSelection.single(clampPosition(selection.anchor), clampPosition(selection.head)),
+      selection: EditorSelection.single(
+        clampPosition(selection.anchor),
+        clampPosition(selection.head),
+      ),
       scrollIntoView: true,
     })
   }

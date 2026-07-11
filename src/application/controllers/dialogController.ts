@@ -53,7 +53,7 @@ export type ConflictDialogDecision =
   | { kind: 'keep-folden' }
   | { kind: 'reload-disk' }
   | { kind: 'save-as' }
-  | { kind: 'apply-merged', content: string }
+  | { kind: 'apply-merged'; content: string }
   | { kind: 'later' }
 
 export type ConflictDialogState = {

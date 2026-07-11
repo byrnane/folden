@@ -76,9 +76,12 @@ describe('session controller', () => {
     const controller = createSessionController(true)
     controller.markRestoreComplete()
     let resolvePersist!: () => void
-    const persist = vi.fn(() => new Promise<void>((resolve) => {
-      resolvePersist = resolve
-    }))
+    const persist = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePersist = resolve
+        }),
+    )
 
     const first = controller.persistSessionAndRecoveryState(persist)
     const second = controller.persistSessionAndRecoveryState(persist)
@@ -102,7 +105,9 @@ describe('session controller', () => {
       workspace: { id: 'workspace-1', rootPath: 'C:\\Docs' },
       splitEnabled: false,
       activePaneId: 'left',
-      panes: [{ id: 'left', title: 'Main', documentIds: [document.id], activeDocumentId: document.id }],
+      panes: [
+        { id: 'left', title: 'Main', documentIds: [document.id], activeDocumentId: document.id },
+      ],
       paneDocumentModes: { [`left:${document.id}`]: 'source' },
       normalizePath: (path) => path.toLowerCase(),
       getDocument: () => document,

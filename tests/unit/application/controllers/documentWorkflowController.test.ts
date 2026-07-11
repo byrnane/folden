@@ -98,7 +98,9 @@ function createHarness(document = createDocument()) {
     }),
     openUnsavedDialog: vi.fn(),
     openConflictDialog: vi.fn(),
-    getPane: vi.fn((paneId: EditorPane['id']) => panes.value.find((pane) => pane.id === paneId) ?? null),
+    getPane: vi.fn(
+      (paneId: EditorPane['id']) => panes.value.find((pane) => pane.id === paneId) ?? null,
+    ),
     getPaneSnapshot: vi.fn(() => panes.value),
     setActiveDocument: vi.fn((_pane: EditorPane, documentId: string) => {
       panes.value[0]!.activeDocumentId = documentId
@@ -119,24 +121,28 @@ function createHarness(document = createDocument()) {
       removedDocumentIds.push([documentId])
       return { removedDocumentIds: [documentId] }
     }),
-    removeDocumentsFromPaneState: vi.fn((documentIds: string[]) => ({ removedDocumentIds: documentIds })),
+    removeDocumentsFromPaneState: vi.fn((documentIds: string[]) => ({
+      removedDocumentIds: documentIds,
+    })),
     ensureViewSession: vi.fn(() => ({ id: 'left:doc-1' })),
     getDocumentMode: vi.fn(() => 'visual' as const),
     applyDocumentUpdateToSessions: vi.fn((update, _nextDocument: OpenDocument, applyUpdate) =>
       applyUpdate(update.documentId, update.baseRevision, update.nextContent),
     ),
     updateDocumentSessions: vi.fn(),
-    createDocumentDraft: vi.fn((content: string, name = 'Untitled.md') => createDocument({
-      id: `scratch-${Math.random()}`,
-      nativeId: null,
-      path: null,
-      workspaceId: null,
-      relativePath: null,
-      name,
-      content,
-      revision: 0,
-      persistedRevision: 0,
-    })),
+    createDocumentDraft: vi.fn((content: string, name = 'Untitled.md') =>
+      createDocument({
+        id: `scratch-${Math.random()}`,
+        nativeId: null,
+        path: null,
+        workspaceId: null,
+        relativePath: null,
+        name,
+        content,
+        revision: 0,
+        persistedRevision: 0,
+      }),
+    ),
     openDocumentState: vi.fn((opened: OpenedDocument) => {
       const nextDocument = createDocument({
         id: 'doc-opened',
@@ -151,23 +157,30 @@ function createHarness(document = createDocument()) {
       documents.value.push(nextDocument)
       return nextDocument
     }),
-    getDocument: vi.fn((documentId: string) => documents.value.find((candidate) => candidate.id === documentId) ?? null),
-    applyDocumentUpdate: vi.fn((_documentId: string, _baseRevision: number, nextContent: string) => {
-      document.content = nextContent
-      document.revision += 1
-      return document
-    }),
+    getDocument: vi.fn(
+      (documentId: string) =>
+        documents.value.find((candidate) => candidate.id === documentId) ?? null,
+    ),
+    applyDocumentUpdate: vi.fn(
+      (_documentId: string, _baseRevision: number, nextContent: string) => {
+        document.content = nextContent
+        document.revision += 1
+        return document
+      },
+    ),
     undoDocument: vi.fn(),
     redoDocument: vi.fn(),
     markDocumentQueued: vi.fn(() => document),
     markDocumentSaving: vi.fn(() => document),
-    markDocumentSaved: vi.fn((_documentId: string, revision: number, savedDocument: OpenedDocument) => {
-      document.persistedRevision = revision
-      document.path = savedDocument.path
-      document.nativeId = savedDocument.id
-      document.relativePath = savedDocument.relativePath
-      return document
-    }),
+    markDocumentSaved: vi.fn(
+      (_documentId: string, revision: number, savedDocument: OpenedDocument) => {
+        document.persistedRevision = revision
+        document.path = savedDocument.path
+        document.nativeId = savedDocument.id
+        document.relativePath = savedDocument.relativePath
+        return document
+      },
+    ),
     markDocumentSaveError: vi.fn(() => document),
     replaceDocumentFromDisk: vi.fn((_documentId: string, opened: OpenedDocument) => {
       document.content = opened.content
@@ -220,7 +233,13 @@ describe('document workflow controller', () => {
     await controller.saveDocument(document)
 
     expect(deps.applyDocumentUpdate).toHaveBeenCalledWith(document.id, 1, 'after')
-    expect(files.saveTextFile).toHaveBeenCalledWith('native-1', 'after', null, document.fileFormat, undefined)
+    expect(files.saveTextFile).toHaveBeenCalledWith(
+      'native-1',
+      'after',
+      null,
+      document.fileFormat,
+      undefined,
+    )
     expect(deps.markDocumentSaved).toHaveBeenCalled()
   })
 
@@ -246,7 +265,13 @@ describe('document workflow controller', () => {
 
     await controller.triggerAutosaveDocuments([document.id])
 
-    expect(files.saveTextFile).toHaveBeenCalledWith('native-1', document.content, null, document.fileFormat, undefined)
+    expect(files.saveTextFile).toHaveBeenCalledWith(
+      'native-1',
+      document.content,
+      null,
+      document.fileFormat,
+      undefined,
+    )
   })
 
   it('skips explicit autosave triggers for unsafe or unsaved documents', async () => {
@@ -267,11 +292,17 @@ describe('document workflow controller', () => {
     const { controller, deps, document, files } = createHarness()
     deps.openUnsavedDialog.mockResolvedValueOnce('cancel')
 
-    await controller.closeDocument({ id: 'left', title: 'Main', documentIds: [document.id], activeDocumentId: document.id }, document.id)
+    await controller.closeDocument(
+      { id: 'left', title: 'Main', documentIds: [document.id], activeDocumentId: document.id },
+      document.id,
+    )
     expect(deps.removeDocuments).not.toHaveBeenCalled()
 
     deps.openUnsavedDialog.mockResolvedValueOnce('discard')
-    await controller.closeDocument({ id: 'left', title: 'Main', documentIds: [document.id], activeDocumentId: document.id }, document.id)
+    await controller.closeDocument(
+      { id: 'left', title: 'Main', documentIds: [document.id], activeDocumentId: document.id },
+      document.id,
+    )
     expect(deps.removeDocuments).toHaveBeenCalledWith([document.id])
     expect(files.closeNativeDocuments).toHaveBeenCalledWith(['native-1'])
   })
@@ -283,7 +314,10 @@ describe('document workflow controller', () => {
 
     await controller.reloadDocumentFromDisk(cleanDocument.id)
 
-    expect(deps.replaceDocumentFromDisk).toHaveBeenCalledWith(cleanDocument.id, expect.objectContaining({ content: 'from disk' }))
+    expect(deps.replaceDocumentFromDisk).toHaveBeenCalledWith(
+      cleanDocument.id,
+      expect.objectContaining({ content: 'from disk' }),
+    )
     expect(deps.updateDocumentSessions).toHaveBeenCalled()
   })
 

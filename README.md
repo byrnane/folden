@@ -6,10 +6,10 @@ Folden is a local-first desktop editor for Markdown and plain text files.
 
 It is built around a simple contract:
 
-* user content stays on the user's machine;
-* ordinary files remain the source of truth;
-* Markdown stays readable outside Folden;
-* core workflows should stay direct and predictable.
+- user content stays on the user's machine;
+- ordinary files remain the source of truth;
+- Markdown stays readable outside Folden;
+- core workflows should stay direct and predictable.
 
 ## What It Does
 
@@ -19,10 +19,10 @@ It is not a cloud notes service, collaboration platform, mobile app, database-ba
 
 ## Requirements
 
-* Node.js and npm.
-* Rust toolchain with Cargo.
-* Windows C++ Build Tools with the `Desktop development with C++` workload.
-* Microsoft Edge WebView2 runtime.
+- Node.js and npm.
+- Rust toolchain with Cargo.
+- Windows C++ Build Tools with the `Desktop development with C++` workload.
+- Microsoft Edge WebView2 runtime.
 
 ## Quick Start
 
@@ -51,9 +51,9 @@ cargo test
 
 ## Documentation
 
-* [docs/PRODUCT.md](docs/PRODUCT.md) — product principles, supported surface, and boundaries.
-* [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — setup, scripts, checks, CI, builds, and releases.
-* [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — code ownership, dependency flow, and testing map.
-* [docs/RELEASE.md](docs/RELEASE.md) — release checklist.
-* [docs/DOGFOODING.md](docs/DOGFOODING.md) — dogfooding template.
-* [CHANGELOG.md](CHANGELOG.md) — release history.
+- [docs/PRODUCT.md](docs/PRODUCT.md) — product principles, supported surface, and boundaries.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — setup, scripts, checks, CI, builds, and releases.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — code ownership, dependency flow, and testing map.
+- [docs/RELEASE.md](docs/RELEASE.md) — release checklist.
+- [docs/DOGFOODING.md](docs/DOGFOODING.md) — dogfooding template.
+- [CHANGELOG.md](CHANGELOG.md) — release history.

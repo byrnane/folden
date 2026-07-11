@@ -29,10 +29,7 @@ export function recordDocumentHistory(
   }
 }
 
-export function undoDocumentHistory(
-  history: DocumentHistoryState,
-  currentContent: string,
-) {
+export function undoDocumentHistory(history: DocumentHistoryState, currentContent: string) {
   const previousEntry = history.past.at(-1)
 
   if (!previousEntry) {
@@ -48,10 +45,7 @@ export function undoDocumentHistory(
   }
 }
 
-export function redoDocumentHistory(
-  history: DocumentHistoryState,
-  currentContent: string,
-) {
+export function redoDocumentHistory(history: DocumentHistoryState, currentContent: string) {
   const [nextEntry, ...remainingFuture] = history.future
 
   if (!nextEntry) {

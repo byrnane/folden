@@ -4,10 +4,7 @@ import {
   getSynchronizedSessionIds,
   type DocumentUpdate,
 } from '../../domain/documents/editorSync'
-import {
-  createEditorViewSession,
-  type EditorViewSession,
-} from '../../domain/documents/editorSync'
+import { createEditorViewSession, type EditorViewSession } from '../../domain/documents/editorSync'
 import type { EditorMode, OpenDocument } from '../../domain/documents/documentState'
 import type { EditorAdapter, EditorPane } from '../types/shell'
 
@@ -63,7 +60,9 @@ export function createPaneController(initialDocument: OpenDocument) {
   }
 
   function getDocumentMode(pane: EditorPane, document: OpenDocument) {
-    return paneDocumentModes.value[paneDocumentModeKey(pane.id, document.id)] ?? document.defaultMode
+    return (
+      paneDocumentModes.value[paneDocumentModeKey(pane.id, document.id)] ?? document.defaultMode
+    )
   }
 
   function ensureViewSession(pane: EditorPane, document: OpenDocument) {
@@ -87,8 +86,10 @@ export function createPaneController(initialDocument: OpenDocument) {
   }
 
   function getViewSessionId(pane: EditorPane, document: OpenDocument) {
-    return viewSessions.value[paneDocumentModeKey(pane.id, document.id)]?.id
-      ?? paneDocumentModeKey(pane.id, document.id)
+    return (
+      viewSessions.value[paneDocumentModeKey(pane.id, document.id)]?.id ??
+      paneDocumentModeKey(pane.id, document.id)
+    )
   }
 
   function getViewSession(pane: EditorPane, document: OpenDocument) {
@@ -232,7 +233,11 @@ export function createPaneController(initialDocument: OpenDocument) {
 
     const sessionIds = [
       update.originViewId,
-      ...getSynchronizedSessionIds(Object.values(viewSessions.value), document.id, update.originViewId),
+      ...getSynchronizedSessionIds(
+        Object.values(viewSessions.value),
+        document.id,
+        update.originViewId,
+      ),
     ]
     const nextSessions = { ...viewSessions.value }
 
@@ -298,7 +303,11 @@ export function createPaneController(initialDocument: OpenDocument) {
     paneDocumentModes.value = nextPaneDocumentModes
   }
 
-  function moveDocumentToPane(document: OpenDocument, sourcePaneId: EditorPane['id'], targetPaneId: EditorPane['id']) {
+  function moveDocumentToPane(
+    document: OpenDocument,
+    sourcePaneId: EditorPane['id'],
+    targetPaneId: EditorPane['id'],
+  ) {
     if (sourcePaneId === targetPaneId) {
       addDocumentToPane(document, targetPaneId)
       return
@@ -329,9 +338,10 @@ export function createPaneController(initialDocument: OpenDocument) {
     sourcePane.documentIds = sourcePane.documentIds.filter((id) => id !== documentId)
 
     const currentTargetIds = targetPane.documentIds.filter((id) => id !== documentId)
-    const insertIndex = typeof targetIndex === 'number'
-      ? Math.min(Math.max(targetIndex, 0), currentTargetIds.length)
-      : currentTargetIds.length
+    const insertIndex =
+      typeof targetIndex === 'number'
+        ? Math.min(Math.max(targetIndex, 0), currentTargetIds.length)
+        : currentTargetIds.length
 
     currentTargetIds.splice(insertIndex, 0, documentId)
     targetPane.documentIds = currentTargetIds
@@ -345,7 +355,11 @@ export function createPaneController(initialDocument: OpenDocument) {
     normalizePaneState()
   }
 
-  function reorderDocumentInPane(paneId: EditorPane['id'], documentId: string, targetIndex: number) {
+  function reorderDocumentInPane(
+    paneId: EditorPane['id'],
+    documentId: string,
+    targetIndex: number,
+  ) {
     const pane = getPane(paneId)
 
     if (!pane || !pane.documentIds.includes(documentId)) {
@@ -399,9 +413,8 @@ export function createPaneController(initialDocument: OpenDocument) {
       pane.activeDocumentId = pane.documentIds.at(-1) ?? null
     }
 
-    const removedDocumentIds = removeOrphanedDocument && !isDocumentOpen(documentId)
-      ? [documentId]
-      : []
+    const removedDocumentIds =
+      removeOrphanedDocument && !isDocumentOpen(documentId) ? [documentId] : []
     removePaneRecords([documentId], paneId, removedDocumentIds.length > 0)
     normalizePaneState()
     return { removedDocumentIds }
@@ -436,7 +449,9 @@ export function createPaneController(initialDocument: OpenDocument) {
     const nextViewSessions = { ...viewSessions.value }
     const paneIds: EditorPane['id'][] = allPaneRecords
       ? panes.value.map((pane) => pane.id)
-      : paneId ? [paneId] : []
+      : paneId
+        ? [paneId]
+        : []
 
     for (const documentId of documentIds) {
       for (const currentPaneId of paneIds) {

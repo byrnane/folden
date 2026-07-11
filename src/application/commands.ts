@@ -30,10 +30,12 @@ export type AppCommand = {
 export function matchesShortcut(event: KeyboardEvent, shortcut: CommandShortcut) {
   const hasMod = event.ctrlKey || event.metaKey
 
-  return event.code === shortcut.code &&
+  return (
+    event.code === shortcut.code &&
     Boolean(shortcut.mod) === hasMod &&
     Boolean(shortcut.shift) === event.shiftKey &&
     Boolean(shortcut.alt) === event.altKey
+  )
 }
 
 export function createCommandRegistry(commands: AppCommand[]) {
@@ -70,7 +72,8 @@ export function createCommandRegistry(commands: AppCommand[]) {
     }
 
     for (const command of orderedCommands) {
-      const hasMatchingShortcut = command.shortcuts?.some((shortcut) => matchesShortcut(event, shortcut)) ?? false
+      const hasMatchingShortcut =
+        command.shortcuts?.some((shortcut) => matchesShortcut(event, shortcut)) ?? false
 
       if (!hasMatchingShortcut) {
         continue
