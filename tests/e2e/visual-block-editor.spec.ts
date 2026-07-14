@@ -1,5 +1,5 @@
-import { expect, type Locator, test } from '@playwright/test'
-import { openApp } from './helpers'
+import { expect, type Locator, type Page, test } from '@playwright/test'
+import { applicationSettingsStorageKey, openApp } from './helpers'
 
 function blockHandle(surface: Locator, index: number) {
   return surface.locator('.visual-block-controls').nth(index).getByTestId('visual-block-handle')
@@ -10,6 +10,72 @@ function blockMenuTrigger(surface: Locator, index: number) {
     .locator('.visual-block-controls')
     .nth(index)
     .getByTestId('visual-block-menu-trigger')
+}
+
+const contextToolbarMarkdown = `Plain text
+
+[Example](https://example.com)
+
+![Picture](missing.png)
+
+| One | Two |
+| --- | --- |
+| A | B |
+`
+
+async function expectContextToolbar(
+  page: Page,
+  context: 'text' | 'link' | 'image' | 'table',
+  firstAction: string,
+  labelsVisible: boolean,
+) {
+  const toolbar = page.getByTestId('visual-context-menu')
+  await expect(toolbar).toHaveAttribute('data-context', context)
+  const firstButton = toolbar.getByRole('button', { name: firstAction })
+  await expect(firstButton).toHaveAttribute('title', firstAction)
+  if (labelsVisible) {
+    await expect(firstButton.locator('span')).toBeVisible()
+  } else {
+    await expect(firstButton.locator('span')).toBeHidden()
+  }
+
+  if (!labelsVisible) {
+    await expect
+      .poll(async () => {
+        const box = await firstButton.boundingBox()
+        return box ? Math.abs(box.width - box.height) : Number.POSITIVE_INFINITY
+      })
+      .toBeLessThanOrEqual(1)
+  }
+}
+
+for (const density of ['compact', 'comfortable'] as const) {
+  test(`uses ${density} density across every contextual toolbar state`, async ({ page }) => {
+    await openApp(page, {
+      mockOptions: { initialFiles: { 'contexts.md': contextToolbarMarkdown } },
+      storageEntries: {
+        [applicationSettingsStorageKey]: JSON.stringify({ appearance: { density } }),
+      },
+    })
+    await page.getByTestId('open-folder-empty').click()
+    await page.getByTestId('workspace-entry-contexts.md').click()
+
+    const surface = page.locator('.visual-editor-content .ProseMirror')
+    const text = surface.locator('p').filter({ hasText: 'Plain text' })
+    await text.click()
+    await page.keyboard.press('End')
+    await page.keyboard.press('Shift+ArrowLeft')
+    await expectContextToolbar(page, 'text', 'Bold', density === 'comfortable')
+
+    await surface.getByRole('link', { name: 'Example' }).click()
+    await expectContextToolbar(page, 'link', 'Open link', density === 'comfortable')
+
+    await surface.locator('.visual-image-node').click()
+    await expectContextToolbar(page, 'image', 'Source', density === 'comfortable')
+
+    await surface.locator('td').first().click()
+    await expectContextToolbar(page, 'table', 'Add row before', density === 'comfortable')
+  })
 }
 
 test('uses slash commands and contextual formatting without a permanent toolbar', async ({
@@ -34,6 +100,57 @@ test('uses slash commands and contextual formatting without a permanent toolbar'
   await page.getByTestId('visual-context-menu').getByRole('button', { name: 'Bold' }).click()
   await page.getByRole('button', { name: 'Source', exact: true }).click()
   await expect(page.getByTestId('source-editor')).toContainText('**t**')
+})
+
+test('renders italic formatting in visual mode', async ({ page }) => {
+  await openApp(page, { mockOptions: { initialFiles: { 'italic.md': 'Italic text\n' } } })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-italic.md').click()
+
+  const paragraph = page.locator('.visual-editor-content .ProseMirror > p')
+  await paragraph.click()
+  await page.keyboard.press('End')
+  await page.keyboard.press('Shift+Control+ArrowLeft')
+  await page.getByTestId('visual-context-menu').getByRole('button', { name: 'Italic' }).click()
+
+  await expect(paragraph.locator('em')).toHaveText('text')
+  await expect(paragraph.locator('em')).toHaveCSS('font-synthesis', 'style')
+  await expect(paragraph.locator('em')).toHaveCSS('font-style', 'italic')
+})
+
+test('keeps Markdown markers hidden after sequential visual formatting', async ({ page }) => {
+  await openApp(page, { mockOptions: { initialFiles: { 'marks.md': 'Unknown Space\n' } } })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-marks.md').click()
+
+  const paragraph = page.locator('.visual-editor-content .ProseMirror > p')
+  await paragraph.click()
+  await page.keyboard.press('Home')
+  for (let index = 0; index < 'Unknown'.length; index += 1) {
+    await page.keyboard.press('Shift+ArrowRight')
+  }
+  await page.getByTestId('visual-context-menu').getByRole('button', { name: 'Italic' }).click()
+  await paragraph.click()
+  await page.keyboard.press('End')
+  await page.keyboard.press('Shift+Control+ArrowLeft')
+  await page.getByTestId('visual-context-menu').getByRole('button', { name: 'Strike' }).click()
+
+  await expect(paragraph).toHaveText('Unknown Space')
+  await expect(paragraph.locator('em')).toHaveText('Unknown')
+  await expect(paragraph.locator('s')).toHaveText('Space')
+})
+
+test('does not render emphasis markers from existing Markdown', async ({ page }) => {
+  await openApp(page, {
+    mockOptions: { initialFiles: { 'existing-marks.md': '*Unknown* ~~Space~~\n' } },
+  })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-existing-marks.md').click()
+
+  const paragraph = page.locator('.visual-editor-content .ProseMirror > p')
+  await expect(paragraph).toHaveText('Unknown Space')
+  await expect(paragraph.locator('em')).toHaveText('Unknown')
+  await expect(paragraph.locator('s')).toHaveText('Space')
 })
 
 test('selects, duplicates, transforms and moves blocks from the handle', async ({ page }) => {
@@ -259,6 +376,90 @@ test('keeps block menu anchored, compact and scoped to its block', async ({ page
   await expect(blocks.nth(0)).toHaveCSS('opacity', '1')
   await page.mouse.move(8, 8)
   await expect(surface.locator('.visual-block-controls').first()).toHaveCSS('opacity', '0')
+})
+
+test('closes a block menu on the second trigger click', async ({ page }) => {
+  await openApp(page, { mockOptions: { initialFiles: { 'toggle.md': 'Block\n' } } })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-toggle.md').click()
+
+  const surface = page.locator('.visual-editor-content .ProseMirror')
+  await surface.locator(':scope > p').hover()
+  const trigger = blockMenuTrigger(surface, 0)
+  await trigger.click()
+  await expect(page.getByTestId('visual-block-menu')).toBeVisible()
+  await trigger.click()
+  await expect(page.getByTestId('visual-block-menu')).toHaveCount(0)
+})
+
+test('keeps floating block and slash menus inside the app viewport', async ({ page }) => {
+  const content = Array.from({ length: 40 }, (_, index) => `Paragraph ${index + 1}`).join('\n\n')
+  await openApp(page, { mockOptions: { initialFiles: { 'bottom.md': `${content}\n` } } })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-bottom.md').click()
+
+  const surface = page.locator('.visual-editor-content .ProseMirror')
+  const lastBlock = surface.locator(':scope > p').last()
+  await lastBlock.scrollIntoViewIfNeeded()
+  await lastBlock.hover()
+  await blockMenuTrigger(surface, 39).click()
+  const blockMenu = page.getByTestId('visual-block-menu')
+  await blockMenu.getByRole('button', { name: 'Turn into' }).click()
+  await expect
+    .poll(async () => {
+      const box = await blockMenu.boundingBox()
+      return box ? box.y + box.height : Number.POSITIVE_INFINITY
+    })
+    .toBeLessThanOrEqual((await page.evaluate(() => window.innerHeight)) - 11)
+
+  await page.keyboard.press('Escape')
+  await lastBlock.click()
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('/')
+  const slashMenu = page.getByTestId('visual-slash-menu')
+  await expect
+    .poll(async () => {
+      const box = await slashMenu.boundingBox()
+      return box ? box.y + box.height : Number.POSITIVE_INFINITY
+    })
+    .toBeLessThanOrEqual((await page.evaluate(() => window.innerHeight)) - 11)
+})
+
+test('aligns heading controls and gives dividers a selectable hit area', async ({ page }) => {
+  await openApp(page, {
+    mockOptions: {
+      initialFiles: {
+        'blocks.md':
+          'Before\n\n---\n\n# H1\n\n## H2\n\n### H3\n\n#### H4\n\n##### H5\n\n###### H6\n',
+      },
+    },
+  })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-blocks.md').click()
+
+  const surface = page.locator('.visual-editor-content .ProseMirror')
+  const divider = surface.locator(':scope > hr')
+  const dividerBox = await divider.boundingBox()
+  expect(dividerBox!.height).toBeGreaterThanOrEqual(25)
+  await divider.click({ position: { x: 20, y: dividerBox!.height / 2 } })
+  await expect(divider).toHaveClass(/ProseMirror-selectednode/)
+  await expect(blockMenuTrigger(surface, 1)).toBeVisible()
+
+  for (let level = 1; level <= 6; level += 1) {
+    const heading = surface.locator(`:scope > h${level}`)
+    await heading.scrollIntoViewIfNeeded()
+    await heading.hover()
+    const headingBox = await heading.boundingBox()
+    const controlsBox = await surface
+      .locator('.visual-block-controls')
+      .nth(level + 1)
+      .boundingBox()
+    expect(Math.abs(controlsBox!.y - headingBox!.y)).toBeLessThan(4)
+
+    const editorBox = await page.getByTestId('visual-editor').boundingBox()
+    expect(controlsBox!.x).toBeGreaterThanOrEqual(editorBox!.x + 7)
+  }
 })
 
 test('continues block drag autoscroll while the pointer stays at the viewport edge', async ({

@@ -15,6 +15,10 @@ test('keeps split source and visual panes in sync for the same document', async 
   const rightPane = panes.nth(1)
 
   await leftPane.click()
+  await page
+    .getByRole('navigation', { name: 'Activity' })
+    .getByRole('button', { name: 'Workspace' })
+    .click()
   await page.getByTestId('workspace-entry-README.md').click()
 
   await page.getByRole('button', { name: 'Source' }).click()
@@ -123,11 +127,19 @@ test('shows split open editors and marks the active pane document', async ({ pag
   await page.locator('button[title="Toggle split view"]').click()
   await page.locator('button[title="Move active tab right"]').click()
   await page.locator('.editor-pane').first().click()
+  await page
+    .getByRole('navigation', { name: 'Activity' })
+    .getByRole('button', { name: 'Workspace' })
+    .click()
   await page.getByTestId('workspace-entry-notes').click()
   await page.getByTestId('workspace-entry-notes\\daily.md').click()
   await page.getByRole('button', { name: 'Source' }).click()
   await sourceEditor(page).click()
   await page.keyboard.type('Dirty open editor marker')
+  await page
+    .getByRole('navigation', { name: 'Activity' })
+    .getByRole('button', { name: 'Workspace' })
+    .click()
 
   const openEditors = page.locator('.open-editors')
   await expect(openEditors.locator('.open-editor-row.active')).toHaveCount(2)
@@ -139,6 +151,10 @@ test('shows split open editors and marks the active pane document', async ({ pag
   ).toHaveCount(1)
 
   await page.locator('.editor-pane').nth(1).click()
+  await page
+    .getByRole('navigation', { name: 'Activity' })
+    .getByRole('button', { name: 'Workspace' })
+    .click()
   await expect(openEditors.locator('.open-editor-row.active-pane-document')).toContainText(
     'README.md',
   )

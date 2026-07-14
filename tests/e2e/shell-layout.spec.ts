@@ -10,6 +10,7 @@ import {
 } from './helpers'
 
 test('shows toolbar labels only in comfortable density', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 800 })
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
@@ -59,6 +60,7 @@ test('shows toolbar labels only in comfortable density', async ({ page }) => {
 })
 
 test('uses explicit activity rail modes and keeps sidebar labels fitted', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 800 })
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
@@ -215,8 +217,8 @@ test('keeps document text selectable while service chrome is not', async ({ page
   await expect(page.getByTestId('visual-editor')).not.toHaveCSS('user-select', 'none')
 })
 
-test('keeps sidebar resize limits honest while compacting narrow windows', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 })
+test('keeps sidebar resize limits honest and hides it at narrow widths', async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 800 })
   await openApp(page, {
     storageEntries: {
       [applicationLayoutStorageKey]: JSON.stringify({
@@ -234,19 +236,138 @@ test('keeps sidebar resize limits honest while compacting narrow windows', async
     .toBe(layoutSettingLimits.sidebarWidth.max)
 
   await page.setViewportSize({ width: 900, height: 620 })
+  await expect(page.locator('.workspace-sidebar')).toHaveCount(0)
+  await expect(page.locator('.topbar .labelled-icon-button span').first()).toBeHidden()
+})
+
+test('protects editor width by temporarily hiding sidebar, map and outline in order', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1500, height: 800 })
+  await openApp(page, {
+    mockOptions: {
+      initialFiles: {
+        'layout.md': '# Layout\n\nText for adaptive layout.\n',
+      },
+    },
+  })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-layout.md').click()
+
+  const sidebar = page.locator('.workspace-sidebar')
+  const outline = page.locator('.document-outline')
+  const map = page.locator('.document-map')
+  await expect(sidebar).toBeVisible()
+  await expect(outline).toBeVisible()
+  await expect(map).toBeVisible()
+  const persistedBeforeResize = await page.evaluate(
+    ([settingsKey, layoutKey]) => ({
+      settings: window.localStorage.getItem(settingsKey),
+      layout: window.localStorage.getItem(layoutKey),
+    }),
+    [applicationSettingsStorageKey, applicationLayoutStorageKey] as const,
+  )
+
+  await page.setViewportSize({ width: 1200, height: 800 })
+  await expect(sidebar).toHaveCount(0)
+  await expect(outline).toBeVisible()
+  await expect(map).toBeVisible()
   await expect
-    .poll(async () =>
+    .poll(() =>
       page
-        .locator('.workspace-sidebar')
+        .getByTestId('visual-editor')
         .evaluate((element) => Math.round(element.getBoundingClientRect().width)),
     )
-    .toBeLessThanOrEqual(Math.round(900 * 0.3))
-  await expect(page.locator('.topbar .labelled-icon-button span').first()).toBeHidden()
+    .toBeGreaterThanOrEqual(864)
+
+  await page.locator('button[title="Workspace"]').click()
+  await expect(sidebar).toBeVisible()
+  await page.setViewportSize({ width: 1199, height: 800 })
+  await expect(sidebar).toHaveCount(0)
+
+  await page.setViewportSize({ width: 1150, height: 800 })
+  await expect(sidebar).toHaveCount(0)
+  await expect(outline).toBeVisible()
+  await expect(map).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Source', exact: true }).click()
+  await expect(outline).toBeVisible()
+  await expect(map).toHaveCount(0)
+
+  await page.setViewportSize({ width: 1000, height: 800 })
+  await expect(outline).toHaveCount(0)
+  await expect(map).toHaveCount(0)
+
+  expect(
+    await page.evaluate(
+      ([settingsKey, layoutKey]) => ({
+        settings: window.localStorage.getItem(settingsKey),
+        layout: window.localStorage.getItem(layoutKey),
+      }),
+      [applicationSettingsStorageKey, applicationLayoutStorageKey] as const,
+    ),
+  ).toEqual(persistedBeforeResize)
+
+  await page.setViewportSize({ width: 1500, height: 800 })
+  await expect(sidebar).toBeVisible()
+  await expect(outline).toBeVisible()
+  await expect(map).toBeVisible()
+})
+
+test('hides sidebar before shrinking a scratch editor', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 800 })
+  await openApp(page)
+  await page.getByTestId('open-folder-empty').click()
+  await page
+    .locator('.workspace-tree-actions')
+    .getByRole('button', { name: 'New scratch document' })
+    .click()
+
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await expect(page.locator('.workspace-sidebar')).toHaveCount(0)
+  await expect
+    .poll(() =>
+      page
+        .getByTestId('visual-editor')
+        .evaluate((element) => Math.round(element.getBoundingClientRect().width)),
+    )
+    .toBeGreaterThanOrEqual(864)
+})
+
+test('protects both editor panes before auxiliary panels in split view', async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 800 })
+  await openApp(page, {
+    mockOptions: {
+      initialFiles: {
+        'left.md': '# Left\n\nLeft pane.\n',
+        'right.md': '# Right\n\nRight pane.\n',
+      },
+    },
+  })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-left.md').click()
+  await page.getByTestId('workspace-entry-right.md').click()
+  await page.locator('button[title="Toggle split view"]').click()
+  await page.locator('button[title="Move active tab right"]').click()
+
+  const panes = page.locator('.editor-pane')
+  await expect(panes).toHaveCount(2)
+  await expect(page.locator('.workspace-sidebar')).toHaveCount(0)
+  await expect(page.locator('.document-outline')).toHaveCount(0)
+  await expect(page.locator('.document-map')).toHaveCount(0)
+  await expect
+    .poll(() =>
+      panes.evaluateAll((elements) =>
+        Math.min(...elements.map((element) => Math.round(element.getBoundingClientRect().width))),
+      ),
+    )
+    .toBeGreaterThanOrEqual(864)
 })
 
 test('resizes layout separators with keyboard and exposes values to assistive tech', async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1700, height: 800 })
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()

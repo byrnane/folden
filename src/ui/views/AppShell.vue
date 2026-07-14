@@ -16,7 +16,7 @@ import {
   PanelRightOpen,
   Save,
 } from 'lucide-vue-next'
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ConfirmDialog from '../dialogs/ConfirmDialog.vue'
 import ConflictResolutionDialog from '../dialogs/ConflictResolutionDialog.vue'
 import MarkdownSafetyDialog from '../dialogs/MarkdownSafetyDialog.vue'
@@ -37,6 +37,11 @@ import type { ApplicationSettings } from '../../application/settings'
 import type { ActivitySection } from '../../application/settings'
 import { uiIconSizes } from '../uiConstants'
 import { vFitLabel } from '../fitLabel'
+import {
+  adaptiveEditorLayoutBreakpoints,
+  editorInlinePaddingForWidth,
+  resolveAdaptiveEditorLayout,
+} from './adaptiveEditorLayout'
 
 const resizeKeyboardStepPx = 16
 const resizeKeyboardLargeStepPx = 48
@@ -150,12 +155,17 @@ const activeSettingsSection = ref<'editor' | 'files' | 'appearance'>('editor')
 const paneToolbarDisabledCommands = ref<Partial<Record<'left' | 'right', EditorCommand[]>>>({})
 const sidebarResizeStart = ref<{ x: number; width: number } | null>(null)
 const splitResizeStart = ref<{ x: number; ratio: number; width: number } | null>(null)
+const shellElement = ref<HTMLElement | null>(null)
+const shellWidth = ref(Number.POSITIVE_INFINITY)
+const preserveAdaptiveSidebar = ref(false)
+let shellResizeObserver: ResizeObserver | null = null
 
 const activityWidth = computed(() =>
   layoutSettings.value.activityRailMode === 'expanded'
     ? layoutSettings.value.activityExpandedWidth
     : layoutSettings.value.activityCompactWidth,
 )
+const editorInlinePadding = computed(() => editorInlinePaddingForWidth(shellWidth.value))
 
 const shellStyle = computed(() => ({
   '--activity-width': `${activityWidth.value}px`,
@@ -172,6 +182,7 @@ const shellStyle = computed(() => ({
   ),
   '--visual-font-size': `${clampNumber(appSettings.value.editor.visualFontSize, applicationSettingLimits.visualFontSize)}px`,
   '--visual-max-width': `${clampNumber(appSettings.value.editor.visualMaxWidth, applicationSettingLimits.visualMaxWidth)}px`,
+  '--visual-editor-inline-padding': `${editorInlinePadding.value}px`,
 }))
 
 const activeScreen = computed(() => activityScreens[layoutSettings.value.activeActivitySection])
@@ -184,7 +195,7 @@ const sidebarLabel = computed(
       settings: 'Settings',
     })[activeScreen.value.sidebar],
 )
-const showSidebar = computed(
+const requestedShowSidebar = computed(
   () =>
     !layoutSettings.value.focusMode &&
     (!activeScreen.value.sidebarClosable || appSettings.value.appearance.showSidebar),
@@ -234,6 +245,56 @@ const editorPaneViews = computed(() =>
     }
   }),
 )
+const splitStacked = computed(
+  () => splitEnabled.value && shellWidth.value <= adaptiveEditorLayoutBreakpoints.stackedSplit,
+)
+const adaptivePanes = computed(() =>
+  editorPaneViews.value.flatMap((pane, index) => {
+    const activeDocument = pane.activeDocument
+    if (!activeDocument) return []
+    const blocks = activeDocument.blockDocument?.blocks ?? []
+    const fraction =
+      splitEnabled.value && !splitStacked.value && editorPaneViews.value.length > 1
+        ? index === 0
+          ? layoutSettings.value.splitRatio
+          : 1 - layoutSettings.value.splitRatio
+        : 1
+
+    return [
+      {
+        fraction,
+        hasOutline: activeDocument.isMarkdown && blocks.some((block) => block.kind === 'heading'),
+        hasDocumentMap: activeDocument.isMarkdown && blocks.length > 0,
+      },
+    ]
+  }),
+)
+const adaptiveLayout = computed(() =>
+  resolveAdaptiveEditorLayout({
+    availableWidth: shellWidth.value,
+    enabled: activeScreen.value.workbench === 'editor' && !layoutSettings.value.focusMode,
+    showActivity: !layoutSettings.value.focusMode && appSettings.value.appearance.showActivityBar,
+    activityWidth: activityWidth.value,
+    showSidebar: requestedShowSidebar.value,
+    preserveSidebar: preserveAdaptiveSidebar.value || adaptivePanes.value.length === 0,
+    sidebarWidth: layoutSettings.value.sidebarWidth,
+    showDocumentOutline: layoutSettings.value.showDocumentOutline,
+    outlineWidth: layoutSettings.value.outlineWidth,
+    showDocumentMap: layoutSettings.value.showDocumentMap,
+    documentMapWidth: layoutSettings.value.documentMapWidth,
+    protectedEditorWidth:
+      clampNumber(
+        appSettings.value.editor.visualMaxWidth,
+        applicationSettingLimits.visualMaxWidth,
+      ) +
+      editorInlinePadding.value * 2,
+    panes: adaptivePanes.value,
+    splitStacked: splitStacked.value,
+  }),
+)
+const showSidebar = computed(() => adaptiveLayout.value.showSidebar)
+const showDocumentOutline = computed(() => adaptiveLayout.value.showDocumentOutline)
+const showDocumentMap = computed(() => adaptiveLayout.value.showDocumentMap)
 const activePaneIsRight = computed(() => activePaneId.value === 'right')
 const moveActiveTabTitle = computed(() =>
   activePaneIsRight.value ? 'Move active tab left' : 'Move active tab right',
@@ -280,6 +341,23 @@ function formatOpenDocumentsStatus(openCount: number, unsavedCount: number) {
 function updateAppSettings(nextSettings: ApplicationSettings) {
   Object.assign(appSettings.value, nextSettings)
 }
+
+function handleActivitySection(section: ActivitySection) {
+  preserveAdaptiveSidebar.value = true
+  setActivitySection(section)
+}
+
+function handleCloseSidebar() {
+  preserveAdaptiveSidebar.value = false
+  closeSidebar()
+}
+
+watch(
+  () => activeDocument.value?.id,
+  () => {
+    preserveAdaptiveSidebar.value = false
+  },
+)
 
 function beginSidebarResize(event: MouseEvent) {
   sidebarResizeStart.value = {
@@ -361,14 +439,31 @@ function updatePaneToolbarState(
   }
 }
 
+onMounted(() => {
+  if (!shellElement.value) return
+  const updateShellWidth = () => {
+    const nextWidth = shellElement.value?.clientWidth ?? window.innerWidth
+    if (Number.isFinite(shellWidth.value) && nextWidth !== shellWidth.value) {
+      preserveAdaptiveSidebar.value = false
+    }
+    shellWidth.value = nextWidth
+  }
+  updateShellWidth()
+  shellResizeObserver = new ResizeObserver(updateShellWidth)
+  shellResizeObserver.observe(shellElement.value)
+})
+
 onBeforeUnmount(() => {
   stopSidebarResize()
   stopSplitResize()
+  shellResizeObserver?.disconnect()
+  shellResizeObserver = null
 })
 </script>
 
 <template>
   <main
+    ref="shellElement"
     class="app-shell"
     :class="{
       'focus-mode': layoutSettings.focusMode,
@@ -387,7 +482,7 @@ onBeforeUnmount(() => {
       :mode="layoutSettings.activityRailMode"
       :compact-width="layoutSettings.activityCompactWidth"
       :expanded-width="layoutSettings.activityExpandedWidth"
-      @set-section="setActivitySection"
+      @set-section="handleActivitySection"
       @set-mode="setActivityRailMode"
       @set-width="setActivityRailWidth"
       @reset-width="resetActivityRailWidth"
@@ -594,7 +689,7 @@ onBeforeUnmount(() => {
           title="Close sidebar"
           aria-label="Close sidebar"
           :disabled="!activeScreen.sidebarClosable"
-          @click="closeSidebar"
+          @click="handleCloseSidebar"
         >
           <PanelLeftClose :size="uiIconSizes.workspaceAction" />
           <span>Close sidebar</span>
@@ -838,8 +933,8 @@ onBeforeUnmount(() => {
         :source-word-wrap="appSettings.editor.wordWrap"
         :outline-width="layoutSettings.outlineWidth"
         :document-map-width="layoutSettings.documentMapWidth"
-        :show-document-outline="layoutSettings.showDocumentOutline"
-        :show-document-map="layoutSettings.showDocumentMap"
+        :show-document-outline="showDocumentOutline"
+        :show-document-map="showDocumentMap"
         :workspace-root-path="workspace?.rootPath ?? null"
         :close-document="closeDocument"
         :open-dropped-path="openDroppedPath"

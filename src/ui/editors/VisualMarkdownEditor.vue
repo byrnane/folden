@@ -63,6 +63,8 @@ import {
 import type { LogicalSelectionAnchor } from '../../domain/markdown/blockDocument'
 import { RawMarkdownBlock } from './rawMarkdownBlock'
 import { buildVisualMarkdownProjection } from './visualProjection'
+import VisualContextToolbar from './VisualContextToolbar.vue'
+import type { VisualContextToolbarContext } from './VisualContextToolbar.vue'
 
 const props = defineProps<{
   documentId: string
@@ -152,6 +154,12 @@ const headings = computed(() => extractMarkdownHeadings(props.modelValue))
 const showOutline = computed(() => props.showDocumentOutline && headings.value.length > 0)
 const mapBlocks = computed(() => buildDocumentMapLines(props.modelValue))
 const showDocumentMap = computed(() => props.showDocumentMap && mapBlocks.value.length > 0)
+const contextToolbarContext = computed<VisualContextToolbarContext>(() => {
+  if (editor.value?.isActive('table')) return 'table'
+  if (editor.value?.isActive('image')) return 'image'
+  if (editor.value?.isActive('link')) return 'link'
+  return 'text'
+})
 
 const structuralTableCommands: EditorCommand[] = [
   'add-row-before',
@@ -772,14 +780,33 @@ function closeBlockMenu() {
   updateContextMenu()
 }
 
+function viewportClampedPosition(element: HTMLElement, position: { top: number; left: number }) {
+  const margin = 12
+  const rect = element.getBoundingClientRect()
+  const maxTop = Math.max(margin, window.innerHeight - rect.height - margin)
+  const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin)
+  return {
+    top: Math.max(margin, Math.min(position.top, maxTop)),
+    left: Math.max(margin, Math.min(position.left, maxLeft)),
+  }
+}
+
 function clampBlockMenuToViewport() {
   const menu = blockMenuElement.value
   if (!menu) return
-  const rect = menu.getBoundingClientRect()
-  blockMenuPosition.value = {
-    top: Math.max(12, Math.min(blockMenuPosition.value.top, window.innerHeight - rect.height - 12)),
-    left: Math.max(12, Math.min(blockMenuPosition.value.left, window.innerWidth - rect.width - 12)),
-  }
+  blockMenuPosition.value = viewportClampedPosition(menu, blockMenuPosition.value)
+}
+
+function clampSlashMenuToViewport() {
+  const menu = slashMenuElement.value
+  if (!menu || !slashMenu.value) return
+  const position = viewportClampedPosition(menu, slashMenu.value)
+  slashMenu.value = { ...slashMenu.value, ...position }
+}
+
+function clampFloatingMenusToViewport() {
+  clampBlockMenuToViewport()
+  clampSlashMenuToViewport()
 }
 
 function openBlockTransformMenu() {
@@ -1158,6 +1185,7 @@ function updateSlashMenu() {
   }
   const coords = editor.value.view.coordsAtPos($from.pos)
   slashMenu.value = { query: match[1], selected: 0, top: coords.bottom + 6, left: coords.left }
+  nextTick(clampSlashMenuToViewport)
 }
 
 function runSlashCommand(command: EditorCommand) {
@@ -1183,7 +1211,7 @@ function updateContextMenu() {
     return
   }
   const selection = editor.value.state.selection
-  if (selection instanceof NodeSelection) {
+  if (selection instanceof NodeSelection && !editor.value.isActive('image')) {
     contextMenuPosition.value = null
     return
   }
@@ -1259,7 +1287,13 @@ function handleVisualFrameKeydown(event: KeyboardEvent) {
 function markVisualInput(event: Event) {
   if (event.type === 'pointerdown') {
     const target = event.target as HTMLElement | null
-    if (blockMenuOpen.value && target?.closest('.tiptap')) closeBlockMenu()
+    if (
+      blockMenuOpen.value &&
+      target?.closest('.tiptap') &&
+      !target.closest('.visual-block-menu-trigger')
+    ) {
+      closeBlockMenu()
+    }
     const block = target?.closest<HTMLElement>('.visual-block-node')
     const index = Number(block?.dataset.blockIndex)
     if (block && Number.isInteger(index)) activateBlock(index)
@@ -1371,6 +1405,7 @@ onMounted(() => {
   scrollHost.value?.addEventListener('scroll', handleVisualScroll)
   document.addEventListener('pointerdown', handleDocumentPointerDown)
   document.addEventListener('keydown', handleDocumentKeydown)
+  window.addEventListener('resize', clampFloatingMenusToViewport)
   if (scrollHost.value) {
     mapResizeObserver = new ResizeObserver(updateMapViewport)
     mapResizeObserver.observe(scrollHost.value)
@@ -1644,6 +1679,7 @@ onBeforeUnmount(() => {
   finishBlockDrag()
   document.removeEventListener('pointerdown', handleDocumentPointerDown)
   document.removeEventListener('keydown', handleDocumentKeydown)
+  window.removeEventListener('resize', clampFloatingMenusToViewport)
   scrollHost.value?.removeEventListener('scroll', handleVisualScroll)
   mapResizeObserver?.disconnect()
   mapResizeObserver = null
@@ -1803,44 +1839,18 @@ onBeforeUnmount(() => {
         </button>
         <span v-if="filteredSlashCommands.length === 0">No commands</span>
       </div>
-      <div
+      <VisualContextToolbar
         v-if="contextMenuPosition"
-        class="visual-context-menu"
-        :style="{ top: `${contextMenuPosition.top}px`, left: `${contextMenuPosition.left}px` }"
-        data-testid="visual-context-menu"
-      >
-        <template v-if="editor?.isActive('table')">
-          <button type="button" @click="runEditorCommand('add-row-before')">Add row before</button>
-          <button type="button" @click="runEditorCommand('add-row-after')">Add row after</button>
-          <button type="button" @click="runEditorCommand('delete-row')">Delete row</button>
-          <button type="button" @click="runEditorCommand('add-column-before')">
-            Add column before
-          </button>
-          <button type="button" @click="runEditorCommand('add-column-after')">
-            Add column after
-          </button>
-          <button type="button" @click="runEditorCommand('delete-column')">Delete column</button>
-          <button type="button" @click="runEditorCommand('delete-table')">Delete table</button>
-        </template>
-        <template v-else-if="editor?.isActive('image')">
-          <button type="button" @click="editSelectedImage">Source</button>
-          <button type="button" @click="editSelectedImageAlt">Alt</button>
-          <button type="button" @click="deleteContextNode">Delete</button>
-        </template>
-        <template v-else-if="editor?.isActive('link')">
-          <button type="button" @click="openSelectedLink">Open</button>
-          <button type="button" @click="setLink">Edit</button>
-          <button type="button" @click="removeSelectedLink">Remove</button>
-        </template>
-        <template v-else>
-          <button type="button" @click="runEditorCommand('bold')">Bold</button>
-          <button type="button" @click="runEditorCommand('italic')">Italic</button>
-          <button type="button" @click="runEditorCommand('strike')">Strike</button>
-          <button type="button" @click="runEditorCommand('inline-code')">Code</button>
-          <button type="button" @click="runEditorCommand('link')">Link</button>
-          <button type="button" @click="runEditorCommand('clear-formatting')">Clear</button>
-        </template>
-      </div>
+        :context="contextToolbarContext"
+        :position="contextMenuPosition"
+        @run-command="runEditorCommand"
+        @edit-image-source="editSelectedImage"
+        @edit-image-alt="editSelectedImageAlt"
+        @delete-node="deleteContextNode"
+        @open-link="openSelectedLink"
+        @edit-link="setLink"
+        @remove-link="removeSelectedLink"
+      />
       <div ref="scrollHost" class="visual-editor-scroll">
         <div ref="editorHost" class="visual-editor-content" @click.capture="handleVisualClick" />
       </div>
