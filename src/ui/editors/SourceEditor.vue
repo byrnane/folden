@@ -6,6 +6,7 @@ import { tags } from '@lezer/highlight'
 import { basicSetup, EditorView } from 'codemirror'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
+import type { DocumentPatch } from '../../domain/documents/documentPatch'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
 import { toSourceSelectionState } from '../../domain/documents/editorViewState'
 import type { EditorCommand } from '../../application/types/shell'
@@ -15,6 +16,11 @@ import {
   findActiveHeading,
 } from '../../domain/markdown/outline'
 import type { MarkdownHeading } from '../../domain/markdown/outline'
+import {
+  logicalAnchorAtOffset,
+  offsetForLogicalAnchor,
+  type MarkdownBlockDocument,
+} from '../../domain/markdown/blockDocument'
 import PromptDialog from '../dialogs/PromptDialog.vue'
 import DocumentMap from '../navigation/DocumentMap.vue'
 import DocumentOutline from '../navigation/DocumentOutline.vue'
@@ -36,13 +42,29 @@ const props = defineProps<{
   showDocumentOutline: boolean
   showDocumentMap: boolean
   viewState: EditorViewSession
+  blockDocument: MarkdownBlockDocument | null
 }>()
 
 const emit = defineEmits<{
   'document-update': [update: DocumentUpdate]
+  'history-command': [command: 'undo' | 'redo']
   'set-outline-width': [width: number]
   'set-document-map-width': [width: number]
 }>()
+
+function handleSourceKeydown(event: KeyboardEvent) {
+  const primary = event.ctrlKey || event.metaKey
+  const key = event.key.toLowerCase()
+  if (primary && key === 'z') {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('history-command', event.shiftKey ? 'redo' : 'undo')
+  } else if (primary && key === 'y') {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('history-command', 'redo')
+  }
+}
 
 const editorHost = ref<HTMLDivElement | null>(null)
 const mapViewport = ref({ top: 0, height: 100 })
@@ -537,11 +559,24 @@ onMounted(() => {
       ...(props.wordWrap ? [EditorView.lineWrapping] : []),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !isApplyingExternalContent) {
+          const patches: DocumentPatch[] = []
+          let offset = 0
+          update.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+            const insert = inserted.toString()
+            patches.push({
+              from: fromA + offset,
+              to: toA + offset,
+              insert,
+              removed: update.startState.doc.sliceString(fromA, toA),
+            })
+            offset += insert.length - (toA - fromA)
+          })
+          if (!patches.length) return
           emit('document-update', {
             documentId: props.documentId,
             originViewId: props.viewId,
             baseRevision: lastAppliedRevision,
-            nextContent: update.state.doc.toString(),
+            patches,
             updateKind: 'source-edit',
           })
           lastAppliedRevision += 1
@@ -617,18 +652,39 @@ function captureViewState() {
           head: selection.head,
         }
       : props.viewState.selectionState,
+    logicalSelection:
+      selection && props.blockDocument
+        ? {
+            anchor: logicalAnchorAtOffset(props.blockDocument, selection.anchor),
+            head: logicalAnchorAtOffset(props.blockDocument, selection.head),
+          }
+        : props.viewState.logicalSelection,
     isFocused: editorView?.hasFocus ?? false,
   }
 }
 
 function restoreViewState(
-  viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>,
+  viewState: Pick<
+    EditorViewSession,
+    'scrollTop' | 'selectionState' | 'logicalSelection' | 'isFocused'
+  >,
 ) {
   if (!editorView) {
     return
   }
 
-  const selection = toSourceSelectionState(viewState.selectionState, editorView.state.doc.length)
+  const logicalAnchor =
+    props.blockDocument && viewState.logicalSelection?.anchor
+      ? offsetForLogicalAnchor(props.blockDocument, viewState.logicalSelection.anchor)
+      : null
+  const logicalHead =
+    props.blockDocument && viewState.logicalSelection?.head
+      ? offsetForLogicalAnchor(props.blockDocument, viewState.logicalSelection.head)
+      : null
+  const selection =
+    logicalAnchor !== null && logicalHead !== null
+      ? { anchor: logicalAnchor, head: logicalHead }
+      : toSourceSelectionState(viewState.selectionState, editorView.state.doc.length)
 
   if (selection) {
     editorView.dispatch({
@@ -679,6 +735,7 @@ onBeforeUnmount(() => {
       '--outline-width': `${outlineWidth}px`,
       '--document-map-width': `${documentMapWidth}px`,
     }"
+    @keydown.capture="handleSourceKeydown"
   >
     <DocumentOutline
       v-if="showOutline"

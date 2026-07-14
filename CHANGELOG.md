@@ -6,6 +6,17 @@
 - Минорные версии: 5-10 строк.
 - Мажорные версии: полноценные release notes.
 
+## 0.9.0 - 2026-07-14
+
+- Folden переориентирован на Visual-first написание статей, сценариев, документации и длинных Markdown-текстов; Source сохранён как вторичный точный режим.
+- Добавлена общая lossless-блоковая модель со стабильными runtime-ID, локальным перепарсом изменённого диапазона и буквальным сохранением нетронутых блоков.
+- Frontmatter, HTML, комментарии, footnotes, directives и неизвестная inline-разметка доступны в Visual как редактируемые Source blocks без safety-dialog.
+- Visual получил цельные интерактивные блоки с handle, контекстным меню, диапазонным выделением, drag-and-drop, keyboard move, duplicate/delete/transform и slash menu.
+- Постоянная Visual-toolbar заменена bubble- и контекстными панелями для текста, ссылок, изображений и таблиц.
+- Visual и Source используют общие patch-based undo/redo, logical anchors и синхронизацию позиции без полных document snapshots.
+- Добавлены future-планы поиска и производительности workspace; placeholder Search сохранён без расширения функциональности.
+- Расширены unit/E2E-регрессии для lossless round-trip, raw-блоков, блочных операций, общей истории, save/recovery/conflicts, split panes, outline и document map.
+
 ## 0.8.6 - 2026-07-11
 
 - Layout state вынесен из application shell, а Vue/Tauri-зависимости удалены из domain layer.

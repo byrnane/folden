@@ -99,7 +99,9 @@ export function createPaneController(initialDocument: OpenDocument) {
   function updateEditorViewSession(
     paneId: EditorPane['id'],
     documentId: string,
-    viewState: Partial<Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>>,
+    viewState: Partial<
+      Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'logicalSelection' | 'isFocused'>
+    >,
   ) {
     const sessionId = paneDocumentModeKey(paneId, documentId)
     const session = viewSessions.value[sessionId]
@@ -213,6 +215,7 @@ export function createPaneController(initialDocument: OpenDocument) {
       documentId: string,
       baseRevision: number,
       nextContent: string,
+      patches: DocumentUpdate['patches'],
     ) => OpenDocument | null,
   ) {
     const acceptedUpdate = acceptDocumentUpdate(document, update)
@@ -225,6 +228,7 @@ export function createPaneController(initialDocument: OpenDocument) {
       document.id,
       update.baseRevision,
       acceptedUpdate.nextContent,
+      update.patches,
     )
 
     if (!nextDocument) {

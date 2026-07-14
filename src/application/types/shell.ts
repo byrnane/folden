@@ -1,6 +1,7 @@
 import type { WorkspaceEntry } from '../../domain/native'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
 import type { EditorMode, OpenDocument } from '../../domain/documents/documentState'
+import type { MarkdownBlockDocument } from '../../domain/markdown/blockDocument'
 
 export type Workspace = {
   id: string
@@ -31,6 +32,7 @@ export type EditorPaneActiveDocumentView = {
   viewSessionId: string
   viewSession: EditorViewSession
   shouldLoadRemoteImages: boolean
+  blockDocument: MarkdownBlockDocument | null
 }
 
 export type EditorPaneView = EditorPane & {
@@ -40,9 +42,15 @@ export type EditorPaneView = EditorPane & {
 
 export type EditorAdapter = {
   flushContent: () => string
-  captureViewState?: () => Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>
+  captureViewState?: () => Pick<
+    EditorViewSession,
+    'scrollTop' | 'selectionState' | 'logicalSelection' | 'isFocused'
+  >
   restoreViewState?: (
-    viewState: Pick<EditorViewSession, 'scrollTop' | 'selectionState' | 'isFocused'>,
+    viewState: Pick<
+      EditorViewSession,
+      'scrollTop' | 'selectionState' | 'logicalSelection' | 'isFocused'
+    >,
   ) => void
   runCommand?: (command: EditorCommand) => void
 }

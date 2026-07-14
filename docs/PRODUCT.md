@@ -1,16 +1,14 @@
 # Folden Product
 
-Folden is a local-first desktop editor for Markdown and ordinary text files. It is meant to feel like a focused writing tool while preserving the user's direct control over files, folders, and source text.
+Folden is a local-first, visual-first desktop writing editor built on Markdown. It is meant to feel like a focused tool for articles, scripts, documentation, notes, and specifications while preserving the user's direct control over files and folders.
 
 ## Audience
 
 Folden is built for people who write and maintain text as part of real work:
 
-- developers;
-- game designers;
-- technical writers;
-- writers of documentation, notes, specs, scripts, and articles;
-- Markdown users who want visual editing without giving up source control.
+- writers of articles, scripts, documentation, notes, and specifications;
+- technical writers and game designers working with structured long-form text;
+- Markdown users who want a strong visual block editor while retaining access to source text.
 
 ## Principles
 
@@ -58,8 +56,8 @@ Folden currently supports:
 - multiple documents with tabs, tab reorder, tab transfer between panes, and Open Editors;
 - two-pane split view with shared document sessions and persisted split ratio;
 - activity rail, workspace and settings sections, focus mode, resizable sidebar and rail, density settings, and layout reset;
-- source mode with CodeMirror;
-- visual Markdown mode with Tiptap and a shared Markdown toolbar;
+- a visual-first Markdown editor with Tiptap;
+- a secondary Source mode with CodeMirror for inspecting and precisely editing Markdown;
 - Markdown outline navigation with active-section highlighting, keyboard navigation, and a resizable document map in Source and Visual modes;
 - explicit dirty state, undo, redo, save, save as copy, and close protection;
 - autosave for saved documents when enabled, including delay, window-blur, and document-switch settings;
@@ -80,13 +78,14 @@ Folden is not currently:
 - a database-backed document store;
 - a plugin platform;
 - an AI writing product;
-- an arbitrary split-grid editor.
+- an arbitrary split-grid editor;
+- an IDE or code-centric development environment.
 
 Future features should keep the same product contract: user documents stay file-first and readable outside Folden.
 
 ## Role of Markdown and Plain Text
 
-Markdown files can open in Visual mode and Source mode. Source mode is a first-class editing surface, not a fallback. Visual mode should help users write supported CommonMark/GFM without taking ownership away from the source file. Raw HTML, HTML comments, frontmatter, footnotes, and custom directives stay safety-gated for Visual editing until Folden can preserve those raw blocks without rewriting them.
+Markdown files open in Visual mode by default. Source remains a complete but secondary view for inspecting and precisely editing Markdown. Visual editing is the primary product experience and should expose documents as clear, movable blocks without taking ownership away from the source file. Raw HTML, HTML comments, frontmatter, footnotes, and custom directives must survive as editable source blocks instead of forcing the whole document out of Visual mode.
 
 Plain text files remain plain text files. Folden should not force arbitrary text into a Markdown or block-document model just because the application has a visual editor.
 

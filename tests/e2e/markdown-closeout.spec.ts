@@ -34,14 +34,15 @@ const supportedKitchenSink = [
   '',
 ].join('\n')
 
-test('shows markdown toolbar and visual mode for scratch markdown documents', async ({ page }) => {
+test('keeps formatting contextual in Visual and available in Source', async ({ page }) => {
   await openApp(page)
 
   await expect(page.getByTestId('document-title')).toHaveText('Untitled.md')
-  await expect(page.locator('.shared-toolbar')).toBeVisible()
+  await expect(page.locator('.shared-toolbar')).toBeHidden()
   await expect(page.getByRole('button', { name: 'Visual', exact: true })).toBeEnabled()
 
   await page.getByRole('button', { name: 'Source', exact: true }).click()
+  await expect(page.locator('.shared-toolbar')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Insert table' })).toBeEnabled()
   await expect(page.getByRole('button', { name: 'Add row before' })).toBeDisabled()
   await sourceEditor(page).click()
@@ -104,7 +105,7 @@ test('switches supported markdown kitchen sink without content or dirty changes'
   await expect(page.getByTestId('source-editor')).toContainText('Saved closeout line.')
 })
 
-test('keeps unsafe kitchen sink and raw source blocks unchanged', async ({ page }) => {
+test('keeps kitchen sink and raw source blocks unchanged through Visual', async ({ page }) => {
   const unsafeKitchenSink = readFileSync('test_files/markdown_kitchen_sink.md', 'utf8')
   const rawSource = [
     '---',
@@ -130,14 +131,9 @@ test('keeps unsafe kitchen sink and raw source blocks unchanged', async ({ page 
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-markdown_kitchen_sink.md').click()
 
-  await expect(page.getByTestId('source-editor')).toContainText('Markdown Kitchen Sink')
+  await expect(page.getByTestId('visual-editor')).toContainText('Markdown Kitchen Sink')
   await page.getByRole('button', { name: 'Visual', exact: true }).click()
-  await expect(
-    page.getByRole('dialog', { name: 'Visual mode may rewrite markdown_kitchen_sink.md' }),
-  ).toBeVisible()
-  await page.getByRole('button', { name: 'Stay in Source' }).click()
-
-  await expect(page.getByTestId('source-editor')).toContainText('Markdown Kitchen Sink')
+  await expect(page.getByTestId('visual-editor')).toContainText('Source block')
   await expect(page.getByTestId('open-documents-status')).toHaveText('2 open')
   await expect
     .poll(async () =>
@@ -152,7 +148,7 @@ test('keeps unsafe kitchen sink and raw source blocks unchanged', async ({ page 
     .toBe(unsafeKitchenSink)
 
   await page.getByTestId('workspace-entry-raw_source.md').click()
-  await page.getByRole('button', { name: 'Source', exact: true }).click()
+  await expect(page.locator('.raw-markdown-block')).toHaveCount(3)
   await page.getByTestId('save-document').click()
   await expect
     .poll(async () =>
@@ -267,8 +263,8 @@ test('edits visual tables and task checkboxes without rewriting neighbors', asyn
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-visual_roundtrip.md').click()
 
-  await expect(page.getByRole('button', { name: 'Add row before' })).toBeDisabled()
-  await expect(page.getByRole('button', { name: 'Delete table' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Add row before' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Delete table' })).toHaveCount(0)
   await page.locator('.visual-editor-content td').first().click()
   await expect(page.getByRole('button', { name: 'Add row before' })).toBeEnabled()
   await page.getByRole('button', { name: 'Add row after' }).click()

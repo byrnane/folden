@@ -15,8 +15,8 @@ type VisualSafetyDeps = {
 }
 
 export function createVisualSafetyController(deps: VisualSafetyDeps) {
+  void deps
   const markdownSafetyCache = ref<Record<string, MarkdownSafetyReport>>({})
-  const visualSafetyAcknowledgments = ref<Record<string, number>>({})
   const remoteImagePermissions = ref<Record<string, boolean>>({})
 
   function markdownSafetyCacheKey(document: Pick<OpenDocument, 'id' | 'revision'>) {
@@ -47,24 +47,9 @@ export function createVisualSafetyController(deps: VisualSafetyDeps) {
     return nextReport
   }
 
-  function acknowledgeVisualSafety(document: OpenDocument) {
-    visualSafetyAcknowledgments.value = {
-      ...visualSafetyAcknowledgments.value,
-      [document.id]: document.revision,
-    }
-  }
-
-  function isVisualSafetyAcknowledged(document: OpenDocument) {
-    return visualSafetyAcknowledgments.value[document.id] === document.revision
-  }
-
   function hasUnsafeUnacknowledgedVisualState(document: OpenDocument) {
-    if (!isMarkdownDocument(document)) {
-      return false
-    }
-
-    const safetyReport = getMarkdownSafetyReport(document)
-    return !safetyReport.safeForVisualEditing && !isVisualSafetyAcknowledged(document)
+    void document
+    return false
   }
 
   function documentHasRemoteImages(document: OpenDocument) {
@@ -96,58 +81,12 @@ export function createVisualSafetyController(deps: VisualSafetyDeps) {
     remoteImagePermissions.value = nextPermissions
   }
 
-  function resetVisualSafetyAcknowledgment(documentId: string, revision: number) {
-    if (visualSafetyAcknowledgments.value[documentId] === revision) {
-      return
-    }
-
-    if (!(documentId in visualSafetyAcknowledgments.value)) {
-      return
-    }
-
-    const nextAcknowledgments = { ...visualSafetyAcknowledgments.value }
-    delete nextAcknowledgments[documentId]
-    visualSafetyAcknowledgments.value = nextAcknowledgments
-  }
-
   function enforceDocumentVisualSafety(document: OpenDocument) {
-    resetVisualSafetyAcknowledgment(document.id, document.revision)
-
-    if (!isMarkdownDocument(document)) {
-      return
-    }
-
-    const safetyReport = getMarkdownSafetyReport(document)
-
-    if (safetyReport.safeForVisualEditing || isVisualSafetyAcknowledged(document)) {
-      return
-    }
-
-    document.defaultMode = 'source'
-    deps.setOpenDocumentMode(document.id, 'source')
+    void document
   }
 
   async function confirmVisualMode(document: OpenDocument) {
-    if (!isMarkdownDocument(document)) {
-      return false
-    }
-
-    const safetyReport = getMarkdownSafetyReport(document)
-
-    if (safetyReport.safeForVisualEditing || isVisualSafetyAcknowledged(document)) {
-      return true
-    }
-
-    const confirmed = await deps.openMarkdownSafetyDialog({
-      title: `Visual mode may rewrite ${document.name}`,
-      features: safetyReport.unsupportedFeatures,
-    })
-
-    if (confirmed) {
-      acknowledgeVisualSafety(document)
-    }
-
-    return confirmed
+    return isMarkdownDocument(document)
   }
 
   return {

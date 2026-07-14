@@ -24,7 +24,7 @@ test('keeps remote images blocked until the document explicitly allows them', as
   const editor = sourceEditor(page)
   await editor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
-  await page.keyboard.type('\n![remote](https://example.com/preview.png)\n')
+  await page.keyboard.insertText('\n![remote](https://example.com/preview.png)\n')
 
   await page.getByRole('button', { name: 'Visual' }).click()
   await expect(page.getByTestId('visual-editor')).toContainText('Remote image is blocked.')
@@ -36,6 +36,10 @@ test('keeps remote images blocked until the document explicitly allows them', as
   expect(remoteRequests).toEqual([])
 
   await page.getByTestId('load-remote-images').click()
+  await expect(page.getByTestId('visual-editor')).toHaveAttribute(
+    'data-remote-images-allowed',
+    'true',
+  )
   await expect.poll(() => remoteRequests.length).toBeGreaterThan(0)
   await expect(page.locator('img[src="https://example.com/preview.png"]')).toBeVisible()
 })

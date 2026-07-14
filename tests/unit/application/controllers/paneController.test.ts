@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createPaneController } from '../../../../src/application/controllers/paneController'
 import { createTextFileFormat } from '../../../../src/domain/document'
 import type { OpenDocument } from '../../../../src/domain/documents/documentState'
+import { createDocumentPatch } from '../../../../src/domain/documents/documentPatch'
 
 function createDocument(id: string, content = 'content'): OpenDocument {
   return {
@@ -141,7 +142,7 @@ describe('pane controller', () => {
         documentId: document.id,
         originViewId: leftSession,
         baseRevision: 0,
-        nextContent: 'after',
+        patches: [createDocumentPatch('before', 'after')!],
         updateKind: 'source-edit',
       },
       document,

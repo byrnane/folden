@@ -7,6 +7,7 @@ import {
 import { createTextFileFormat } from '../../../../src/domain/document'
 import { createDocumentHistoryState } from '../../../../src/domain/documents/documentHistory'
 import type { OpenDocument } from '../../../../src/domain/documents/documentState'
+import { createDocumentPatch } from '../../../../src/domain/documents/documentPatch'
 
 function createDocument(): OpenDocument {
   return {
@@ -39,7 +40,7 @@ describe('editor sync', () => {
         documentId: document.id,
         originViewId: 'left:doc-1',
         baseRevision: 1,
-        nextContent: 'stale',
+        patches: [createDocumentPatch('hello', 'stale')!],
         updateKind: 'source-edit',
       }),
     ).toBeNull()
@@ -49,7 +50,7 @@ describe('editor sync', () => {
         documentId: document.id,
         originViewId: 'left:doc-1',
         baseRevision: 2,
-        nextContent: 'fresh',
+        patches: [createDocumentPatch('hello', 'fresh')!],
         updateKind: 'source-edit',
       }),
     ).toEqual({

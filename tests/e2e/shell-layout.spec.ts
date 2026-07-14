@@ -6,6 +6,7 @@ import {
   layoutSettingLimits,
   openApp,
   readPersistedLayout,
+  sourceEditor,
 } from './helpers'
 
 test('shows toolbar labels only in comfortable density', async ({ page }) => {
@@ -30,6 +31,7 @@ test('shows toolbar labels only in comfortable density', async ({ page }) => {
   await page.getByRole('button', { name: 'Appearance' }).click()
   await page.getByLabel('Density').selectOption('comfortable')
   await page.locator('button[title="Workspace"]').click()
+  await page.getByRole('button', { name: 'Source', exact: true }).click()
 
   await expect(splitLabel).toBeVisible()
   await expect(page.getByRole('button', { name: 'Heading 1' })).toBeVisible()
@@ -49,7 +51,7 @@ test('shows toolbar labels only in comfortable density', async ({ page }) => {
   await expect(page.locator(`#${headingsListId}`)).toBeHidden()
   await expect(headingsTrigger).toBeFocused()
   await headingsTrigger.click()
-  await page.getByTestId('visual-editor').click()
+  await sourceEditor(page).click()
   await expect(page.locator(`#${headingsListId}`)).toBeHidden()
   await headingsTrigger.click()
   await page.locator(`#${headingsListId}`).getByRole('button', { name: 'Heading 4' }).click()
@@ -81,10 +83,7 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
   await expect(scratchButton).toHaveAttribute('title', 'New scratch document')
   await expect(page.getByRole('button', { name: 'Visual' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Source' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Headings' })).toHaveAttribute(
-    'aria-expanded',
-    'false',
-  )
+  await expect(page.getByRole('button', { name: 'Headings' })).toHaveCount(0)
 
   await dragBy(page.getByTestId('activity-splitter'), 100)
   await expect

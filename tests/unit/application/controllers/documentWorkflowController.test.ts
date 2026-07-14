@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { createDocumentWorkflowController } from '../../../../src/application/controllers/documentWorkflowController'
 import { createTextFileFormat } from '../../../../src/domain/document'
 import type { OpenDocument } from '../../../../src/domain/documents/documentState'
+import type { DocumentPatch } from '../../../../src/domain/documents/documentPatch'
 import type { EditorPane } from '../../../../src/application/types/shell'
 import type { OpenedDocument } from '../../../../src/domain/native'
 
@@ -126,9 +127,12 @@ function createHarness(document = createDocument()) {
     })),
     ensureViewSession: vi.fn(() => ({ id: 'left:doc-1' })),
     getDocumentMode: vi.fn(() => 'visual' as const),
-    applyDocumentUpdateToSessions: vi.fn((update, _nextDocument: OpenDocument, applyUpdate) =>
-      applyUpdate(update.documentId, update.baseRevision, update.nextContent),
-    ),
+    applyDocumentUpdateToSessions: vi.fn((update, _nextDocument: OpenDocument, applyUpdate) => {
+      const nextContent = update.patches.reduce((content: string, patch: DocumentPatch) => {
+        return `${content.slice(0, patch.from)}${patch.insert}${content.slice(patch.to)}`
+      }, document.content)
+      return applyUpdate(update.documentId, update.baseRevision, nextContent)
+    }),
     updateDocumentSessions: vi.fn(),
     createDocumentDraft: vi.fn((content: string, name = 'Untitled.md') =>
       createDocument({
@@ -232,7 +236,7 @@ describe('document workflow controller', () => {
 
     await controller.saveDocument(document)
 
-    expect(deps.applyDocumentUpdate).toHaveBeenCalledWith(document.id, 1, 'after')
+    expect(deps.applyDocumentUpdate).toHaveBeenCalledWith(document.id, 1, 'after', 'visual-edit')
     expect(files.saveTextFile).toHaveBeenCalledWith(
       'native-1',
       'after',

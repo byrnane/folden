@@ -28,7 +28,7 @@ function documentFixture(overrides: Partial<OpenDocument> = {}): OpenDocument {
 }
 
 describe('visual safety controller', () => {
-  it('forces unsafe markdown back to source until user acknowledges visual mode', async () => {
+  it('allows unsupported markdown through lossless raw blocks without a warning', async () => {
     const setOpenDocumentMode = vi.fn()
     const openMarkdownSafetyDialog = vi.fn<() => Promise<boolean>>().mockResolvedValueOnce(true)
     const controller = createVisualSafetyController({
@@ -42,15 +42,12 @@ describe('visual safety controller', () => {
 
     controller.enforceDocumentVisualSafety(document)
 
-    expect(document.defaultMode).toBe('source')
-    expect(setOpenDocumentMode).toHaveBeenCalledWith('document-1', 'source')
-    expect(controller.hasUnsafeUnacknowledgedVisualState(document)).toBe(true)
+    expect(document.defaultMode).toBe('visual')
+    expect(setOpenDocumentMode).not.toHaveBeenCalled()
+    expect(controller.hasUnsafeUnacknowledgedVisualState(document)).toBe(false)
 
     await expect(controller.confirmVisualMode(document)).resolves.toBe(true)
-    expect(openMarkdownSafetyDialog).toHaveBeenCalledWith({
-      title: 'Visual mode may rewrite draft.md',
-      features: expect.arrayContaining([expect.objectContaining({ kind: 'html' })]),
-    })
+    expect(openMarkdownSafetyDialog).not.toHaveBeenCalled()
     expect(controller.hasUnsafeUnacknowledgedVisualState(document)).toBe(false)
   })
 
@@ -82,7 +79,7 @@ describe('visual safety controller', () => {
     expect(controller.shouldLoadRemoteImages(markdownWithRemoteImage)).toBe(false)
   })
 
-  it('requires a fresh acknowledgment after unsafe document revision changes', async () => {
+  it('keeps raw-block markdown editable after document revision changes', async () => {
     const controller = createVisualSafetyController({
       setOpenDocumentMode: vi.fn(),
       openMarkdownSafetyDialog: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
@@ -97,6 +94,6 @@ describe('visual safety controller', () => {
     document.revision = 2
     controller.enforceDocumentVisualSafety(document)
 
-    expect(controller.hasUnsafeUnacknowledgedVisualState(document)).toBe(true)
+    expect(controller.hasUnsafeUnacknowledgedVisualState(document)).toBe(false)
   })
 })

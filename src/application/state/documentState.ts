@@ -10,12 +10,22 @@ import {
 } from '../../domain/document'
 import {
   createDocumentHistoryState,
+  recordDocumentPatchHistory,
   recordDocumentHistory,
   redoDocumentHistory,
   undoDocumentHistory,
 } from '../../domain/documents/documentHistory'
 import type { NativeError } from '../../domain/nativeError'
 import type { LoadedDocument, OpenDocument } from '../../domain/documents/documentState'
+import {
+  parseMarkdownBlockDocument,
+  updateMarkdownBlockDocument,
+} from '../../domain/markdown/blockDocument'
+import {
+  applyDocumentPatch,
+  createDocumentPatch,
+  type DocumentPatch,
+} from '../../domain/documents/documentPatch'
 
 type DocumentStateOptions = {
   fileNameFromPath: (path: string) => string
@@ -27,6 +37,31 @@ export function createDocumentState(options: DocumentStateOptions) {
   const documentsById = ref<Record<DocumentId, OpenDocument>>({})
   const documentOrder = ref<DocumentId[]>([])
   const pathToDocumentId = ref<Record<string, DocumentId>>({})
+
+  function buildBlockDocument(
+    document: Pick<OpenDocument, 'path' | 'name' | 'content' | 'blockDocument'>,
+    nextContent = document.content,
+    patches?: readonly DocumentPatch[],
+  ) {
+    if (!options.isMarkdownPath(document.path ?? document.name)) return null
+    if (document.blockDocument && patches?.length) {
+      let blockDocument = document.blockDocument
+      let currentSource = document.content
+      for (const patch of patches) {
+        const patchedSource = applyDocumentPatch(currentSource, patch)
+        if (patchedSource === null) return parseMarkdownBlockDocument(nextContent, blockDocument)
+        blockDocument = updateMarkdownBlockDocument(blockDocument, patchedSource, patch)
+        currentSource = patchedSource
+      }
+      return currentSource === nextContent
+        ? blockDocument
+        : parseMarkdownBlockDocument(nextContent, blockDocument)
+    }
+    const patch = createDocumentPatch(document.content, nextContent)
+    return document.blockDocument && patch
+      ? updateMarkdownBlockDocument(document.blockDocument, nextContent, patch)
+      : parseMarkdownBlockDocument(nextContent, document.blockDocument ?? undefined)
+  }
 
   const documents = computed(() =>
     documentOrder.value
@@ -64,7 +99,7 @@ export function createDocumentState(options: DocumentStateOptions) {
     content: string,
     fallbackName?: string,
   ): OpenDocument {
-    return {
+    const document: OpenDocument = {
       id: crypto.randomUUID(),
       nativeId: null,
       path,
@@ -82,7 +117,10 @@ export function createDocumentState(options: DocumentStateOptions) {
       externalState: 'idle',
       externalMessage: null,
       history: createDocumentHistoryState(),
+      blockDocument: null,
     }
+    document.blockDocument = buildBlockDocument(document)
+    return document
   }
 
   function getDocument(documentId: DocumentId) {
@@ -140,7 +178,15 @@ export function createDocumentState(options: DocumentStateOptions) {
       return
     }
 
+    document.history = recordDocumentHistory(
+      document.history,
+      document.content,
+      nextContent,
+      'content-update',
+    )
+    const blockDocument = buildBlockDocument(document, nextContent)
     document.content = nextContent
+    document.blockDocument = blockDocument
     document.revision = nextDocumentRevision(document.revision)
   }
 
@@ -148,6 +194,8 @@ export function createDocumentState(options: DocumentStateOptions) {
     documentId: DocumentId,
     baseRevision: DocumentRevision,
     nextContent: string,
+    historyGroup = `revision-${baseRevision}`,
+    patches?: readonly DocumentPatch[],
   ) {
     const document = getDocument(documentId)
 
@@ -156,8 +204,12 @@ export function createDocumentState(options: DocumentStateOptions) {
     }
 
     if (document.content !== nextContent) {
-      document.history = recordDocumentHistory(document.history, document.content)
+      document.history = patches?.length
+        ? recordDocumentPatchHistory(document.history, patches, historyGroup)
+        : recordDocumentHistory(document.history, document.content, nextContent, historyGroup)
+      const blockDocument = buildBlockDocument(document, nextContent, patches)
       document.content = nextContent
+      document.blockDocument = blockDocument
       document.revision = nextDocumentRevision(document.revision)
       document.externalState = 'idle'
       document.externalMessage = null
@@ -180,7 +232,9 @@ export function createDocumentState(options: DocumentStateOptions) {
     }
 
     document.history = result.history
+    const blockDocument = buildBlockDocument(document, result.nextContent)
     document.content = result.nextContent
+    document.blockDocument = blockDocument
     document.revision = nextDocumentRevision(document.revision)
     return document
   }
@@ -199,7 +253,9 @@ export function createDocumentState(options: DocumentStateOptions) {
     }
 
     document.history = result.history
+    const blockDocument = buildBlockDocument(document, result.nextContent)
     document.content = result.nextContent
+    document.blockDocument = blockDocument
     document.revision = nextDocumentRevision(document.revision)
     return document
   }
@@ -255,6 +311,9 @@ export function createDocumentState(options: DocumentStateOptions) {
 
     if (!options.isMarkdownPath(documentSnapshot.path)) {
       document.defaultMode = 'source'
+      document.blockDocument = null
+    } else {
+      document.blockDocument = buildBlockDocument(document)
     }
 
     setPathIndex(document.path, document.id)
@@ -297,6 +356,9 @@ export function createDocumentState(options: DocumentStateOptions) {
     document.externalState = 'idle'
     document.externalMessage = null
     document.history = createDocumentHistoryState()
+    document.blockDocument = options.isMarkdownPath(documentSnapshot.path)
+      ? parseMarkdownBlockDocument(documentSnapshot.content)
+      : null
 
     if (!options.isMarkdownPath(documentSnapshot.path)) {
       document.defaultMode = 'source'

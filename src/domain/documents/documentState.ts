@@ -1,6 +1,7 @@
 import type { DocumentId, DocumentRevision, FileFingerprint, TextFileFormat } from '../document'
 import type { NativeError } from '../nativeError'
 import type { DocumentHistoryState } from './documentHistory'
+import type { MarkdownBlockDocument } from '../markdown/blockDocument'
 
 export type EditorMode = 'visual' | 'source'
 export type ExternalDocumentState = 'idle' | 'conflict' | 'missing'
@@ -23,6 +24,7 @@ export type OpenDocument = {
   externalState: ExternalDocumentState
   externalMessage: string | null
   history: DocumentHistoryState
+  blockDocument?: MarkdownBlockDocument | null
 }
 
 export type LoadedDocument = {

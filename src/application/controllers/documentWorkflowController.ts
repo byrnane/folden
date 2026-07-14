@@ -4,6 +4,7 @@ import { createTextFileFormat } from '../../domain/document'
 import { shouldPromptToDiscardDocument } from '../../domain/documents/closeProtection'
 import type { EditorMode, OpenDocument } from '../../domain/documents/documentState'
 import type { DocumentUpdate } from '../../domain/documents/editorSync'
+import { createDocumentPatch } from '../../domain/documents/documentPatch'
 import { createDocumentSaveQueue, type SaveJob } from '../../domain/documents/saveQueue'
 import type { OpenedDocument, WorkspaceEntry } from '../../domain/native'
 import type { NativeError } from '../../domain/nativeError'
@@ -78,6 +79,7 @@ type DocumentWorkflowDeps = {
       documentId: string,
       baseRevision: number,
       nextContent: string,
+      patches: DocumentUpdate['patches'],
     ) => OpenDocument | null,
   ) => OpenDocument | null
   updateDocumentSessions: (documentId: string, revision: number) => void
@@ -88,6 +90,8 @@ type DocumentWorkflowDeps = {
     documentId: string,
     baseRevision: number,
     nextContent: string,
+    historyGroup?: string,
+    patches?: DocumentUpdate['patches'],
   ) => OpenDocument | null
   undoDocument: (documentId: string) => OpenDocument | null
   redoDocument: (documentId: string) => OpenDocument | null
@@ -180,11 +184,15 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     }
 
     const session = deps.ensureViewSession(pane, document)
+    const patch = createDocumentPatch(document.content, nextContent)
+    if (!patch) {
+      return
+    }
     handleDocumentUpdate({
       documentId: document.id,
       originViewId: session.id,
       baseRevision: document.revision,
-      nextContent,
+      patches: [patch],
       updateKind: deps.getDocumentMode(pane, document) === 'visual' ? 'visual-edit' : 'source-edit',
     })
   }
@@ -207,7 +215,21 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     const nextDocument = deps.applyDocumentUpdateToSessions(
       update,
       document,
-      deps.applyDocumentUpdate,
+      (documentId, baseRevision, nextContent, patches) =>
+        patches
+          ? deps.applyDocumentUpdate(
+              documentId,
+              baseRevision,
+              nextContent,
+              update.historyGroup ?? update.updateKind,
+              patches,
+            )
+          : deps.applyDocumentUpdate(
+              documentId,
+              baseRevision,
+              nextContent,
+              update.historyGroup ?? update.updateKind,
+            ),
     )
 
     if (!nextDocument) {

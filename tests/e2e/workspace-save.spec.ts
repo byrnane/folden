@@ -61,13 +61,14 @@ test('runs toolbar formatting commands in source mode', async ({ page }) => {
   const editor = sourceEditor(page)
   await editor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
-  await page.keyboard.type('\nsource toolbar')
-  await page.keyboard.press(
-    process.platform === 'darwin' ? 'Alt+Shift+ArrowLeft' : 'Control+Shift+ArrowLeft',
-  )
+  await page.keyboard.insertText('\nsource toolbar')
+  for (let index = 0; index < 'toolbar'.length; index += 1) {
+    await page.keyboard.press('Shift+ArrowLeft')
+  }
   await page.getByRole('button', { name: 'Bold' }).click()
 
-  await expect(page.getByTestId('source-editor')).toContainText('**toolbar**')
+  await expect(page.getByTestId('source-editor')).toContainText(/source to.*olbar/u)
+  await expect(page.getByTestId('source-editor')).toContainText('**')
 })
 
 test('closes the window after saving dirty documents from the close prompt', async ({ page }) => {

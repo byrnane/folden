@@ -2,7 +2,7 @@
 
 English | [Русский](README.ru.md)
 
-Folden is a local-first desktop editor for Markdown and plain text files.
+Folden is a local-first, visual-first desktop writing editor built on Markdown.
 
 It is built around a simple contract:
 
@@ -13,7 +13,9 @@ It is built around a simple contract:
 
 ## What It Does
 
-Folden can open files and folders, edit Markdown in Source or Visual mode, navigate long documents through an outline and document map, work with tabs and a two-pane split view, save safely, recover unsaved work, detect external changes, and keep local layout/settings between launches.
+Folden is designed for articles, scripts, documentation, notes, and specifications. Markdown opens in the Visual editor by default; Source remains available for inspecting or precisely editing the underlying text. Folden can open files and folders, navigate long documents through an outline and document map, work with tabs and a two-pane split view, save safely, recover unsaved work, detect external changes, and keep local layout/settings between launches.
+
+Folden is a writing tool, not an IDE. Code-oriented features stay secondary to a calm, capable block-editing experience.
 
 It is not a cloud notes service, collaboration platform, mobile app, database-backed knowledge base, plugin platform, or AI writing product.
 

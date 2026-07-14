@@ -49,6 +49,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   beginSplitResize: [event: MouseEvent]
   documentUpdate: [update: DocumentUpdate]
+  historyCommand: [command: 'undo' | 'redo']
   toolbarState: [paneId: EditorPane['id'], state: { disabledCommands: EditorCommand[] }]
   moveDocumentBetweenPanes: [
     documentId: string,
@@ -436,7 +437,7 @@ onBeforeUnmount(() => {
       <template v-if="pane.activeDocument">
         <Suspense v-if="pane.activeDocument.mode === 'visual'">
           <VisualMarkdownEditor
-            :key="`${pane.activeDocument.viewSessionId}:${pane.activeDocument.shouldLoadRemoteImages ? 'remote-on' : 'remote-off'}`"
+            :key="pane.activeDocument.viewSessionId"
             :ref="(value) => setPaneEditorAdapter(pane.id, value as EditorAdapter | null)"
             :document-id="pane.activeDocument.document.id"
             :view-id="pane.activeDocument.viewSessionId"
@@ -450,7 +451,9 @@ onBeforeUnmount(() => {
             :show-document-map="showDocumentMap"
             :allow-remote-images="pane.activeDocument.shouldLoadRemoteImages"
             :view-state="pane.activeDocument.viewSession"
+            :block-document="pane.activeDocument.blockDocument"
             @document-update="emit('documentUpdate', $event)"
+            @history-command="emit('historyCommand', $event)"
             @toolbar-state="emit('toolbarState', pane.id, $event)"
             @set-outline-width="emit('setOutlineWidth', $event)"
             @set-document-map-width="emit('setDocumentMapWidth', $event)"
@@ -475,7 +478,9 @@ onBeforeUnmount(() => {
               :show-document-outline="showDocumentOutline"
               :show-document-map="showDocumentMap"
               :view-state="pane.activeDocument.viewSession"
+              :block-document="pane.activeDocument.blockDocument"
               @document-update="emit('documentUpdate', $event)"
+              @history-command="emit('historyCommand', $event)"
               @set-outline-width="emit('setOutlineWidth', $event)"
               @set-document-map-width="emit('setDocumentMapWidth', $event)"
             />

@@ -228,6 +228,7 @@ const editorPaneViews = computed(() =>
             viewSessionId: getViewSessionId(pane, activeDocumentInPane),
             viewSession: getViewSession(pane, activeDocumentInPane),
             shouldLoadRemoteImages: shouldLoadRemoteImages(activeDocumentInPane),
+            blockDocument: activeDocumentInPane.blockDocument ?? null,
           }
         : null,
     }
@@ -242,7 +243,8 @@ const showDocumentToolbar = computed(
   () =>
     (activeScreen.value.workbench === 'editor' || layoutSettings.value.focusMode) &&
     activeDocument.value !== null &&
-    isMarkdownDocument(activeDocument.value),
+    isMarkdownDocument(activeDocument.value) &&
+    activeDocumentMode.value === 'source',
 )
 const sourceDisabledToolbarCommands: EditorCommand[] = [
   'add-row-before',
@@ -849,6 +851,7 @@ onBeforeUnmount(() => {
         @set-outline-width="setOutlineWidth"
         @set-document-map-width="setDocumentMapWidth"
         @document-update="handleDocumentUpdate"
+        @history-command="executeCommand($event === 'undo' ? 'document.undo' : 'document.redo')"
         @toolbar-state="updatePaneToolbarState"
         @move-document-between-panes="moveDocumentIdBetweenPanes"
         @reorder-document-in-pane="reorderDocumentInPane"

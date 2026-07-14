@@ -1,17 +1,26 @@
 import { nextDocumentRevision, type DocumentRevision } from '../document'
 import type { EditorMode, OpenDocument } from './documentState'
+import { applyDocumentPatch, type DocumentPatch } from './documentPatch'
+import type { LogicalSelectionAnchor } from '../markdown/blockDocument'
 
 export type EditorViewId = string
 
 export type DocumentUpdateKind = 'source-edit' | 'visual-edit' | 'undo' | 'redo'
 
-export type DocumentUpdate = {
+export type DocumentTransaction = {
   documentId: string
   originViewId: EditorViewId
   baseRevision: DocumentRevision
-  nextContent: string
+  patches: DocumentPatch[]
+  selection?: {
+    anchor: LogicalSelectionAnchor | null
+    head: LogicalSelectionAnchor | null
+  }
   updateKind: DocumentUpdateKind
+  historyGroup?: string
 }
+
+export type DocumentUpdate = DocumentTransaction
 
 export type EditorViewSession = {
   id: EditorViewId
@@ -20,6 +29,10 @@ export type EditorViewSession = {
   mode: EditorMode
   scrollTop: number
   selectionState: unknown | null
+  logicalSelection: {
+    anchor: LogicalSelectionAnchor | null
+    head: LogicalSelectionAnchor | null
+  } | null
   lastAppliedRevision: DocumentRevision
   isFocused: boolean
 }
@@ -36,6 +49,7 @@ export function createEditorViewSession(
     mode,
     scrollTop: 0,
     selectionState: null,
+    logicalSelection: null,
     lastAppliedRevision: document.revision,
     isFocused: false,
   }
@@ -50,7 +64,14 @@ export function acceptDocumentUpdate(document: OpenDocument, update: DocumentUpd
     return null
   }
 
-  if (update.nextContent === document.content) {
+  let nextContent = document.content
+  for (const patch of update.patches) {
+    const patched = applyDocumentPatch(nextContent, patch)
+    if (patched === null) return null
+    nextContent = patched
+  }
+
+  if (nextContent === document.content) {
     return {
       nextRevision: document.revision,
       nextContent: document.content,
@@ -59,7 +80,7 @@ export function acceptDocumentUpdate(document: OpenDocument, update: DocumentUpd
 
   return {
     nextRevision: nextDocumentRevision(document.revision),
-    nextContent: update.nextContent,
+    nextContent,
   }
 }
 
