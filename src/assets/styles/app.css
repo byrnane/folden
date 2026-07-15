@@ -2017,6 +2017,7 @@ h1 {
   display: block;
   height: var(--document-map-content-height);
   will-change: transform;
+  width: calc(100% - 12px);
 }
 
 .document-map-line {

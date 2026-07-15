@@ -44,11 +44,8 @@ import { resolveVisualImageSource } from '../../domain/markdown/imageRendering'
 import { convertVisualImagePath } from '../../infrastructure/tauri/visualImageAssets'
 import { validateLinkTarget } from '../../domain/markdown/markdownSafety'
 import type { EditorCommand } from '../../application/types/shell'
-import {
-  buildDocumentMapLines,
-  extractMarkdownHeadings,
-  findActiveHeading,
-} from '../../domain/markdown/outline'
+import { findActiveHeading } from '../../domain/markdown/outline'
+import type { DocumentAnalysisResult } from '../../domain/markdown/documentAnalysis'
 import {
   createImageInputDialog,
   createLinkInputDialog,
@@ -71,6 +68,7 @@ const props = defineProps<{
   viewId: string
   modelValue: string
   revision: number
+  analysis: DocumentAnalysisResult | null
   documentPath: string | null
   workspaceRootPath: string | null
   outlineWidth: number
@@ -96,6 +94,7 @@ const slashMenuElement = ref<HTMLDivElement | null>(null)
 const blockMenuElement = ref<HTMLDivElement | null>(null)
 const mapViewport = ref({ top: 0, height: 100 })
 const mapLinePositions = ref<Record<number, number>>({})
+const headingScrollPositions = ref<Record<string, number>>({})
 const activeHeadingId = ref<string | null>(null)
 const editor = shallowRef<Editor | null>(null)
 const inputDialog = ref<EditorInputDialogState | null>(null)
@@ -113,6 +112,7 @@ let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
 let mapResizeObserver: ResizeObserver | null = null
+let scrollFrame = 0
 let blockDragGhost: HTMLDivElement | null = null
 let blockSelectionPinned = false
 let blockAutoScrollFrame: number | null = null
@@ -150,10 +150,10 @@ function beginVisualOperation(kind: string) {
   })
 }
 
-const headings = computed(() => extractMarkdownHeadings(props.modelValue))
+const headings = computed(() => props.analysis?.headings ?? [])
 const showOutline = computed(() => props.showDocumentOutline && headings.value.length > 0)
-const mapBlocks = computed(() => buildDocumentMapLines(props.modelValue))
-const showDocumentMap = computed(() => props.showDocumentMap && mapBlocks.value.length > 0)
+const mapSegments = computed(() => props.analysis?.mapSegments ?? [])
+const showDocumentMap = computed(() => props.showDocumentMap && mapSegments.value.length > 0)
 const contextToolbarContext = computed<VisualContextToolbarContext>(() => {
   if (editor.value?.isActive('table')) return 'table'
   if (editor.value?.isActive('image')) return 'image'
@@ -662,17 +662,6 @@ function updateMapViewport() {
   const scrollHeight = scrollElement.scrollHeight
   const clientHeight = scrollElement.clientHeight
 
-  mapLinePositions.value = Object.fromEntries(
-    headings.value.map((heading) => {
-      const element = findAnchorTarget(`#${encodeURIComponent(heading.id)}`)
-      const rect = element?.getBoundingClientRect()
-      const position = rect
-        ? rect.top - scrollElement.getBoundingClientRect().top + scrollElement.scrollTop
-        : 0
-      return [heading.line - 1, Math.min(Math.max((position / scrollHeight) * 100, 0), 100)]
-    }),
-  )
-
   if (scrollHeight <= 0 || clientHeight <= 0 || scrollHeight <= clientHeight) {
     mapViewport.value = { top: 0, height: 100 }
     updateActiveHeading()
@@ -686,25 +675,40 @@ function updateMapViewport() {
   updateActiveHeading()
 }
 
+function measureHeadingPositions() {
+  const scrollElement = scrollHost.value
+  if (!scrollElement) return
+  const scrollRect = scrollElement.getBoundingClientRect()
+  const scrollHeight = Math.max(scrollElement.scrollHeight, 1)
+  const entries = headings.value.map((heading) => {
+    const rect = findAnchorTarget(`#${encodeURIComponent(heading.id)}`)?.getBoundingClientRect()
+    return {
+      heading,
+      top: rect ? rect.top - scrollRect.top + scrollElement.scrollTop : Number.POSITIVE_INFINITY,
+    }
+  })
+  headingScrollPositions.value = Object.fromEntries(
+    entries.map(({ heading, top }) => [heading.id, top]),
+  )
+  mapLinePositions.value = Object.fromEntries(
+    entries
+      .filter(({ top }) => Number.isFinite(top))
+      .map(({ heading, top }) => [heading.line - 1, (top / scrollHeight) * 100]),
+  )
+  updateMapViewport()
+}
+
 function updateActiveHeading() {
   if (!scrollHost.value || !editorHost.value || headings.value.length === 0) {
     activeHeadingId.value = null
     return
   }
 
-  const scrollElement = scrollHost.value
-  const scrollRect = scrollElement.getBoundingClientRect()
-  const positions = Object.fromEntries(
-    headings.value.map((heading) => {
-      const element = findAnchorTarget(`#${encodeURIComponent(heading.id)}`)
-      const rect = element?.getBoundingClientRect()
-      return [
-        heading.id,
-        rect ? rect.top - scrollRect.top + scrollElement.scrollTop : Number.POSITIVE_INFINITY,
-      ]
-    }),
+  activeHeadingId.value = findActiveHeading(
+    headings.value,
+    headingScrollPositions.value,
+    scrollHost.value.scrollTop,
   )
-  activeHeadingId.value = findActiveHeading(headings.value, positions, scrollElement.scrollTop)
 }
 
 function scrollMapToRatio(ratio: number) {
@@ -1270,7 +1274,8 @@ function handleVisualKeydown(event: KeyboardEvent) {
 }
 
 function handleVisualScroll() {
-  updateMapViewport()
+  window.cancelAnimationFrame(scrollFrame)
+  scrollFrame = window.requestAnimationFrame(updateMapViewport)
 }
 
 function handleVisualFrameKeydown(event: KeyboardEvent) {
@@ -1407,11 +1412,14 @@ onMounted(() => {
   document.addEventListener('keydown', handleDocumentKeydown)
   window.addEventListener('resize', clampFloatingMenusToViewport)
   if (scrollHost.value) {
-    mapResizeObserver = new ResizeObserver(updateMapViewport)
+    mapResizeObserver = new ResizeObserver(measureHeadingPositions)
     mapResizeObserver.observe(scrollHost.value)
+    if (editorHost.value) mapResizeObserver.observe(editorHost.value)
   }
-  nextTick(updateMapViewport)
+  nextTick(measureHeadingPositions)
 })
+
+watch(headings, () => nextTick(measureHeadingPositions))
 
 function flushContent() {
   if (!hasVisualChanges) return props.modelValue
@@ -1683,6 +1691,7 @@ onBeforeUnmount(() => {
   scrollHost.value?.removeEventListener('scroll', handleVisualScroll)
   mapResizeObserver?.disconnect()
   mapResizeObserver = null
+  window.cancelAnimationFrame(scrollFrame)
   editor.value?.destroy()
   editor.value = null
   resolveInputDialog?.(null)
@@ -1858,7 +1867,7 @@ onBeforeUnmount(() => {
 
     <DocumentMap
       v-if="showDocumentMap"
-      :lines="mapBlocks"
+      :segments="mapSegments"
       :line-positions="mapLinePositions"
       :viewport="mapViewport"
       :width="documentMapWidth"

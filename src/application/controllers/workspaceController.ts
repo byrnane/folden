@@ -303,6 +303,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
         return {
           ...entry,
           children: nextChildren,
+          openableState: deriveDirectoryOpenableState(nextChildren),
         }
       }
 
@@ -310,11 +311,25 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
         return entry
       }
 
+      const children = replaceWorkspaceBranch(entry.children, branchPath, nextChildren)
       return {
         ...entry,
-        children: replaceWorkspaceBranch(entry.children, branchPath, nextChildren),
+        children,
+        openableState: deriveDirectoryOpenableState(children),
       }
     })
+  }
+
+  function deriveDirectoryOpenableState(
+    children: WorkspaceEntry[],
+  ): WorkspaceEntry['openableState'] {
+    if (children.some((child) => child.kind === 'file' || child.openableState === 'present')) {
+      return 'present'
+    }
+    if (children.some((child) => child.kind === 'directory' && child.openableState === 'unknown')) {
+      return 'unknown'
+    }
+    return 'empty'
   }
 
   function applyWorkspaceBranch(branchPath: string | null, children: WorkspaceEntry[]) {

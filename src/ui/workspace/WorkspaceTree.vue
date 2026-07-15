@@ -65,7 +65,7 @@ function isLoading(entry: WorkspaceTreeEntry) {
 }
 
 function rowTitle(entry: WorkspaceTreeEntry) {
-  if (isDirectory(entry) && !entry.hasOpenableDescendants) {
+  if (isDirectory(entry) && entry.openableState === 'empty') {
     return `${entry.path} - No supported files`
   }
 
@@ -115,7 +115,7 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
         :class="{
           active: pathMatches(activePath, entry.path),
           selected: pathMatches(selectedPath, entry.path),
-          muted: isDirectory(entry) && !entry.hasOpenableDescendants,
+          muted: isDirectory(entry) && entry.openableState === 'empty',
         }"
         :title="rowTitle(entry)"
         :draggable="!isDirectory(entry)"

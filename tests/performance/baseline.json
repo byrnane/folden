@@ -1,0 +1,15 @@
+{
+  "machine": {
+    "platform": "win32",
+    "arch": "x64",
+    "cpuModel": "12th Gen Intel(R) Core(TM) i9-12900K"
+  },
+  "metrics": {
+    "documentAnalysisMedianMs": 83.2874,
+    "rootListingMedianMs": 0.1719,
+    "traversalMedianMs": 68.2009,
+    "inputP95Ms": 0,
+    "documentSettledMedianMs": 554.9,
+    "directoryRenderMedianMs": 369.9
+  }
+}

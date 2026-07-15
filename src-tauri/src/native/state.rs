@@ -4,6 +4,8 @@ pub(crate) struct NativeAppState {
     pub(crate) documents: HashMap<String, AuthorizedDocument>,
     pub(crate) watcher: Option<RecommendedWatcher>,
     pub(crate) watched_paths: HashMap<String, WatchPathMode>,
+    pub(crate) workspace_watch_paths: HashSet<String>,
+    pub(crate) workspace_traversal_cancel: Arc<AtomicBool>,
     pub(crate) self_write_suppressions: Arc<Mutex<HashMap<String, u64>>>,
 }
 #[derive(Clone)]
@@ -18,13 +20,11 @@ pub(crate) struct AuthorizedDocument {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WatchPathMode {
-    Recursive,
     NonRecursive,
 }
 impl WatchPathMode {
     pub(crate) fn recursive_mode(self) -> RecursiveMode {
         match self {
-            Self::Recursive => RecursiveMode::Recursive,
             Self::NonRecursive => RecursiveMode::NonRecursive,
         }
     }
@@ -36,6 +36,8 @@ impl Default for NativeAppState {
             documents: HashMap::new(),
             watcher: None,
             watched_paths: HashMap::new(),
+            workspace_watch_paths: HashSet::new(),
+            workspace_traversal_cancel: Arc::new(AtomicBool::new(false)),
             self_write_suppressions: Arc::new(Mutex::new(HashMap::new())),
         }
     }

@@ -94,7 +94,7 @@ pub(crate) struct WorkspaceEntry {
     pub(crate) name: String,
     pub(crate) path: String,
     pub(crate) kind: String,
-    pub(crate) has_openable_descendants: bool,
+    pub(crate) openable_state: String,
     pub(crate) children: Vec<WorkspaceEntry>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

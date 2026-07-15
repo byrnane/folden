@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, markRaw, ref } from 'vue'
 import {
   createTextFileFormat,
   INITIAL_DOCUMENT_REVISION,
@@ -20,6 +20,7 @@ import type { LoadedDocument, OpenDocument } from '../../domain/documents/docume
 import {
   parseMarkdownBlockDocument,
   updateMarkdownBlockDocument,
+  type MarkdownBlockDocument,
 } from '../../domain/markdown/blockDocument'
 import {
   applyDocumentPatch,
@@ -119,7 +120,7 @@ export function createDocumentState(options: DocumentStateOptions) {
       history: createDocumentHistoryState(),
       blockDocument: null,
     }
-    document.blockDocument = buildBlockDocument(document)
+    document.blockDocument = protectBlockDocument(buildBlockDocument(document))
     return document
   }
 
@@ -186,7 +187,7 @@ export function createDocumentState(options: DocumentStateOptions) {
     )
     const blockDocument = buildBlockDocument(document, nextContent)
     document.content = nextContent
-    document.blockDocument = blockDocument
+    document.blockDocument = protectBlockDocument(blockDocument)
     document.revision = nextDocumentRevision(document.revision)
   }
 
@@ -209,7 +210,7 @@ export function createDocumentState(options: DocumentStateOptions) {
         : recordDocumentHistory(document.history, document.content, nextContent, historyGroup)
       const blockDocument = buildBlockDocument(document, nextContent, patches)
       document.content = nextContent
-      document.blockDocument = blockDocument
+      document.blockDocument = protectBlockDocument(blockDocument)
       document.revision = nextDocumentRevision(document.revision)
       document.externalState = 'idle'
       document.externalMessage = null
@@ -234,7 +235,7 @@ export function createDocumentState(options: DocumentStateOptions) {
     document.history = result.history
     const blockDocument = buildBlockDocument(document, result.nextContent)
     document.content = result.nextContent
-    document.blockDocument = blockDocument
+    document.blockDocument = protectBlockDocument(blockDocument)
     document.revision = nextDocumentRevision(document.revision)
     return document
   }
@@ -255,7 +256,7 @@ export function createDocumentState(options: DocumentStateOptions) {
     document.history = result.history
     const blockDocument = buildBlockDocument(document, result.nextContent)
     document.content = result.nextContent
-    document.blockDocument = blockDocument
+    document.blockDocument = protectBlockDocument(blockDocument)
     document.revision = nextDocumentRevision(document.revision)
     return document
   }
@@ -313,7 +314,7 @@ export function createDocumentState(options: DocumentStateOptions) {
       document.defaultMode = 'source'
       document.blockDocument = null
     } else {
-      document.blockDocument = buildBlockDocument(document)
+      document.blockDocument = protectBlockDocument(buildBlockDocument(document))
     }
 
     setPathIndex(document.path, document.id)
@@ -356,9 +357,11 @@ export function createDocumentState(options: DocumentStateOptions) {
     document.externalState = 'idle'
     document.externalMessage = null
     document.history = createDocumentHistoryState()
-    document.blockDocument = options.isMarkdownPath(documentSnapshot.path)
-      ? parseMarkdownBlockDocument(documentSnapshot.content)
-      : null
+    document.blockDocument = protectBlockDocument(
+      options.isMarkdownPath(documentSnapshot.path)
+        ? parseMarkdownBlockDocument(documentSnapshot.content)
+        : null,
+    )
 
     if (!options.isMarkdownPath(documentSnapshot.path)) {
       document.defaultMode = 'source'
@@ -503,4 +506,7 @@ export function createDocumentState(options: DocumentStateOptions) {
     updateDocumentPaths,
     removeDocuments,
   }
+}
+function protectBlockDocument(value: MarkdownBlockDocument | null) {
+  return value ? markRaw(value) : null
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import { EditorSelection } from '@codemirror/state'
+import { Compartment, EditorSelection } from '@codemirror/state'
 import { tags } from '@lezer/highlight'
 import { basicSetup, EditorView } from 'codemirror'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -10,12 +10,9 @@ import type { DocumentPatch } from '../../domain/documents/documentPatch'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
 import { toSourceSelectionState } from '../../domain/documents/editorViewState'
 import type { EditorCommand } from '../../application/types/shell'
-import {
-  buildDocumentMapLines,
-  extractMarkdownHeadings,
-  findActiveHeading,
-} from '../../domain/markdown/outline'
+import { findActiveHeadingByLine } from '../../domain/markdown/outline'
 import type { MarkdownHeading } from '../../domain/markdown/outline'
+import type { DocumentAnalysisResult } from '../../domain/markdown/documentAnalysis'
 import {
   logicalAnchorAtOffset,
   offsetForLogicalAnchor,
@@ -35,8 +32,8 @@ const props = defineProps<{
   viewId: string
   modelValue: string
   revision: number
+  analysis: DocumentAnalysisResult | null
   wordWrap: boolean
-  isMarkdown: boolean
   outlineWidth: number
   documentMapWidth: number
   showDocumentOutline: boolean
@@ -74,6 +71,7 @@ const inputDialog = ref<EditorInputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
 let editorView: EditorView | null = null
 let mapResizeObserver: ResizeObserver | null = null
+let scrollFrame = 0
 let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
@@ -119,11 +117,30 @@ const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.monospace, color: '#8dd7c0' },
   { tag: tags.quote, color: '#aeb7c5', fontStyle: 'italic' },
 ])
+const sourceHighlightLimitCharacters = 1_000_000
+const markdownExtensions = new Compartment()
+let markdownHighlightingEnabled = props.modelValue.length <= sourceHighlightLimitCharacters
 
-const headings = computed(() => (props.isMarkdown ? extractMarkdownHeadings(props.modelValue) : []))
+function sourceMarkdownExtensions(content: string) {
+  return content.length <= sourceHighlightLimitCharacters
+    ? [markdown(), syntaxHighlighting(markdownHighlightStyle)]
+    : []
+}
+
+function syncMarkdownExtensions(content: string) {
+  if (!editorView) return
+  const nextEnabled = content.length <= sourceHighlightLimitCharacters
+  if (nextEnabled === markdownHighlightingEnabled) return
+  markdownHighlightingEnabled = nextEnabled
+  editorView.dispatch({
+    effects: markdownExtensions.reconfigure(sourceMarkdownExtensions(content)),
+  })
+}
+
+const headings = computed(() => props.analysis?.headings ?? [])
 const showOutline = computed(() => props.showDocumentOutline && headings.value.length > 0)
-const mapLines = computed(() => (props.isMarkdown ? buildDocumentMapLines(props.modelValue) : []))
-const showDocumentMap = computed(() => props.showDocumentMap && mapLines.value.length > 0)
+const mapSegments = computed(() => props.analysis?.mapSegments ?? [])
+const showDocumentMap = computed(() => props.showDocumentMap && mapSegments.value.length > 0)
 
 function clampPosition(position: number) {
   return Math.min(Math.max(position, 0), editorView?.state.doc.length ?? 0)
@@ -251,16 +268,6 @@ function updateMapViewport() {
   const scrollHeight = scrollElement.scrollHeight
   const clientHeight = scrollElement.clientHeight
 
-  mapLinePositions.value = Object.fromEntries(
-    headings.value.map((heading) => {
-      const line = editorView!.state.doc.line(
-        Math.min(Math.max(heading.line, 1), editorView!.state.doc.lines),
-      )
-      const position = editorView!.lineBlockAt(line.from).top
-      return [heading.line - 1, Math.min(Math.max((position / scrollHeight) * 100, 0), 100)]
-    }),
-  )
-
   if (scrollHeight <= 0 || clientHeight <= 0 || scrollHeight <= clientHeight) {
     mapViewport.value = { top: 0, height: 100 }
     updateActiveHeading()
@@ -274,22 +281,33 @@ function updateMapViewport() {
   updateActiveHeading()
 }
 
+function measureHeadingPositions() {
+  if (!editorView) return
+  mapLinePositions.value = Object.fromEntries(
+    headings.value.map((heading) => [
+      heading.line - 1,
+      ((heading.line - 1) / Math.max(editorView!.state.doc.lines - 1, 1)) * 100,
+    ]),
+  )
+  updateMapViewport()
+}
+
 function updateActiveHeading() {
   if (!editorView || headings.value.length === 0) {
     activeHeadingId.value = null
     return
   }
 
-  const scrollElement = editorView.scrollDOM
-  const positions = Object.fromEntries(
-    headings.value.map((heading) => {
-      const line = editorView!.state.doc.line(
-        Math.min(Math.max(heading.line, 1), editorView!.state.doc.lines),
-      )
-      return [heading.id, editorView!.lineBlockAt(line.from).top]
-    }),
+  const topBlock = editorView.lineBlockAtHeight(editorView.scrollDOM.scrollTop)
+  activeHeadingId.value = findActiveHeadingByLine(
+    headings.value,
+    editorView.state.doc.lineAt(topBlock.from).number,
   )
-  activeHeadingId.value = findActiveHeading(headings.value, positions, scrollElement.scrollTop)
+}
+
+function scheduleMapViewportUpdate() {
+  window.cancelAnimationFrame(scrollFrame)
+  scrollFrame = window.requestAnimationFrame(updateMapViewport)
 }
 
 function scrollMapToRatio(ratio: number) {
@@ -553,9 +571,8 @@ onMounted(() => {
     parent: editorHost.value,
     extensions: [
       basicSetup,
-      markdown(),
       sourceTheme,
-      syntaxHighlighting(markdownHighlightStyle),
+      markdownExtensions.of(sourceMarkdownExtensions(props.modelValue)),
       ...(props.wordWrap ? [EditorView.lineWrapping] : []),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !isApplyingExternalContent) {
@@ -585,10 +602,10 @@ onMounted(() => {
     ],
   })
   restoreViewState(props.viewState)
-  editorView.scrollDOM.addEventListener('scroll', updateMapViewport)
-  mapResizeObserver = new ResizeObserver(updateMapViewport)
+  editorView.scrollDOM.addEventListener('scroll', scheduleMapViewportUpdate)
+  mapResizeObserver = new ResizeObserver(measureHeadingPositions)
   mapResizeObserver.observe(editorView.scrollDOM)
-  nextTick(updateMapViewport)
+  nextTick(measureHeadingPositions)
 })
 
 watch(
@@ -598,10 +615,15 @@ watch(
       return
     }
 
-    const currentValue = editorView.state.doc.toString()
     const isDocumentSwitch = documentId !== previousDocumentId
+    if (!isDocumentSwitch && revision === lastAppliedRevision) {
+      syncMarkdownExtensions(value)
+      return
+    }
+    const currentValue = editorView.state.doc.toString()
 
     if (value === currentValue) {
+      syncMarkdownExtensions(value)
       lastAppliedRevision = revision
       return
     }
@@ -611,6 +633,9 @@ watch(
     const anchor = Math.min(selection.anchor, nextLength)
     const head = Math.min(selection.head, nextLength)
     const scrollTop = editorView.scrollDOM.scrollTop
+    const nextHighlightingEnabled = value.length <= sourceHighlightLimitCharacters
+    const highlightingChanged = nextHighlightingEnabled !== markdownHighlightingEnabled
+    const enableHighlightingAfterReplace = highlightingChanged && nextHighlightingEnabled
     isApplyingExternalContent = true
     editorView.dispatch({
       changes: {
@@ -619,7 +644,17 @@ watch(
         insert: value,
       },
       selection: EditorSelection.single(anchor, head),
+      effects:
+        highlightingChanged && !enableHighlightingAfterReplace
+          ? markdownExtensions.reconfigure(sourceMarkdownExtensions(value))
+          : undefined,
     })
+    markdownHighlightingEnabled = nextHighlightingEnabled
+    if (enableHighlightingAfterReplace) {
+      editorView.dispatch({
+        effects: markdownExtensions.reconfigure(sourceMarkdownExtensions(value)),
+      })
+    }
     lastAppliedRevision = revision
     isApplyingExternalContent = false
 
@@ -635,6 +670,8 @@ watch(
     nextTick(updateMapViewport)
   },
 )
+
+watch(headings, () => editorView?.requestMeasure({ read: measureHeadingPositions }))
 
 function flushContent() {
   return editorView?.state.doc.toString() ?? props.modelValue
@@ -718,7 +755,8 @@ defineExpose({
 })
 
 onBeforeUnmount(() => {
-  editorView?.scrollDOM.removeEventListener('scroll', updateMapViewport)
+  editorView?.scrollDOM.removeEventListener('scroll', scheduleMapViewportUpdate)
+  window.cancelAnimationFrame(scrollFrame)
   mapResizeObserver?.disconnect()
   mapResizeObserver = null
   editorView?.destroy()
@@ -748,7 +786,7 @@ onBeforeUnmount(() => {
     <div ref="editorHost" class="source-editor" data-testid="source-editor" />
     <DocumentMap
       v-if="showDocumentMap"
-      :lines="mapLines"
+      :segments="mapSegments"
       :line-positions="mapLinePositions"
       :viewport="mapViewport"
       :width="documentMapWidth"

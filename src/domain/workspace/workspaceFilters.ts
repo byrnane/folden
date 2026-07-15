@@ -64,9 +64,15 @@ export function filterWorkspaceEntries(
     return [
       {
         ...entry,
-        hasOpenableDescendants: children.some(
-          (child) => child.kind === 'file' || child.hasOpenableDescendants,
-        ),
+        openableState: children.some(
+          (child) => child.kind === 'file' || child.openableState === 'present',
+        )
+          ? 'present'
+          : children.some(
+                (child) => child.kind === 'directory' && child.openableState === 'unknown',
+              )
+            ? 'unknown'
+            : 'empty',
         children,
       },
     ]

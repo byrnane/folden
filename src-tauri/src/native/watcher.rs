@@ -92,18 +92,17 @@ pub(crate) fn register_self_write_suppression(state: &NativeAppState, path: &Pat
 }
 pub(crate) fn desired_watch_paths(state: &NativeAppState) -> HashMap<String, WatchPathMode> {
     let mut desired_paths = HashMap::new();
-    for workspace in state.workspaces.values() {
-        desired_paths.insert(
-            path_to_string(&workspace.root_path),
-            WatchPathMode::Recursive,
-        );
+    for path in &state.workspace_watch_paths {
+        desired_paths.insert(path.clone(), WatchPathMode::NonRecursive);
     }
     for document in state.documents.values() {
-        let is_inside_workspace = state
-            .workspaces
-            .values()
-            .any(|workspace| document.path.starts_with(&workspace.root_path));
-        if is_inside_workspace {
+        let parent_is_watched = document
+            .path
+            .parent()
+            .map(path_to_string)
+            .map(|parent| state.workspace_watch_paths.contains(&parent))
+            .unwrap_or(false);
+        if parent_is_watched {
             continue;
         }
         desired_paths

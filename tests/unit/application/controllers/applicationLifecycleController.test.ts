@@ -130,6 +130,7 @@ function createHarness() {
       createDirectory: vi.fn(),
       createFile: vi.fn(),
       listDirectory: vi.fn(),
+      syncWorkspaceWatchScope: vi.fn(),
       loadWorkspaceSettings: vi.fn(),
       openTextFileByPath,
       openWorkspaceDirectory: vi.fn(),

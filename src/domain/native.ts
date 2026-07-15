@@ -10,7 +10,7 @@ export type WorkspaceEntry = {
   name: string
   path: string
   kind: 'directory' | 'file'
-  hasOpenableDescendants: boolean
+  openableState: 'unknown' | 'present' | 'empty'
   children: WorkspaceEntry[]
 }
 
@@ -127,7 +127,9 @@ export function isWorkspaceEntry(value: unknown): value is WorkspaceEntry {
     typeof value.name === 'string' &&
     typeof value.path === 'string' &&
     (value.kind === 'directory' || value.kind === 'file') &&
-    typeof value.hasOpenableDescendants === 'boolean' &&
+    (value.openableState === 'unknown' ||
+      value.openableState === 'present' ||
+      value.openableState === 'empty') &&
     Array.isArray(value.children) &&
     value.children.every(isWorkspaceEntry)
   )

@@ -22,6 +22,7 @@ import {
   saveSessionState,
   saveTextFile,
   saveWorkspaceSettings,
+  syncWorkspaceWatchScope,
   trashPath,
 } from './files'
 
@@ -44,6 +45,7 @@ export function createTauriNativePorts(): NativePorts {
       renamePath,
       restoreWorkspaceByPath,
       saveWorkspaceSettings,
+      syncWorkspaceWatchScope,
       trashPath,
     },
     sessionStorage: {

@@ -33,6 +33,7 @@ export type WorkspaceFilePort = {
   openWorkspaceDirectory: () => Promise<WorkspaceDescriptor | null>
   restoreWorkspaceByPath: (rootPath: string) => Promise<WorkspaceDescriptor>
   listDirectory: (workspaceId: string, path: string) => Promise<WorkspaceEntry[]>
+  syncWorkspaceWatchScope: (workspaceId: string | null, loadedPaths: string[]) => Promise<void>
   loadWorkspaceSettings: (workspaceId: string) => Promise<WorkspaceSettings>
   saveWorkspaceSettings: (workspaceId: string, settings: WorkspaceSettings) => Promise<void>
   openTextFileByPath: (workspaceId: string, path: string) => Promise<OpenedDocument>

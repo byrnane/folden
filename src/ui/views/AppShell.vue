@@ -52,6 +52,7 @@ const {
   activeDocument,
   activeDocumentMode,
   activeDocumentWordCount,
+  analysisWarning,
   activeLocation,
   activePaneId,
   activePath,
@@ -69,6 +70,7 @@ const {
   createWorkspaceFile,
   dirtyDocuments,
   documents,
+  documentAnalyses,
   errorMessage,
   executeCommand,
   expandedWorkspacePaths,
@@ -867,9 +869,13 @@ onBeforeUnmount(() => {
         @export-diagnostics="executeCommand('diagnostics.export')"
       />
 
-      <div v-if="errorMessage || watcherWarning" class="toast-stack" aria-live="polite">
+      <div
+        v-if="errorMessage || watcherWarning || analysisWarning"
+        class="toast-stack"
+        aria-live="polite"
+      >
         <p :class="errorMessage ? 'toast-message error-message' : 'toast-message warning-message'">
-          {{ errorMessage ?? watcherWarning }}
+          {{ errorMessage ?? watcherWarning ?? analysisWarning }}
         </p>
       </div>
       <section
@@ -926,6 +932,7 @@ onBeforeUnmount(() => {
 
       <EditorPaneGrid
         v-if="showEditorView"
+        :document-analyses="documentAnalyses"
         :visible-panes="editorPaneViews"
         :active-pane-id="activePaneId"
         :split-enabled="splitEnabled"

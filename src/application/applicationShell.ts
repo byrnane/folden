@@ -28,6 +28,7 @@ import { createWorkspaceWorkflowController } from './controllers/workspaceWorkfl
 import { createVisualSafetyController } from './controllers/visualSafetyController'
 import { createApplicationCommandController } from './controllers/applicationCommandController'
 import { createLayoutController } from './controllers/layoutController'
+import { createDocumentAnalysisController } from './controllers/documentAnalysisController'
 import { createTauriNativePorts } from '../infrastructure/tauri/nativePorts'
 import type { EditorCommand, EditorPane } from './types/shell'
 export type { EditorAdapter, EditorCommand } from './types/shell'
@@ -95,6 +96,7 @@ export function useApplicationShell() {
     expandedWorkspacePaths,
     loadingWorkspacePaths,
     workspaceLoadErrors,
+    loadedWorkspacePaths,
     selectedPath,
     recentWorkspaces,
     setWorkspacePathLoading,
@@ -165,6 +167,17 @@ export function useApplicationShell() {
     dispose: disposeExternalChangesController,
   } = externalChangesController
   const isFileBusy = ref(false)
+  const analysisWarning = ref<string | null>(null)
+  const documentAnalysisController = createDocumentAnalysisController({
+    createWorker: () =>
+      new Worker(new URL('../workers/documentAnalysis.worker.ts', import.meta.url), {
+        type: 'module',
+      }),
+    onError: (message) => {
+      analysisWarning.value = message
+    },
+  })
+  const documentAnalyses = documentAnalysisController.analyses
   const dialogController = createDialogController()
   const {
     promptDialog,
@@ -229,14 +242,9 @@ export function useApplicationShell() {
 
     return getDocumentMode(activePane.value, activeDocument.value)
   })
-  const activeDocumentWordCount = computed(() => {
-    if (!activeDocument.value) {
-      return 0
-    }
-
-    const words = activeDocument.value.content.trim().match(/\S+/g)
-    return words?.length ?? 0
-  })
+  const activeDocumentWordCount = computed(() =>
+    activeDocument.value ? (documentAnalyses.value[activeDocument.value.id]?.wordCount ?? 0) : 0,
+  )
   const activePath = computed(() => {
     if (!workspace.value || activeDocument.value?.workspaceId !== workspace.value.id) {
       return null
@@ -726,6 +734,38 @@ export function useApplicationShell() {
   const { mount: mountApplicationLifecycle, dispose: disposeApplicationLifecycle } =
     applicationLifecycleController
 
+  let pendingWorkspaceWatchScope: { workspaceId: string | null; loadedPaths: string[] } | null =
+    null
+  let workspaceWatchScopeSyncActive = false
+
+  async function flushWorkspaceWatchScope() {
+    if (workspaceWatchScopeSyncActive) return
+    workspaceWatchScopeSyncActive = true
+    try {
+      while (pendingWorkspaceWatchScope) {
+        const scope = pendingWorkspaceWatchScope
+        pendingWorkspaceWatchScope = null
+        try {
+          await nativePorts.workspace.syncWorkspaceWatchScope(scope.workspaceId, scope.loadedPaths)
+        } catch (error) {
+          setWatcherWarning(`Could not update watcher scope: ${formatError(error)}`)
+        }
+      }
+    } finally {
+      workspaceWatchScopeSyncActive = false
+      if (pendingWorkspaceWatchScope) void flushWorkspaceWatchScope()
+    }
+  }
+
+  watch(
+    () => [workspace.value?.id ?? null, [...loadedWorkspacePaths.value].sort()] as const,
+    ([workspaceId, loadedPaths]) => {
+      pendingWorkspaceWatchScope = { workspaceId, loadedPaths }
+      void flushWorkspaceWatchScope()
+    },
+    { deep: true, immediate: true },
+  )
+
   watch(
     appSettings,
     (settings) => {
@@ -793,6 +833,21 @@ export function useApplicationShell() {
     { deep: true },
   )
 
+  watch(
+    () =>
+      documents.value.map((document) => ({
+        documentId: document.id,
+        revision: document.revision,
+        content: document.content,
+        isMarkdown: isMarkdownDocument(document),
+      })),
+    (requests) => {
+      documentAnalysisController.retain(requests.map((request) => request.documentId))
+      requests.forEach(documentAnalysisController.request)
+    },
+    { deep: true, immediate: true },
+  )
+
   onMounted(() => {
     mountApplicationLifecycle(initialText)
     window.addEventListener('blur', triggerAutosaveOnWindowBlur)
@@ -802,12 +857,14 @@ export function useApplicationShell() {
     window.removeEventListener('blur', triggerAutosaveOnWindowBlur)
     disposeLayoutController()
     disposeApplicationLifecycle()
+    documentAnalysisController.dispose()
   })
 
   return {
     activeDocument,
     activeDocumentMode,
     activeDocumentWordCount,
+    analysisWarning,
     activeLocation,
     activePaneId,
     activePath,
@@ -825,6 +882,7 @@ export function useApplicationShell() {
     createWorkspaceFile,
     dirtyDocuments,
     documents,
+    documentAnalyses,
     errorMessage,
     executeCommand,
     expandedWorkspacePaths,

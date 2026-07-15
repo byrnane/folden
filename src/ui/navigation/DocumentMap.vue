@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { DocumentMapLine } from '../../domain/markdown/outline'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { DocumentMapSegment } from '../../domain/markdown/outline'
 
 const props = defineProps<{
-  lines: DocumentMapLine[]
+  segments: DocumentMapSegment[]
   linePositions: Readonly<Record<number, number>>
   viewport: { top: number; height: number }
   width: number
@@ -17,11 +17,15 @@ const emit = defineEmits<{
 const mapDragActive = ref(false)
 const mapResizeStart = ref<{ x: number; width: number } | null>(null)
 const mapElement = ref<HTMLElement | null>(null)
+const canvasElement = ref<HTMLCanvasElement | null>(null)
 const visibleHeight = ref(0)
 const lineHeight = 5
 let mapResizeObserver: ResizeObserver | null = null
+let dprMediaQuery: MediaQueryList | null = null
+let drawFrame = 0
 
-const contentHeight = computed(() => Math.max(props.lines.length * lineHeight, 24))
+const naturalContentHeight = computed(() => Math.max(props.segments.length * lineHeight, 24))
+const contentHeight = computed(() => naturalContentHeight.value)
 const mapViewportHeight = computed(() => visibleHeight.value)
 const viewportHeight = computed(() =>
   Math.min(
@@ -51,8 +55,50 @@ const viewportStyle = computed(() => ({
   height: `${viewportHeight.value}px`,
 }))
 
-function linePosition(line: DocumentMapLine) {
-  return props.linePositions[line.index] ?? (line.index / Math.max(props.lines.length - 1, 1)) * 100
+function segmentPosition(segment: DocumentMapSegment) {
+  return props.linePositions[segment.index] ?? segment.position * 100
+}
+
+function drawMap() {
+  window.cancelAnimationFrame(drawFrame)
+  drawFrame = window.requestAnimationFrame(() => {
+    const canvas = canvasElement.value
+    if (!canvas) return
+    const width = Math.max(canvas.clientWidth, 1)
+    const height = contentHeight.value
+    const ratio = Math.max(window.devicePixelRatio || 1, 1)
+    canvas.width = Math.ceil(width * ratio)
+    canvas.height = Math.ceil(height * ratio)
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.scale(ratio, ratio)
+    context.clearRect(0, 0, width, height)
+
+    for (const segment of props.segments) {
+      if (segment.kind === 'empty') continue
+      const indent = (segment.indent / 100) * width
+      const segmentWidth = Math.max(((segment.width - segment.indent) / 100) * width, 5)
+      const y = (segmentPosition(segment) / 100) * Math.max(height - 3, 0)
+      context.fillStyle =
+        segment.kind === 'heading'
+          ? 'rgba(242, 197, 114, 0.78)'
+          : segment.kind === 'list'
+            ? 'rgba(90, 169, 167, 0.5)'
+            : 'rgba(174, 183, 197, 0.22)'
+      context.fillRect(indent, y, segmentWidth, segment.kind === 'heading' ? 3 : 2)
+    }
+  })
+}
+
+function watchDevicePixelRatio() {
+  dprMediaQuery?.removeEventListener('change', handleDevicePixelRatioChange)
+  dprMediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+  dprMediaQuery.addEventListener('change', handleDevicePixelRatioChange)
+}
+
+function handleDevicePixelRatioChange() {
+  watchDevicePixelRatio()
+  drawMap()
 }
 
 function beginDrag(event: PointerEvent) {
@@ -102,14 +148,23 @@ onMounted(() => {
 
   mapResizeObserver = new ResizeObserver(([entry]) => {
     visibleHeight.value = entry.contentRect.height
+    drawMap()
   })
   mapResizeObserver.observe(mapElement.value)
+  window.addEventListener('resize', drawMap)
+  watchDevicePixelRatio()
 })
+
+watch(() => [props.segments, props.linePositions] as const, drawMap, { deep: true })
 
 onBeforeUnmount(() => {
   stopResize()
   mapResizeObserver?.disconnect()
   mapResizeObserver = null
+  window.removeEventListener('resize', drawMap)
+  dprMediaQuery?.removeEventListener('change', handleDevicePixelRatioChange)
+  dprMediaQuery = null
+  window.cancelAnimationFrame(drawFrame)
 })
 </script>
 
@@ -124,19 +179,7 @@ onBeforeUnmount(() => {
     @pointerup="endDrag"
     @pointercancel="endDrag"
   >
-    <span class="document-map-content" :style="contentStyle">
-      <span
-        v-for="line in lines"
-        :key="line.index"
-        class="document-map-line"
-        :class="line.kind"
-        :style="{
-          '--map-line-width': `${line.width}%`,
-          '--map-line-indent': `${line.indent}%`,
-          '--map-line-top': `${linePosition(line)}%`,
-        }"
-      />
-    </span>
+    <canvas ref="canvasElement" class="document-map-content" :style="contentStyle" />
     <span class="document-map-viewport" :style="viewportStyle" />
     <span
       class="document-map-resize-handle"

@@ -18,6 +18,7 @@ import {
   type TabPointerDrag,
 } from './editorPaneGridLifecycle'
 import { uiIconSizes } from '../uiConstants'
+import type { DocumentAnalysisResult } from '../../domain/markdown/documentAnalysis'
 
 const tabPointerDragStartDistancePx = 5
 const SourceEditor = defineAsyncComponent(() => import('../editors/SourceEditor.vue'))
@@ -27,6 +28,7 @@ const VisualMarkdownEditor = defineAsyncComponent(
 
 const props = defineProps<{
   visiblePanes: EditorPaneView[]
+  documentAnalyses: Readonly<Record<string, DocumentAnalysisResult>>
   activePaneId: EditorPane['id']
   splitEnabled: boolean
   splitRatio: number
@@ -443,6 +445,7 @@ onBeforeUnmount(() => {
             :view-id="pane.activeDocument.viewSessionId"
             :model-value="pane.activeDocument.document.content"
             :revision="pane.activeDocument.document.revision"
+            :analysis="documentAnalyses[pane.activeDocument.document.id] ?? null"
             :document-path="pane.activeDocument.document.path"
             :workspace-root-path="workspaceRootPath"
             :outline-width="outlineWidth"
@@ -471,8 +474,8 @@ onBeforeUnmount(() => {
               :view-id="pane.activeDocument.viewSessionId"
               :model-value="pane.activeDocument.document.content"
               :revision="pane.activeDocument.document.revision"
+              :analysis="documentAnalyses[pane.activeDocument.document.id] ?? null"
               :word-wrap="sourceWordWrap"
-              :is-markdown="pane.activeDocument.isMarkdown"
               :outline-width="outlineWidth"
               :document-map-width="documentMapWidth"
               :show-document-outline="showDocumentOutline"

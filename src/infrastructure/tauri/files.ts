@@ -91,6 +91,10 @@ export async function listDirectory(workspaceId: string, path: string) {
   })
 }
 
+export async function syncWorkspaceWatchScope(workspaceId: string | null, loadedPaths: string[]) {
+  return invokeNative<void>('sync_workspace_watch_scope', { workspaceId, loadedPaths })
+}
+
 export async function loadWorkspaceSettings(workspaceId: string) {
   return invokeNative<WorkspaceSettings>('load_workspace_settings', {
     workspaceId,

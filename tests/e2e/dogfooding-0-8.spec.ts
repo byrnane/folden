@@ -101,6 +101,8 @@ test('mutes folders without supported descendants and keeps action names in comp
   })
   await openWorkspace(page)
 
+  await expect(page.getByTestId('workspace-entry-media')).not.toHaveClass(/muted/)
+  await page.getByTestId('workspace-entry-media').click()
   await expect(page.getByTestId('workspace-entry-media')).toHaveClass(/muted/)
   await expect(page.getByTestId('workspace-entry-media')).toHaveAttribute(
     'title',

@@ -31,7 +31,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       name: string
       path: string
       kind: 'directory' | 'file'
-      hasOpenableDescendants: boolean
+      openableState: 'unknown' | 'present' | 'empty'
       children: WorkspaceEntry[]
     }
 
@@ -129,7 +129,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         name: basename(path),
         path,
         kind: 'directory',
-        hasOpenableDescendants: false,
+        openableState: 'unknown',
         children: [],
       }
     }
@@ -139,7 +139,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         name: basename(path),
         path,
         kind: 'file',
-        hasOpenableDescendants: false,
+        openableState: 'present',
         children: [],
       }
     }
@@ -202,10 +202,9 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
       }
 
       const markOpenable = (entry: WorkspaceEntry): boolean => {
-        entry.hasOpenableDescendants = entry.children.some(
-          (child) => child.kind === 'file' || markOpenable(child),
-        )
-        return entry.hasOpenableDescendants
+        const present = entry.children.some((child) => child.kind === 'file' || markOpenable(child))
+        entry.openableState = present ? 'present' : entry.children.length ? 'unknown' : 'empty'
+        return present
       }
 
       for (const entry of rootEntries) {
@@ -230,9 +229,15 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
 
     function findDirectoryEntries(path: string) {
       const targetPath = normalizeRelativePath(path)
+      const shallowEntries = (entries: WorkspaceEntry[]) =>
+        entries.map((entry) => ({
+          ...entry,
+          openableState: entry.kind === 'directory' ? ('unknown' as const) : ('present' as const),
+          children: [],
+        }))
 
       if (!targetPath) {
-        return listRoot()
+        return shallowEntries(listRoot())
       }
 
       const stack = [...listRoot()]
@@ -245,7 +250,7 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
         }
 
         if (current.path === targetPath) {
-          return current.children
+          return shallowEntries(current.children)
         }
 
         stack.unshift(...current.children)
@@ -277,6 +282,8 @@ export async function installTauriMock(page: Page, options: TauriMockOptions = {
           return workspace
         case 'list_directory':
           return findDirectoryEntries(String(args?.path ?? ''))
+        case 'sync_workspace_watch_scope':
+          return undefined
         case 'load_workspace_settings':
           return structuredClone(workspaceSettings)
         case 'save_workspace_settings':

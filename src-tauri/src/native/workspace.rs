@@ -1,4 +1,127 @@
 use super::*;
+
+#[derive(Clone, Copy)]
+#[allow(dead_code)]
+pub(crate) struct WorkspaceTraversalOptions {
+    pub(crate) max_entries: usize,
+    pub(crate) max_depth: usize,
+    pub(crate) batch_size: usize,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[allow(dead_code)]
+pub(crate) enum WorkspaceTraversalStatus {
+    Complete,
+    LimitReached,
+    Cancelled,
+}
+
+#[allow(dead_code)]
+pub(crate) struct WorkspaceTraversalResult {
+    pub(crate) batches: Vec<Vec<PathBuf>>,
+    pub(crate) status: WorkspaceTraversalStatus,
+}
+
+#[allow(dead_code)]
+pub(crate) fn begin_workspace_traversal(state: &mut NativeAppState) -> Arc<AtomicBool> {
+    state
+        .workspace_traversal_cancel
+        .store(true, Ordering::Relaxed);
+    let token = Arc::new(AtomicBool::new(false));
+    state.workspace_traversal_cancel = Arc::clone(&token);
+    token
+}
+
+#[allow(dead_code)]
+pub(crate) fn traverse_workspace(
+    root: &Path,
+    options: WorkspaceTraversalOptions,
+    cancelled: &AtomicBool,
+    operation: &str,
+) -> NativeResult<WorkspaceTraversalResult> {
+    traverse_workspace_inner(root, options, cancelled, operation, |_| {})
+}
+
+#[cfg(test)]
+pub(crate) fn traverse_workspace_with_hook<F>(
+    root: &Path,
+    options: WorkspaceTraversalOptions,
+    cancelled: &AtomicBool,
+    operation: &str,
+    before_entry: F,
+) -> NativeResult<WorkspaceTraversalResult>
+where
+    F: FnMut(usize),
+{
+    traverse_workspace_inner(root, options, cancelled, operation, before_entry)
+}
+
+fn traverse_workspace_inner<F>(
+    root: &Path,
+    options: WorkspaceTraversalOptions,
+    cancelled: &AtomicBool,
+    operation: &str,
+    mut before_entry: F,
+) -> NativeResult<WorkspaceTraversalResult>
+where
+    F: FnMut(usize),
+{
+    let mut stack = vec![(root.to_path_buf(), 0usize)];
+    let mut batches = Vec::new();
+    let mut batch = Vec::with_capacity(options.batch_size.max(1));
+    let mut visited = 0usize;
+
+    while let Some((directory, depth)) = stack.pop() {
+        for entry in fs::read_dir(&directory).map_err(|error| io_error(operation, error))? {
+            before_entry(visited);
+            if cancelled.load(Ordering::Relaxed) {
+                if !batch.is_empty() {
+                    batches.push(batch);
+                }
+                return Ok(WorkspaceTraversalResult {
+                    batches,
+                    status: WorkspaceTraversalStatus::Cancelled,
+                });
+            }
+            if visited >= options.max_entries {
+                if !batch.is_empty() {
+                    batches.push(batch);
+                }
+                return Ok(WorkspaceTraversalResult {
+                    batches,
+                    status: WorkspaceTraversalStatus::LimitReached,
+                });
+            }
+
+            let entry = entry.map_err(|error| io_error(operation, error))?;
+            let path = entry.path();
+            let file_type = entry
+                .file_type()
+                .map_err(|error| io_error(operation, error))?;
+            if file_type.is_dir() && should_skip_directory(&path) {
+                continue;
+            }
+
+            batch.push(path.clone());
+            visited += 1;
+            if batch.len() >= options.batch_size.max(1) {
+                batches.push(std::mem::take(&mut batch));
+                batch = Vec::with_capacity(options.batch_size.max(1));
+            }
+            if file_type.is_dir() && !file_type.is_symlink() && depth < options.max_depth {
+                stack.push((path, depth + 1));
+            }
+        }
+    }
+
+    if !batch.is_empty() {
+        batches.push(batch);
+    }
+    Ok(WorkspaceTraversalResult {
+        batches,
+        status: WorkspaceTraversalStatus::Complete,
+    })
+}
 pub(crate) fn is_text_file(path: &Path) -> bool {
     let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
         return false;
@@ -27,28 +150,6 @@ pub(crate) fn should_skip_directory(path: &Path) -> bool {
         name,
         ".git" | ".folden" | "node_modules" | "dist" | "build" | "target" | ".cache"
     )
-}
-fn has_openable_descendants(path: &Path, operation: &str) -> NativeResult<bool> {
-    for entry in fs::read_dir(path).map_err(|error| io_error(operation, error))? {
-        let entry = entry.map_err(|error| io_error(operation, error))?;
-        let entry_path = entry.path();
-        let file_type = entry
-            .file_type()
-            .map_err(|error| io_error(operation, error))?;
-
-        if file_type.is_file() && is_text_file(&entry_path) {
-            return Ok(true);
-        }
-
-        if file_type.is_dir()
-            && !should_skip_directory(&entry_path)
-            && has_openable_descendants(&entry_path, operation)?
-        {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
 }
 pub(crate) fn get_workspace<'a>(
     state: &'a NativeAppState,
@@ -185,7 +286,7 @@ pub(crate) fn read_workspace_entries(
                 name,
                 path: relative_path,
                 kind: "directory".to_string(),
-                has_openable_descendants: has_openable_descendants(&entry_path, operation)?,
+                openable_state: "unknown".to_string(),
                 children: Vec::new(),
             });
         } else if file_type.is_file() && is_text_file(&entry_path) {
@@ -193,7 +294,7 @@ pub(crate) fn read_workspace_entries(
                 name,
                 path: relative_path,
                 kind: "file".to_string(),
-                has_openable_descendants: false,
+                openable_state: "present".to_string(),
                 children: Vec::new(),
             });
         }
@@ -283,6 +384,64 @@ pub(crate) fn list_directory(
         resolve_workspace_path(workspace, &path, "list_directory")?
     };
     read_workspace_entries(&workspace.root_path, &canonical_path, "list_directory")
+}
+
+pub(crate) fn workspace_watch_scope_paths(
+    workspace: &AuthorizedWorkspace,
+    loaded_paths: &[String],
+    settings: &WorkspaceSettings,
+) -> NativeResult<HashSet<String>> {
+    let ignored_paths = settings
+        .ignored_paths
+        .iter()
+        .map(|path| ensure_relative_path(path, "sync_workspace_watch_scope"))
+        .collect::<NativeResult<Vec<_>>>()?;
+    let mut watch_paths = HashSet::from([path_to_string(&workspace.root_path)]);
+    for relative_path in loaded_paths {
+        if relative_path.trim().is_empty() {
+            continue;
+        }
+        let normalized_path = ensure_relative_path(relative_path, "sync_workspace_watch_scope")?;
+        if ignored_paths
+            .iter()
+            .any(|ignored_path| normalized_path.starts_with(ignored_path))
+        {
+            continue;
+        }
+        let (path, _) =
+            resolve_workspace_path(workspace, relative_path, "sync_workspace_watch_scope")?;
+        if path.is_dir() {
+            watch_paths.insert(path_to_string(&path));
+        }
+    }
+    Ok(watch_paths)
+}
+
+#[tauri::command]
+pub(crate) fn sync_workspace_watch_scope(
+    state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
+    workspace_id: Option<String>,
+    loaded_paths: Vec<String>,
+) -> NativeResult<()> {
+    let mut state = state.lock().unwrap();
+    let mut watch_paths = HashSet::new();
+    if let Some(workspace_id) = workspace_id {
+        let workspace = get_workspace(&state, &workspace_id, "sync_workspace_watch_scope")?.clone();
+        let settings = load_workspace_settings_from_path(&workspace_settings_path(&workspace))
+            .map_err(|message| {
+                native_error(
+                    FileErrorCode::Unknown,
+                    "sync_workspace_watch_scope",
+                    "Workspace settings are invalid; watcher scope was not changed.",
+                    Some(message),
+                    false,
+                )
+            })?;
+        watch_paths = workspace_watch_scope_paths(&workspace, &loaded_paths, &settings)?;
+    }
+    state.workspace_watch_paths = watch_paths;
+    sync_native_watcher(&mut state, &app_handle)
 }
 fn workspace_settings_path(workspace: &AuthorizedWorkspace) -> PathBuf {
     workspace.root_path.join(".folden").join("workspace.json")

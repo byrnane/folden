@@ -2,11 +2,11 @@ use notify::{
     event::{ModifyKind, RenameMode},
     RecommendedWatcher, RecursiveMode, Watcher,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, Runtime};
@@ -103,6 +103,7 @@ pub fn run() {
             open_logs_folder,
             export_diagnostics,
             list_directory,
+            sync_workspace_watch_scope,
             load_workspace_settings,
             save_workspace_settings,
             open_text_file_by_path,
@@ -207,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn workspace_entries_mark_openable_descendants_and_hide_folden_folder() {
+    fn workspace_entries_are_shallow_and_hide_folden_folder() {
         let temp = TempWorkspace::new();
         fs::create_dir_all(temp.path.join("assets")).expect("failed to create assets");
         fs::write(temp.path.join("assets").join("image.png"), "not text")
@@ -230,15 +231,213 @@ mod tests {
             entries
                 .iter()
                 .find(|entry| entry.name == "assets")
-                .map(|entry| entry.has_openable_descendants),
-            Some(false)
+                .map(|entry| entry.openable_state.as_str()),
+            Some("unknown")
         );
         assert_eq!(
             entries
                 .iter()
                 .find(|entry| entry.name == "notes")
-                .map(|entry| entry.has_openable_descendants),
-            Some(true)
+                .map(|entry| entry.openable_state.as_str()),
+            Some("unknown")
+        );
+    }
+
+    #[test]
+    fn workspace_traversal_is_bounded_and_cancellable() {
+        let temp = TempWorkspace::new();
+        fs::create_dir_all(temp.path.join("nested")).expect("failed to create nested directory");
+        for index in 0..6 {
+            fs::write(temp.path.join("nested").join(format!("{index}.md")), "text")
+                .expect("failed to write traversal fixture");
+        }
+        let result = traverse_workspace(
+            &temp.path,
+            WorkspaceTraversalOptions {
+                max_entries: 3,
+                max_depth: 8,
+                batch_size: 2,
+            },
+            &AtomicBool::new(false),
+            "test_traversal",
+        )
+        .expect("traversal should succeed");
+        assert_eq!(result.status, WorkspaceTraversalStatus::LimitReached);
+        assert_eq!(result.batches.iter().map(Vec::len).sum::<usize>(), 3);
+        assert!(result.batches.iter().all(|batch| batch.len() <= 2));
+
+        let cancelled_token = Arc::new(AtomicBool::new(false));
+        let started = Arc::new(std::sync::Barrier::new(2));
+        let release = Arc::new(std::sync::Barrier::new(2));
+        let traversal_root = temp.path.clone();
+        let traversal_token = Arc::clone(&cancelled_token);
+        let traversal_started = Arc::clone(&started);
+        let traversal_release = Arc::clone(&release);
+        let traversal = std::thread::spawn(move || {
+            traverse_workspace_with_hook(
+                &traversal_root,
+                WorkspaceTraversalOptions {
+                    max_entries: 100,
+                    max_depth: 8,
+                    batch_size: 10,
+                },
+                &traversal_token,
+                "test_traversal",
+                |visited| {
+                    if visited == 0 {
+                        traversal_started.wait();
+                        traversal_release.wait();
+                    }
+                },
+            )
+        });
+        started.wait();
+        let cancel_started = std::time::Instant::now();
+        cancelled_token.store(true, Ordering::Relaxed);
+        release.wait();
+        let cancelled = traversal
+            .join()
+            .expect("traversal thread should finish")
+            .expect("cancelled traversal should succeed");
+        assert_eq!(cancelled.status, WorkspaceTraversalStatus::Cancelled);
+        assert!(cancel_started.elapsed() <= std::time::Duration::from_millis(100));
+    }
+
+    #[test]
+    fn watcher_scope_is_non_recursive_and_keeps_open_documents() {
+        let temp = TempWorkspace::new();
+        let root = fs::canonicalize(&temp.path).expect("failed to canonicalize workspace");
+        let visible = root.join("visible");
+        fs::create_dir_all(&visible).expect("failed to create visible directory");
+        let hidden_directory = root.join("hidden");
+        fs::create_dir_all(&hidden_directory).expect("failed to create hidden directory");
+        let hidden_document = hidden_directory.join("document.md");
+        fs::write(&hidden_document, "text").expect("failed to write open document");
+        let mut state = NativeAppState::default();
+        state.workspace_watch_paths.insert(path_to_string(&root));
+        state.workspace_watch_paths.insert(path_to_string(&visible));
+        state.documents.insert(
+            "document-1".to_string(),
+            AuthorizedDocument {
+                path: hidden_document.clone(),
+                workspace_id: Some("workspace-1".to_string()),
+                relative_path: Some("hidden\\document.md".to_string()),
+            },
+        );
+
+        let paths = desired_watch_paths(&state);
+        assert_eq!(
+            paths.get(&path_to_string(&root)),
+            Some(&WatchPathMode::NonRecursive)
+        );
+        assert_eq!(
+            paths.get(&path_to_string(&visible)),
+            Some(&WatchPathMode::NonRecursive)
+        );
+        assert_eq!(
+            paths.get(&path_to_string(&hidden_document)),
+            Some(&WatchPathMode::NonRecursive)
+        );
+    }
+
+    #[test]
+    fn workspace_watch_scope_excludes_ignored_paths() {
+        let temp = TempWorkspace::new();
+        let root = fs::canonicalize(&temp.path).expect("failed to canonicalize workspace");
+        let visible = root.join("visible");
+        let ignored = root.join("ignored");
+        let ignored_nested = ignored.join("nested");
+        fs::create_dir_all(&visible).expect("failed to create visible directory");
+        fs::create_dir_all(&ignored_nested).expect("failed to create ignored directory");
+        let workspace = AuthorizedWorkspace {
+            root_path: root.clone(),
+        };
+        let paths = workspace_watch_scope_paths(
+            &workspace,
+            &[
+                "visible".to_string(),
+                "ignored".to_string(),
+                path_to_string(&PathBuf::from("ignored").join("nested")),
+            ],
+            &WorkspaceSettings {
+                ignored_paths: vec!["ignored".to_string()],
+            },
+        )
+        .expect("watch scope should resolve");
+
+        assert!(paths.contains(&path_to_string(&root)));
+        assert!(paths.contains(&path_to_string(&visible)));
+        assert!(!paths.contains(&path_to_string(&ignored)));
+        assert!(!paths.contains(&path_to_string(&ignored_nested)));
+    }
+
+    #[test]
+    #[ignore = "creates a 100k-entry filesystem fixture"]
+    fn performance_workspace_100k() {
+        let temp = TempWorkspace::new();
+        for directory_index in 0..100 {
+            let directory = temp.path.join(format!("directory-{directory_index:03}"));
+            fs::create_dir_all(&directory).expect("failed to create performance directory");
+            for file_index in 0..1000 {
+                fs::write(directory.join(format!("file-{file_index:04}.png")), [])
+                    .expect("failed to create performance file");
+            }
+        }
+
+        let traversal_options = WorkspaceTraversalOptions {
+            max_entries: 100_100,
+            max_depth: 8,
+            batch_size: 1000,
+        };
+        let mut traversal_state = NativeAppState::default();
+        let entries = read_workspace_entries(&temp.path, &temp.path, "performance_warmup")
+            .expect("shallow listing warmup should succeed");
+        assert_eq!(entries.len(), 100);
+        let warmup_token = begin_workspace_traversal(&mut traversal_state);
+        let warmup = traverse_workspace(
+            &temp.path,
+            traversal_options,
+            &warmup_token,
+            "performance_traversal_warmup",
+        )
+        .expect("traversal warmup should succeed");
+        assert_eq!(warmup.status, WorkspaceTraversalStatus::Complete);
+
+        let mut listing_runs = Vec::new();
+        let mut traversal_runs = Vec::new();
+        for _ in 0..3 {
+            let started = std::time::Instant::now();
+            let entries = read_workspace_entries(&temp.path, &temp.path, "performance_list")
+                .expect("shallow listing should succeed");
+            listing_runs.push(started.elapsed().as_secs_f64() * 1000.0);
+            assert_eq!(entries.len(), 100);
+
+            let token = begin_workspace_traversal(&mut traversal_state);
+            let started = std::time::Instant::now();
+            let traversal = traverse_workspace(
+                &temp.path,
+                traversal_options,
+                &token,
+                "performance_traversal",
+            )
+            .expect("performance traversal should succeed");
+            traversal_runs.push(started.elapsed().as_secs_f64() * 1000.0);
+            assert_eq!(traversal.status, WorkspaceTraversalStatus::Complete);
+            assert_eq!(
+                traversal.batches.iter().map(Vec::len).sum::<usize>(),
+                100_100
+            );
+        }
+        listing_runs.sort_by(|left, right| left.partial_cmp(right).unwrap());
+        traversal_runs.sort_by(|left, right| left.partial_cmp(right).unwrap());
+        let listing_median = listing_runs[1];
+        let traversal_median = traversal_runs[1];
+        assert!(
+            listing_median <= 250.0,
+            "root listing median took {listing_median}ms"
+        );
+        println!(
+            "FOLDEN_PERF:{{\"rootListingRunsMs\":{listing_runs:?},\"rootListingMedianMs\":{listing_median},\"traversalRunsMs\":{traversal_runs:?},\"traversalMedianMs\":{traversal_median},\"entries\":100100}}"
         );
     }
 
@@ -335,10 +534,10 @@ mod tests {
                 name: "hello.md".to_string(),
                 path: "notes\\hello.md".to_string(),
                 kind: "file".to_string(),
-                has_openable_descendants: false,
+                openable_state: "present".to_string(),
                 children: Vec::new(),
             }],
-            has_openable_descendants: true,
+            openable_state: "present".to_string(),
         };
         assert_eq!(
             serde_json::to_value(workspace_entry).expect("workspace entry should serialize"),

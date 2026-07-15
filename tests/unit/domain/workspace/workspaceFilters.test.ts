@@ -5,13 +5,15 @@ import {
   filterWorkspaceEntriesByIgnoredNames,
 } from '../../../../src/domain/workspace/workspaceFilters'
 
-function entry(value: Omit<WorkspaceEntry, 'hasOpenableDescendants'>): WorkspaceEntry {
+function entry(value: Omit<WorkspaceEntry, 'openableState'>): WorkspaceEntry {
   return {
     ...value,
-    hasOpenableDescendants:
+    openableState:
       value.kind === 'directory'
-        ? value.children.some((child) => child.kind === 'file' || child.hasOpenableDescendants)
-        : false,
+        ? value.children.some((child) => child.kind === 'file' || child.openableState === 'present')
+          ? 'present'
+          : 'empty'
+        : 'present',
   }
 }
 
@@ -140,7 +142,7 @@ describe('workspace entry filters', () => {
         name: 'notes',
         path: 'notes',
         kind: 'directory',
-        hasOpenableDescendants: false,
+        openableState: 'empty',
         children: [],
       },
     ])
