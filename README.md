@@ -2,6 +2,8 @@
 
 English | [Русский](README.ru.md)
 
+[![Windows CI](https://github.com/byrnane/folden/actions/workflows/windows.yml/badge.svg?branch=master&event=push)](https://github.com/byrnane/folden/actions/workflows/windows.yml?query=branch%3Amaster)
+
 Folden is a local-first, visual-first desktop writing editor built on Markdown.
 
 It is built around a simple contract:

@@ -49,6 +49,13 @@ type SourceLine = {
   text: string
 }
 
+type BlockDocumentChange = {
+  previousFrom: number
+  previousTo: number
+  nextFrom: number
+  nextTo: number
+}
+
 function sourceLines(source: string): SourceLine[] {
   const lines: SourceLine[] = []
   const expression = /[^\r\n]*(?:\r\n|\r|\n|$)/gu
@@ -204,31 +211,114 @@ function blockEnd(
   return index
 }
 
-function reconcileBlockIds(previous: MarkdownBlockDocument | undefined, blocks: MarkdownBlock[]) {
+function sameBlockIdentity(first: MarkdownBlock, second: MarkdownBlock) {
+  return first.kind === second.kind && first.rawSource === second.rawSource
+}
+
+function reconcileBlockIds(
+  previous: MarkdownBlockDocument | undefined,
+  blocks: MarkdownBlock[],
+  change?: BlockDocumentChange,
+) {
   if (!previous) return blocks
-  const unused = new Set(previous.blocks.map((block) => block.id))
+  const previousDocument = previous
+  const result = blocks.map((block) => ({ ...block }))
+  const matchedPrevious = new Set<number>()
+  const matchedNext = new Set<number>()
 
-  return blocks.map((block, index) => {
-    const exact = previous.blocks.find(
-      (candidate) => unused.has(candidate.id) && candidate.rawSource === block.rawSource,
+  function preserve(previousIndex: number, nextIndex: number) {
+    if (matchedPrevious.has(previousIndex) || matchedNext.has(nextIndex)) return false
+    const previousBlock = previousDocument.blocks[previousIndex]
+    const nextBlock = result[nextIndex]
+    if (!previousBlock || !nextBlock) return false
+    matchedPrevious.add(previousIndex)
+    matchedNext.add(nextIndex)
+    result[nextIndex] = {
+      ...nextBlock,
+      id: previousBlock.id,
+      visualJson: previousBlock.visualJson,
+    }
+    return true
+  }
+
+  if (change) {
+    const delta = change.nextTo - change.nextFrom - (change.previousTo - change.previousFrom)
+    previousDocument.blocks.forEach((previousBlock, previousIndex) => {
+      const expectedFrom =
+        previousBlock.to <= change.previousFrom
+          ? previousBlock.from
+          : previousBlock.from >= change.previousTo
+            ? previousBlock.from + delta
+            : null
+      if (expectedFrom === null) return
+      const nextIndex = result.findIndex(
+        (nextBlock, candidateIndex) =>
+          !matchedNext.has(candidateIndex) &&
+          nextBlock.from === expectedFrom &&
+          sameBlockIdentity(previousBlock, nextBlock),
+      )
+      if (nextIndex >= 0) preserve(previousIndex, nextIndex)
+    })
+
+    const changedPrevious = previousDocument.blocks
+      .map((block, index) => ({ block, index }))
+      .filter(
+        ({ index, block }) =>
+          !matchedPrevious.has(index) &&
+          block.from < change.previousTo &&
+          block.to > change.previousFrom,
+      )
+    const changedNext = result
+      .map((block, index) => ({ block, index }))
+      .filter(
+        ({ index, block }) =>
+          !matchedNext.has(index) && block.from < change.nextTo && block.to > change.nextFrom,
+      )
+    for (let index = 0; index < Math.min(changedPrevious.length, changedNext.length); index += 1) {
+      if (changedPrevious[index].block.kind === changedNext[index].block.kind) {
+        preserve(changedPrevious[index].index, changedNext[index].index)
+      }
+    }
+  }
+
+  previousDocument.blocks.forEach((previousBlock, previousIndex) => {
+    if (matchedPrevious.has(previousIndex)) return
+    const nextIndex = result.findIndex(
+      (nextBlock, candidateIndex) =>
+        !matchedNext.has(candidateIndex) && sameBlockIdentity(previousBlock, nextBlock),
     )
-    const positional = previous.blocks[index]
-    const match =
-      exact ??
-      (positional && unused.has(positional.id) && positional.kind === block.kind
-        ? positional
-        : null)
-
-    if (!match) return block
-    unused.delete(match.id)
-    return { ...block, id: match.id, visualJson: match.visualJson }
+    if (nextIndex >= 0) preserve(previousIndex, nextIndex)
   })
+
+  result.forEach((nextBlock, nextIndex) => {
+    if (matchedNext.has(nextIndex)) return
+    const previousBlock = previousDocument.blocks[nextIndex]
+    if (previousBlock && !matchedPrevious.has(nextIndex) && previousBlock.kind === nextBlock.kind) {
+      preserve(nextIndex, nextIndex)
+    }
+  })
+
+  const usedIds = new Set(
+    result.filter((_, index) => matchedNext.has(index)).map((block) => block.id),
+  )
+  result.forEach((block, index) => {
+    if (matchedNext.has(index) && usedIds.has(block.id)) return
+    let id = block.id
+    let suffix = 2
+    while (usedIds.has(id)) {
+      id = `${block.id}-${suffix}`
+      suffix += 1
+    }
+    result[index] = { ...block, id }
+    usedIds.add(id)
+  })
+  return result
 }
 
 export function parseMarkdownBlockDocument(
   source: string,
   previous?: MarkdownBlockDocument,
-  options: { allowFrontmatter?: boolean } = {},
+  options: { allowFrontmatter?: boolean; change?: BlockDocumentChange } = {},
 ): MarkdownBlockDocument {
   const lines = sourceLines(source)
   const blocks: MarkdownBlock[] = []
@@ -282,11 +372,61 @@ export function parseMarkdownBlockDocument(
     index = endLine
   }
 
-  return { source, blocks: reconcileBlockIds(previous, blocks) }
+  if (!blocks.length && source.length) {
+    blocks.push({
+      id: `block-${stableHash(`paragraph:${source}`)}-0`,
+      kind: 'paragraph',
+      rawKind: null,
+      from: 0,
+      to: source.length,
+      contentFrom: 0,
+      rawSource: source,
+      visualJson: null,
+      state: 'untouched',
+    })
+  }
+
+  return { source, blocks: reconcileBlockIds(previous, blocks, options.change) }
 }
 
 export function serializeMarkdownBlockDocument(document: MarkdownBlockDocument) {
   return document.blocks.map((block) => block.rawSource).join('')
+}
+
+export function assertMarkdownBlockDocument(document: MarkdownBlockDocument) {
+  const ids = new Set<string>()
+  let expectedFrom = 0
+
+  for (const [index, block] of document.blocks.entries()) {
+    const fail = (message: string): never => {
+      throw new Error(`Block Document invariant failed at block ${index}: ${message}`)
+    }
+    if (!block.id || ids.has(block.id)) fail(`duplicate or empty id "${block.id}"`)
+    ids.add(block.id)
+    if (block.from !== expectedFrom) fail(`expected from=${expectedFrom}, received ${block.from}`)
+    if (block.to < block.from || block.to > document.source.length) fail('invalid source range')
+    if (block.contentFrom < block.from || block.contentFrom > block.to) {
+      fail('contentFrom is outside the block range')
+    }
+    if (block.rawSource !== document.source.slice(block.from, block.to)) {
+      fail('rawSource does not match the document source')
+    }
+    if (block.kind === 'raw') {
+      if (!block.rawKind || block.state !== 'raw') fail('raw block metadata is inconsistent')
+    } else if (block.rawKind !== null || block.state === 'raw') {
+      fail('visual block metadata is inconsistent')
+    }
+    expectedFrom = block.to
+  }
+
+  if (expectedFrom !== document.source.length) {
+    throw new Error(
+      `Block Document invariant failed: blocks end at ${expectedFrom}, source ends at ${document.source.length}`,
+    )
+  }
+  if (serializeMarkdownBlockDocument(document) !== document.source) {
+    throw new Error('Block Document invariant failed: serialized blocks differ from source')
+  }
 }
 
 export function updateMarkdownBlockDocument(
@@ -297,9 +437,15 @@ export function updateMarkdownBlockDocument(
   if (!document.blocks.length || patch.from < 0 || patch.to < patch.from) {
     return parseMarkdownBlockDocument(nextSource, document)
   }
+  const change = {
+    previousFrom: patch.from,
+    previousTo: patch.to,
+    nextFrom: patch.from,
+    nextTo: patch.from + patch.insert.length,
+  }
   const removed = document.source.slice(patch.from, patch.to)
   if (/```|~~~|^\s*(?:---|\+\+\+|:::|<!--|-->)\s*$/mu.test(`${removed}\n${patch.insert}`)) {
-    return parseMarkdownBlockDocument(nextSource, document)
+    return parseMarkdownBlockDocument(nextSource, document, { change })
   }
 
   const firstAffected = document.blocks.findIndex((block) => patch.from <= block.to)
@@ -325,6 +471,12 @@ export function updateMarkdownBlockDocument(
   }
   const reparsed = parseMarkdownBlockDocument(nextSource.slice(oldFrom, nextTo), previousWindow, {
     allowFrontmatter: oldFrom === 0,
+    change: {
+      previousFrom: patch.from - oldFrom,
+      previousTo: patch.to - oldFrom,
+      nextFrom: patch.from - oldFrom,
+      nextTo: patch.from - oldFrom + patch.insert.length,
+    },
   })
   const windowBlocks = reparsed.blocks.map((block) => ({
     ...block,
@@ -375,7 +527,14 @@ export function replaceMarkdownBlock(
   const block = document.blocks.find((candidate) => candidate.id === blockId)
   if (!block) return document
   const source = `${document.source.slice(0, block.from)}${rawSource}${document.source.slice(block.to)}`
-  const next = parseMarkdownBlockDocument(source, document)
+  const next = parseMarkdownBlockDocument(source, document, {
+    change: {
+      previousFrom: block.from,
+      previousTo: block.to,
+      nextFrom: block.from,
+      nextTo: block.from + rawSource.length,
+    },
+  })
   const replacement = next.blocks.find((candidate) => candidate.id === blockId)
   if (replacement && replacement.kind !== 'raw') replacement.state = 'changed'
   return next

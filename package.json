@@ -1,7 +1,7 @@
 {
   "name": "folden",
   "private": true,
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Local-first desktop Markdown and text editor.",
   "author": "byrnane",
   "license": "UNLICENSED",

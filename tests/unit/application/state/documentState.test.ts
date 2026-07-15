@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createDocumentState } from '../../../../src/application/state/documentState'
 import { createTextFileFormat } from '../../../../src/domain/document'
+import { assertMarkdownBlockDocument } from '../../../../src/domain/markdown/blockDocument'
 
 function createLoadedDocument(
   overrides: Partial<Parameters<ReturnType<typeof createState>['openLoadedDocument']>[0]>,
@@ -104,6 +105,35 @@ describe('document state', () => {
 
     expect(redone?.content).toBe('third')
     expect(redone?.revision).toBe(4)
+  })
+
+  it('keeps block history coherent through move, duplicate, delete, undo and redo', () => {
+    const state = createState()
+    const document = state.createScratchDocument('One\n\nTwo\n\nThree\n', 'History.md')
+    const initialIds = document.blockDocument!.blocks.map((block) => block.id)
+    const revisions = [
+      ['Two\n\nOne\n\nThree\n', 'move'],
+      ['Two\n\nOne\n\nOne\n\nThree\n', 'duplicate'],
+      ['Two\n\nOne\n\nOne\n', 'delete'],
+    ] as const
+
+    for (const [content, group] of revisions) {
+      state.applyDocumentUpdate(document.id, document.revision, content, group)
+      expect(() => assertMarkdownBlockDocument(document.blockDocument!)).not.toThrow()
+      expect(new Set(document.blockDocument!.blocks.map((block) => block.id)).size).toBe(
+        document.blockDocument!.blocks.length,
+      )
+    }
+
+    expect(state.undoDocument(document.id)?.content).toBe(revisions[1][0])
+    expect(state.undoDocument(document.id)?.content).toBe(revisions[0][0])
+    expect(state.undoDocument(document.id)?.content).toBe('One\n\nTwo\n\nThree\n')
+    expect(document.blockDocument!.blocks.map((block) => block.id)).toEqual(initialIds)
+
+    expect(state.redoDocument(document.id)?.content).toBe(revisions[0][0])
+    expect(state.redoDocument(document.id)?.content).toBe(revisions[1][0])
+    expect(state.redoDocument(document.id)?.content).toBe(revisions[2][0])
+    expect(() => assertMarkdownBlockDocument(document.blockDocument!)).not.toThrow()
   })
 
   it('updates renamed document paths across descendants', () => {

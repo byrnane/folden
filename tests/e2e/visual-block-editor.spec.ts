@@ -587,3 +587,87 @@ test('shares undo and redo between Visual and Source projections', async ({ page
   await page.getByRole('button', { name: 'Visual', exact: true }).click()
   await expect(page.getByTestId('visual-editor')).toContainText('Body changed')
 })
+
+test('keeps a move, duplicate and delete chain stable through undo and redo', async ({ page }) => {
+  await openApp(page, {
+    mockOptions: { initialFiles: { 'chain.md': 'One\n\nTwo\n\nThree\n' } },
+  })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-chain.md').click()
+
+  const surface = page.locator('.visual-editor-content .ProseMirror')
+  const blockTexts = () => surface.locator(':scope > p').allTextContents()
+  await surface.locator(':scope > p').first().hover()
+  await blockHandle(surface, 0).click()
+  await page.keyboard.press('Alt+ArrowDown')
+  await expect.poll(blockTexts).toEqual(['Two', 'One', 'Three'])
+
+  await surface.locator(':scope > p').nth(1).hover()
+  await blockMenuTrigger(surface, 1).click()
+  await page.getByTestId('visual-block-menu').getByRole('button', { name: 'Duplicate' }).click()
+  await expect.poll(blockTexts).toEqual(['Two', 'One', 'One', 'Three'])
+
+  await surface.locator(':scope > p').nth(3).hover()
+  await blockMenuTrigger(surface, 3).click()
+  await page.getByTestId('visual-block-menu').getByRole('button', { name: 'Delete' }).click()
+  await expect.poll(blockTexts).toEqual(['Two', 'One', 'One'])
+
+  const undo = process.platform === 'darwin' ? 'Meta+z' : 'Control+z'
+  const redo = process.platform === 'darwin' ? 'Meta+Shift+z' : 'Control+y'
+  await page.keyboard.press(undo)
+  await expect.poll(blockTexts).toEqual(['Two', 'One', 'One', 'Three'])
+  await page.keyboard.press(undo)
+  await expect.poll(blockTexts).toEqual(['Two', 'One', 'Three'])
+  await page.keyboard.press(undo)
+  await expect.poll(blockTexts).toEqual(['One', 'Two', 'Three'])
+
+  await page.keyboard.press(redo)
+  await expect.poll(blockTexts).toEqual(['Two', 'One', 'Three'])
+  await page.keyboard.press(redo)
+  await expect.poll(blockTexts).toEqual(['Two', 'One', 'One', 'Three'])
+  await page.keyboard.press(redo)
+  await expect.poll(blockTexts).toEqual(['Two', 'One', 'One'])
+})
+
+test('persists Visual to Source undo and redo through save and reopen', async ({ page }) => {
+  const initial = '# Flow\n\nBody\n'
+  const saved = '# Flow\n\nBody changed\n'
+  await openApp(page, { mockOptions: { initialFiles: { 'round-trip-flow.md': initial } } })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-round-trip-flow.md').click()
+
+  const body = page.locator('.visual-editor-content .ProseMirror p').first()
+  await body.click()
+  await page.keyboard.press('End')
+  await page.keyboard.type(' changed')
+  await page.getByRole('button', { name: 'Source', exact: true }).click()
+  await expect(page.getByTestId('source-editor')).toContainText('Body changed')
+
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z')
+  await expect(page.getByTestId('source-editor')).not.toContainText('Body changed')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+z' : 'Control+y')
+  await expect(page.getByTestId('source-editor')).toContainText('Body changed')
+  await page.getByTestId('save-document').click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as Window & {
+            __FOLDEN_TAURI_MOCK__?: { readFile: (path: string) => string | null }
+          }
+        ).__FOLDEN_TAURI_MOCK__?.readFile('round-trip-flow.md'),
+      ),
+    )
+    .toBe(saved)
+
+  await page
+    .locator('.pane-tabs .tab-button')
+    .filter({ hasText: 'round-trip-flow.md' })
+    .locator('.tab-close')
+    .click({ force: true })
+  await page.getByTestId('workspace-entry-round-trip-flow.md').click()
+  await page.getByRole('button', { name: 'Source', exact: true }).click()
+  await expect(page.getByTestId('source-editor')).toContainText('Body changed')
+  await page.getByRole('button', { name: 'Visual', exact: true }).click()
+  await expect(page.getByTestId('visual-editor')).toContainText('Body changed')
+})

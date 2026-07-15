@@ -1,0 +1,12 @@
+{
+  "relativeRegressionPercent": 15,
+  "measurementFloorMs": 1,
+  "metrics": {
+    "documentAnalysisMedianMs": { "maxMs": 1000 },
+    "rootListingMedianMs": { "maxMs": 250 },
+    "traversalMedianMs": { "maxMs": 1000 },
+    "inputP95Ms": { "maxMs": 16 },
+    "documentSettledMedianMs": { "maxMs": 1000 },
+    "directoryRenderMedianMs": { "maxMs": 500 }
+  }
+}

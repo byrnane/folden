@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  assertMarkdownBlockDocument,
   logicalAnchorAtOffset,
   offsetForLogicalAnchor,
   parseMarkdownBlockDocument,
@@ -38,6 +39,22 @@ describe('Markdown block document', () => {
       ['raw', 'comment'],
       ['table', null],
     ])
+  })
+
+  it('round-trips lexical edge cases exactly', () => {
+    const fixtures = [
+      '\ufeff# Heading\r\n\r\nParagraph with trailing spaces.  \r\n',
+      '# Heading\n\n\n\nParagraph with trailing tab.\t \n\n',
+      '---\ntitle: Draft\n---\n\n<!-- keep -->\n\n:::note\nBody\n:::\n',
+      '````md\n```ts\nconst answer = 42\n```\n````\n',
+      '~~~ts\nconst unfinished = true\n',
+    ]
+
+    for (const source of fixtures) {
+      const document = parseMarkdownBlockDocument(source)
+      expect(serializeMarkdownBlockDocument(document)).toBe(source)
+      expect(() => assertMarkdownBlockDocument(document)).not.toThrow()
+    }
   })
 
   it('changes one block without rewriting its neighbors', () => {
@@ -128,5 +145,88 @@ describe('Markdown block document', () => {
 
     expect(updated.blocks.map((block) => block.kind)).toEqual(['paragraph', 'code-block'])
     expect(updated.blocks[1].rawSource).toContain('Four')
+  })
+
+  it('round-trips whitespace-only Markdown exactly', () => {
+    const source = '\ufeff  \r\n\r\n'
+    const document = parseMarkdownBlockDocument(source)
+
+    expect(serializeMarkdownBlockDocument(document)).toBe(source)
+    expect(() => assertMarkdownBlockDocument(document)).not.toThrow()
+  })
+
+  it('keeps repeated block ids stable when inserting an identical block before them', () => {
+    const source = 'Same\n\nSame\n\nSame\n'
+    const document = parseMarkdownBlockDocument(source)
+    const insertion = document.blocks[1].from
+    const insert = 'Same\n\n'
+    const updated = updateMarkdownBlockDocument(
+      document,
+      `${source.slice(0, insertion)}${insert}${source.slice(insertion)}`,
+      { from: insertion, to: insertion, insert },
+    )
+
+    expect(new Set(updated.blocks.map((block) => block.id))).toHaveProperty(
+      'size',
+      updated.blocks.length,
+    )
+    expect(updated.blocks[0].id).toBe(document.blocks[0].id)
+    expect(updated.blocks[2].id).toBe(document.blocks[1].id)
+    expect(updated.blocks[3].id).toBe(document.blocks[2].id)
+    expect(updated.blocks[1].id).not.toBe(document.blocks[1].id)
+    expect(() => assertMarkdownBlockDocument(updated)).not.toThrow()
+  })
+
+  it('keeps repeated block ids stable when inserting after and deleting the middle block', () => {
+    const source = 'Same\n\nSame\n\nSame\n'
+    const document = parseMarkdownBlockDocument(source)
+    const insertion = document.blocks[1].to
+    const insert = 'Same\n\n'
+    const inserted = updateMarkdownBlockDocument(
+      document,
+      `${source.slice(0, insertion)}${insert}${source.slice(insertion)}`,
+      { from: insertion, to: insertion, insert },
+    )
+
+    expect(inserted.blocks[0].id).toBe(document.blocks[0].id)
+    expect(inserted.blocks[1].id).toBe(document.blocks[1].id)
+    expect(inserted.blocks[3].id).toBe(document.blocks[2].id)
+    expect(inserted.blocks[2].id).not.toBe(document.blocks[2].id)
+
+    const removed = document.blocks[1]
+    const deletedSource = `${source.slice(0, removed.from)}${source.slice(removed.to)}`
+    const deleted = updateMarkdownBlockDocument(document, deletedSource, {
+      from: removed.from,
+      to: removed.to,
+      insert: '',
+    })
+    expect(deleted.blocks.map((block) => block.id)).toEqual([
+      document.blocks[0].id,
+      document.blocks[2].id,
+    ])
+  })
+
+  it('keeps the edited repeated block identity and rejects corrupt documents', () => {
+    const source = 'Same\n\nSame\n\nSame\n'
+    const document = parseMarkdownBlockDocument(source)
+    const middle = document.blocks[1]
+    const from = middle.contentFrom
+    const nextSource = `${source.slice(0, from)}Changed${source.slice(from + 4)}`
+    const updated = updateMarkdownBlockDocument(document, nextSource, {
+      from,
+      to: from + 4,
+      insert: 'Changed',
+    })
+
+    expect(updated.blocks.map((block) => block.id)).toEqual(
+      document.blocks.map((block) => block.id),
+    )
+    const corrupt = {
+      ...updated,
+      blocks: updated.blocks.map((block, index) =>
+        index === 1 ? { ...block, id: updated.blocks[0].id } : block,
+      ),
+    }
+    expect(() => assertMarkdownBlockDocument(corrupt)).toThrow('Block Document invariant failed')
   })
 })

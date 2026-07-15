@@ -170,6 +170,14 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
+Performance-проверки остаются вне обычного CI и запускаются командой:
+
+```powershell
+npm run test:performance
+```
+
+`tests/performance/budgets.json` — источник истины для абсолютных бюджетов. Runner также отклоняет регрессии выше 15%, когда текущая машина совпадает с принятой baseline-машиной.
+
 ## Артефакты сборки
 
 Результат сборки frontend находится в:

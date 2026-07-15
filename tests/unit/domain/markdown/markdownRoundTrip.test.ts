@@ -30,6 +30,10 @@ const supportedFixtures = [
     source: '- one\n  - nested\n- three',
   },
   {
+    name: 'mixed nested lists with continuation paragraphs',
+    source: '- first\n  1. nested ordered\n  2. second nested\n\n    continuation\n- final',
+  },
+  {
     name: 'ordered list start number',
     source: '3. third\n4. fourth',
   },
@@ -42,12 +46,20 @@ const supportedFixtures = [
     source: '```ts\nconst answer = 42\n```',
   },
   {
+    name: 'long tilde fence',
+    source: '~~~~ts\nconst answer = 42\n~~~~',
+  },
+  {
     name: 'indented code block stays code',
     source: '    const answer = 42\n    console.log(answer)',
   },
   {
     name: 'inline link with title',
     source: '[link](https://example.com "Example")',
+  },
+  {
+    name: 'escaped punctuation stays literal',
+    source: 'Escaped \\*asterisks\\*, \\[brackets\\], and \\# hash.',
   },
   {
     name: 'reference link stays a link',
@@ -68,6 +80,10 @@ const supportedFixtures = [
   {
     name: 'table',
     source: '| A | B |\n| - | - |\n| 1 | 2 |',
+  },
+  {
+    name: 'table with empty cells',
+    source: '| Left | Empty | Right |\n| --- | --- | --- |\n| A | | C |',
   },
   {
     name: 'task list',
@@ -100,6 +116,18 @@ const supportedFixtures = [
       '- atmosphere',
       '',
       '![cover](./cover.png)',
+    ].join('\n'),
+  },
+  {
+    name: 'mixed document with escaped links and images',
+    source: [
+      '# Mixed',
+      '',
+      'Text with \\*literal markers\\* and [link](https://example.com/a%28b%29 "A title").',
+      '',
+      '> Quote with `code`.',
+      '',
+      '![preview](./image%20name.png "Image title")',
     ].join('\n'),
   },
   {

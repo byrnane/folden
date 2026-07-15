@@ -28,7 +28,7 @@ Tauri infrastructure adapters
 
 ### `src/ui`
 
-Здесь находятся Vue views, редакторы, диалоги и UI рабочего пространства. UI-компоненты отображают состояние и вызывают публичный application facade. В них не должно быть доменных правил, wiring нативных команд, очередей сохранения или политики файловой системы. `navigation/DocumentOutline.vue` и `navigation/DocumentMap.vue` разделяют рендер навигации Markdown; Source и Visual сохраняют только адаптеры прокрутки своих движков. `views/SettingsView.vue` отображает controls настроек, не владея их состоянием.
+Здесь находятся Vue views, редакторы, диалоги и UI рабочего пространства. UI-компоненты отображают состояние и вызывают публичный application facade. В них не должно быть доменных правил, wiring нативных команд, очередей сохранения или политики файловой системы. `navigation/DocumentOutline.vue` и `navigation/DocumentMap.vue` разделяют рендер навигации Markdown; Source и Visual сохраняют только адаптеры прокрутки своих движков. Настройка Visual-редактора, node views и block controls находятся рядом с `VisualMarkdownEditor.vue` как отдельные editor adapters. `views/SettingsView.vue` отображает controls настроек, не владея их состоянием.
 
 ### `src/application`
 

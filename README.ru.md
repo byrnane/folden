@@ -2,6 +2,8 @@
 
 [English](README.md) | Русский
 
+[![Windows CI](https://github.com/byrnane/folden/actions/workflows/windows.yml/badge.svg?branch=master&event=push)](https://github.com/byrnane/folden/actions/workflows/windows.yml?query=branch%3Amaster)
+
 Folden — локальный настольный редактор Markdown и обычных текстовых файлов.
 
 В основе проекта простой контракт:

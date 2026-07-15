@@ -67,8 +67,7 @@ test('runs toolbar formatting commands in source mode', async ({ page }) => {
   }
   await page.getByRole('button', { name: 'Bold' }).click()
 
-  await expect(page.getByTestId('source-editor')).toContainText(/source to.*olbar/u)
-  await expect(page.getByTestId('source-editor')).toContainText('**')
+  await expect(page.getByTestId('source-editor')).toContainText('source **toolbar**')
 })
 
 test('closes the window after saving dirty documents from the close prompt', async ({ page }) => {

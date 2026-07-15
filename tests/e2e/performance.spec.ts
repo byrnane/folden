@@ -1,8 +1,12 @@
 import { expect, test } from '@playwright/test'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defaultApplicationSettings } from '../../src/application/settings/defaults'
 import { applicationSettingsStorageKey, openApp, sourceEditor } from './helpers'
+
+const budgets = JSON.parse(readFileSync(resolve('tests/performance/budgets.json'), 'utf8')) as {
+  metrics: Record<string, { maxMs: number }>
+}
 
 test.skip(!process.env.FOLDEN_PERFORMANCE, 'runs through npm run test:performance')
 test.setTimeout(60_000)
@@ -138,8 +142,8 @@ test('large document analysis stays off the editing hot path', async ({ page }) 
   })
   const inputP95Ms = percentile(metrics.inputDurationsMs, 0.95)
   const analysisMedianMs = median(analysisRunsMs)
-  expect(inputP95Ms).toBeLessThanOrEqual(16)
-  expect(analysisMedianMs).toBeLessThanOrEqual(1_000)
+  expect(inputP95Ms).toBeLessThanOrEqual(budgets.metrics.inputP95Ms.maxMs)
+  expect(analysisMedianMs).toBeLessThanOrEqual(budgets.metrics.documentSettledMedianMs.maxMs)
   expect(metrics.longTasks.filter(({ duration }) => duration >= 50)).toEqual([])
   writePerformanceReport('browser-document.json', {
     inputDurationsMs: metrics.inputDurationsMs,
@@ -193,6 +197,6 @@ test('a 1k-entry directory renders inside the expansion budget', async ({ page }
     await expect(page.getByTestId(`workspace-entry-${directory}\\file-999.md`)).toBeVisible()
   }
   const directoryMedianMs = median(directoryRunsMs)
-  expect(directoryMedianMs).toBeLessThanOrEqual(500)
+  expect(directoryMedianMs).toBeLessThanOrEqual(budgets.metrics.directoryRenderMedianMs.maxMs)
   writePerformanceReport('browser-workspace.json', { directoryRunsMs, directoryMedianMs })
 })

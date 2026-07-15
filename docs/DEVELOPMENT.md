@@ -168,6 +168,14 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
+Performance checks stay outside routine CI and run through:
+
+```powershell
+npm run test:performance
+```
+
+`tests/performance/budgets.json` is the source of truth for absolute budgets. The runner also rejects regressions above 15% when the current machine matches the accepted baseline.
+
 ## Build Artifacts
 
 Frontend build output goes to:

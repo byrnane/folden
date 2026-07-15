@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { analyzeDocument } from '../../src/domain/markdown/documentAnalysis'
 import { MAX_DOCUMENT_MAP_SEGMENTS } from '../../src/domain/markdown/outline'
+import budgets from './budgets.json'
 
 function median(values: number[]) {
   const sorted = [...values].sort((left, right) => left - right)
@@ -24,7 +25,7 @@ describe('document analysis performance', () => {
     })
     const analysisMs = median(durations)
     expect(Buffer.byteLength(content)).toBeGreaterThanOrEqual(5_000_000)
-    expect(analysisMs).toBeLessThanOrEqual(1_000)
+    expect(analysisMs).toBeLessThanOrEqual(budgets.metrics.documentAnalysisMedianMs.maxMs)
 
     const reportDir = resolve('build/performance')
     mkdirSync(reportDir, { recursive: true })

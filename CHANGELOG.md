@@ -6,6 +6,13 @@
 - Минорные версии: 5-10 строк.
 - Мажорные версии: полноценные release notes.
 
+## 0.9.3 - 2026-07-15
+
+- Block Document получил стабильное сопоставление ID для повторяющихся блоков и dev-инварианты целостности lossless-модели.
+- Расширены Markdown round-trip, shared undo/redo и сквозные Visual → Source → save → reopen регрессии.
+- Настройка Tiptap и управление блочными selection/menu/drag вынесены из `VisualMarkdownEditor.vue` без изменения поведения редактора.
+- Performance-бюджеты собраны в единый проверяемый контракт, а статус Windows CI выведен в README для `master`.
+
 ## 0.9.2 - 2026-07-15
 
 - Анализ outline, document map и word count вынесен в общий Web Worker с защитой от устаревших результатов и сбоев.

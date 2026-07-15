@@ -18,6 +18,7 @@ import {
 import type { NativeError } from '../../domain/nativeError'
 import type { LoadedDocument, OpenDocument } from '../../domain/documents/documentState'
 import {
+  assertMarkdownBlockDocument,
   parseMarkdownBlockDocument,
   updateMarkdownBlockDocument,
   type MarkdownBlockDocument,
@@ -508,5 +509,6 @@ export function createDocumentState(options: DocumentStateOptions) {
   }
 }
 function protectBlockDocument(value: MarkdownBlockDocument | null) {
+  if (value && import.meta.env.DEV) assertMarkdownBlockDocument(value)
   return value ? markRaw(value) : null
 }

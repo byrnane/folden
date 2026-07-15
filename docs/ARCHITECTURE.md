@@ -26,7 +26,7 @@ Dependencies should keep flowing downward. Higher layers may depend on lower-lay
 
 ### `src/ui`
 
-Vue views, editors, dialogs, and workspace UI live here. UI components render state and call the public application facade. They should not contain domain rules, native command wiring, save queues, or filesystem policy. `navigation/DocumentOutline.vue` and `navigation/DocumentMap.vue` share Markdown navigation rendering; Source and Visual editors retain only engine-specific scrolling adapters. `views/SettingsView.vue` renders settings controls while application state remains in the facade.
+Vue views, editors, dialogs, and workspace UI live here. UI components render state and call the public application facade. They should not contain domain rules, native command wiring, save queues, or filesystem policy. `navigation/DocumentOutline.vue` and `navigation/DocumentMap.vue` share Markdown navigation rendering; Source and Visual editors retain only engine-specific scrolling adapters. Visual editor setup, node views, and block controls live beside `VisualMarkdownEditor.vue` as focused editor adapters. `views/SettingsView.vue` renders settings controls while application state remains in the facade.
 
 ### `src/application`
 

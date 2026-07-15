@@ -1,19 +1,8 @@
 <script setup lang="ts">
-import Image from '@tiptap/extension-image'
-import { Extension, type Editor as CoreEditor } from '@tiptap/core'
-import Link from '@tiptap/extension-link'
-import { Table } from '@tiptap/extension-table'
-import TableCell from '@tiptap/extension-table-cell'
-import TableHeader from '@tiptap/extension-table-header'
-import TableRow from '@tiptap/extension-table-row'
-import TaskItem from '@tiptap/extension-task-item'
-import TaskList from '@tiptap/extension-task-list'
-import { Markdown } from '@tiptap/markdown'
-import StarterKit from '@tiptap/starter-kit'
+import { type Editor as CoreEditor } from '@tiptap/core'
 import { Editor } from '@tiptap/vue-3'
 import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model'
-import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
-import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 import {
   ArrowDownToLine,
   ArrowUpToLine,
@@ -40,8 +29,6 @@ import type { DocumentUpdate } from '../../domain/documents/editorSync'
 import { createDocumentPatch } from '../../domain/documents/documentPatch'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
 import { toVisualSelectionState } from '../../domain/documents/editorViewState'
-import { resolveVisualImageSource } from '../../domain/markdown/imageRendering'
-import { convertVisualImagePath } from '../../infrastructure/tauri/visualImageAssets'
 import { validateLinkTarget } from '../../domain/markdown/markdownSafety'
 import type { EditorCommand } from '../../application/types/shell'
 import { findActiveHeading } from '../../domain/markdown/outline'
@@ -58,8 +45,9 @@ import {
   type MarkdownBlockDocument,
 } from '../../domain/markdown/blockDocument'
 import type { LogicalSelectionAnchor } from '../../domain/markdown/blockDocument'
-import { RawMarkdownBlock } from './rawMarkdownBlock'
 import { buildVisualMarkdownProjection } from './visualProjection'
+import { createVisualEditor } from './visualEditorSetup'
+import { useVisualBlockControls } from './useVisualBlockControls'
 import VisualContextToolbar from './VisualContextToolbar.vue'
 import type { VisualContextToolbarContext } from './VisualContextToolbar.vue'
 
@@ -99,13 +87,6 @@ const activeHeadingId = ref<string | null>(null)
 const editor = shallowRef<Editor | null>(null)
 const inputDialog = ref<EditorInputDialogState | null>(null)
 const inputDialogError = ref<string | null>(null)
-const activeBlockIndex = ref<number | null>(null)
-const selectedBlockIndices = ref<number[]>([])
-const blockMenuOpen = ref(false)
-const blockTransformMenuOpen = ref(false)
-const blockMenuPosition = ref({ top: 0, left: 0 })
-const isBlockDragging = ref(false)
-const dropBlockIndex = ref<number | null>(null)
 const slashMenu = ref<{ query: string; selected: number; top: number; left: number } | null>(null)
 const contextMenuPosition = ref<{ top: number; left: number } | null>(null)
 let lastAppliedRevision = props.revision
@@ -113,18 +94,6 @@ let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
 let mapResizeObserver: ResizeObserver | null = null
 let scrollFrame = 0
-let blockDragGhost: HTMLDivElement | null = null
-let blockSelectionPinned = false
-let blockAutoScrollFrame: number | null = null
-let pointerCaptureElement: HTMLElement | null = null
-let pointerDrag: {
-  pointerId: number
-  startX: number
-  startY: number
-  clientX: number
-  clientY: number
-} | null = null
-let pendingBlockClickSelection: { activeIndex: number; indices: number[] } | null = null
 type VisualNodeSnapshot = {
   blockId: string
   nodes: ProseMirrorNode[]
@@ -139,7 +108,6 @@ let visualOperationSequence = 0
 let allowUnfocusedVisualUpdate = false
 let acceptVisualUpdates = false
 let forcedVisualMarkdown: string | null = null
-const blockControlsPluginKey = new PluginKey('foldenBlockControls')
 
 function beginVisualOperation(kind: string) {
   const group = `visual-${kind}-${visualOperationSequence++}`
@@ -360,228 +328,46 @@ function applyExternalContent(value: string, revision: number, preserveViewState
   nextTick(updateMapViewport)
 }
 
-function createImageNodeView(
-  source: string | null,
-  allowRemoteImages: boolean,
-  documentPath: string | null,
-  workspaceRootPath: string | null,
-) {
-  return () => {
-    const dom = document.createElement('div') as HTMLDivElement & {
-      renderWithPermission?: (allowed: boolean) => void
-    }
-    dom.className = 'visual-image-node'
-    dom.contentEditable = 'false'
-    dom.dataset.imageSource = source ?? ''
-    let remoteImagesAllowed = allowRemoteImages
-
-    function renderImage() {
-      const resolvedImage = resolveVisualImageSource(
-        {
-          source,
-          documentPath,
-          workspaceRootPath,
-          allowRemoteImages: remoteImagesAllowed,
-        },
-        convertVisualImagePath,
-      )
-
-      dom.replaceChildren()
-
-      if (resolvedImage.kind === 'placeholder') {
-        dom.dataset.imageState = 'placeholder'
-
-        const placeholder = document.createElement('div')
-        placeholder.className = 'visual-image-placeholder'
-
-        const title = document.createElement('strong')
-        title.textContent = 'Image preview unavailable'
-        placeholder.append(title)
-
-        const message = document.createElement('span')
-        message.textContent = resolvedImage.reason
-        placeholder.append(message)
-
-        if (source?.trim()) {
-          const details = document.createElement('code')
-          details.textContent = source.trim()
-          placeholder.append(details)
-        }
-
-        dom.append(placeholder)
-        return
-      }
-
-      dom.dataset.imageState = 'loaded'
-
-      const image = document.createElement('img')
-      image.src = resolvedImage.renderedSrc
-      image.alt = ''
-      image.loading = 'lazy'
-
-      image.addEventListener(
-        'error',
-        () => {
-          dom.dataset.imageState = 'error'
-          dom.replaceChildren()
-
-          const placeholder = document.createElement('div')
-          placeholder.className = 'visual-image-placeholder visual-image-placeholder-error'
-
-          const title = document.createElement('strong')
-          title.textContent = 'Image could not be loaded'
-          placeholder.append(title)
-
-          const message = document.createElement('span')
-          message.textContent = source?.trim()
-            ? `Folden kept the Markdown unchanged, but the preview failed for ${source.trim()}.`
-            : 'Folden kept the Markdown unchanged, but the preview failed.'
-          placeholder.append(message)
-
-          dom.append(placeholder)
-        },
-        { once: true },
-      )
-
-      dom.append(image)
-    }
-
-    dom.renderWithPermission = (allowed) => {
-      remoteImagesAllowed = allowed
-      renderImage()
-    }
-    renderImage()
-
-    return {
-      dom,
-      update: (updatedNode: { attrs?: { src?: string | null } }) => {
-        if (updatedNode.attrs?.src !== source) {
-          return false
-        }
-
-        return true
-      },
-    }
-  }
-}
-
 function createEditor(element: HTMLDivElement) {
-  const VisualImage = Image.extend({
-    addNodeView() {
-      return ({ node }) =>
-        createImageNodeView(
-          node.attrs.src as string | null,
-          props.allowRemoteImages,
-          props.documentPath,
-          props.workspaceRootPath,
-        )()
-    },
-  })
-
-  const BlockControls = Extension.create({
-    name: 'foldenBlockControls',
-    addProseMirrorPlugins() {
-      return [
-        new Plugin({
-          key: blockControlsPluginKey,
-          props: {
-            decorations: (state) => {
-              const decorations: Decoration[] = []
-              state.doc.forEach((node, offset, index) => {
-                const selected = selectedBlockIndices.value.includes(index)
-                decorations.push(
-                  Decoration.node(offset, offset + node.nodeSize, {
-                    class: `visual-block-node${selected ? ' visual-block-selected' : ''}`,
-                    'data-block-index': String(index),
-                  }),
-                  Decoration.widget(offset, () => createBlockControls(index), {
-                    key: `block-controls-${index}`,
-                    side: -1,
-                    ignoreSelection: true,
-                  }),
-                )
-              })
-              return DecorationSet.create(state.doc, decorations)
-            },
-          },
-        }),
-      ]
-    },
-  })
-
-  return new Editor({
+  return createVisualEditor({
     element,
     content: buildVisualMarkdownProjection(props.modelValue, props.blockDocument),
-    contentType: 'markdown',
-    extensions: [
-      StarterKit.configure({
-        link: false,
-      }),
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-      }),
-      VisualImage.configure({
-        inline: false,
-        allowBase64: false,
-      }),
-      Table.configure({
-        resizable: true,
-      }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      TaskList,
-      TaskItem.configure({
-        nested: true,
-      }),
-      RawMarkdownBlock.configure({
-        onEdit: () => beginVisualOperation('raw'),
-        onCollapse: reparseRawBlock,
-      }),
-      BlockControls,
-      Markdown,
-    ],
-    editorProps: {
-      handleKeyDown: (_view, event) => handleVisualKeydown(event),
-    },
-    onCreate: () => {
+    allowRemoteImages: props.allowRemoteImages,
+    documentPath: props.documentPath,
+    workspaceRootPath: props.workspaceRootPath,
+    blockControls: blockControls.extension,
+    onRawEdit: () => beginVisualOperation('raw'),
+    onRawCollapse: reparseRawBlock,
+    onKeyDown: handleVisualKeydown,
+    onCreate: (createdEditor) => {
       lastAppliedRevision = props.revision
       lastVisualMarkdown = props.modelValue
       hasVisualChanges = false
-      if (editor.value) snapshotVisualNodes(editor.value, props.modelValue)
+      snapshotVisualNodes(createdEditor, props.modelValue)
       emitToolbarState()
     },
-    onSelectionUpdate: ({ editor }) => {
-      if (!(editor.state.selection instanceof NodeSelection) && !blockMenuOpen.value) {
-        activateBlock(editor.state.selection.$from.index(0))
+    onSelectionUpdate: (updatedEditor) => {
+      if (!(updatedEditor.state.selection instanceof NodeSelection) && !blockMenuOpen.value) {
+        activateBlock(updatedEditor.state.selection.$from.index(0))
       }
       emitToolbarState()
       updateContextMenu()
       updateSlashMenu()
     },
-    onUpdate: ({ editor }) => {
-      if (!(editor.state.selection instanceof NodeSelection) && !blockMenuOpen.value) {
-        activateBlock(editor.state.selection.$from.index(0))
+    onUpdate: (updatedEditor) => {
+      if (!(updatedEditor.state.selection instanceof NodeSelection) && !blockMenuOpen.value) {
+        activateBlock(updatedEditor.state.selection.$from.index(0))
       }
       emitToolbarState()
       updateContextMenu()
       updateSlashMenu()
-
-      if (isApplyingExternalContent) {
-        return
-      }
-
+      if (isApplyingExternalContent) return
       if (!acceptVisualUpdates) return
-
-      if (!editor.isFocused && !allowUnfocusedVisualUpdate) {
-        return
-      }
+      if (!updatedEditor.isFocused && !allowUnfocusedVisualUpdate) return
       allowUnfocusedVisualUpdate = false
-
-      const nextContent = forcedVisualMarkdown ?? serializeVisualDocumentLosslessly(editor)
+      const nextContent = forcedVisualMarkdown ?? serializeVisualDocumentLosslessly(updatedEditor)
       forcedVisualMarkdown = null
-      commitVisualContent(editor, nextContent)
+      commitVisualContent(updatedEditor, nextContent)
     },
   })
 }
@@ -739,51 +525,6 @@ function handleVisualClick(event: MouseEvent) {
   openVisualLink(href)
 }
 
-function topLevelElements() {
-  return editor.value
-    ? Array.from(editor.value.view.dom.querySelectorAll<HTMLElement>(':scope > .visual-block-node'))
-    : []
-}
-
-function positionBeforeBlock(index: number) {
-  if (!editor.value) return 0
-  let position = 0
-  for (let current = 0; current < index; current += 1) {
-    position += editor.value.state.doc.child(current).nodeSize
-  }
-  return position
-}
-
-function syncBlockDecorations() {
-  if (!editor.value) return
-  editor.value.view.dispatch(
-    editor.value.state.tr.setMeta(blockControlsPluginKey, true).setMeta('addToHistory', false),
-  )
-}
-
-function activateBlock(index: number) {
-  if (!editor.value || index < 0 || index >= editor.value.state.doc.childCount) return
-  blockSelectionPinned = false
-  activeBlockIndex.value = index
-  if (selectedBlockIndices.value.length === 1 && selectedBlockIndices.value[0] === index) return
-  selectedBlockIndices.value = [index]
-  syncBlockDecorations()
-}
-
-function clearBlockSelection() {
-  blockSelectionPinned = false
-  if (!selectedBlockIndices.value.length) return
-  selectedBlockIndices.value = []
-  syncBlockDecorations()
-}
-
-function closeBlockMenu() {
-  blockMenuOpen.value = false
-  blockTransformMenuOpen.value = false
-  blockSelectionPinned = false
-  updateContextMenu()
-}
-
 function viewportClampedPosition(element: HTMLElement, position: { top: number; left: number }) {
   const margin = 12
   const rect = element.getBoundingClientRect()
@@ -795,12 +536,6 @@ function viewportClampedPosition(element: HTMLElement, position: { top: number; 
   }
 }
 
-function clampBlockMenuToViewport() {
-  const menu = blockMenuElement.value
-  if (!menu) return
-  blockMenuPosition.value = viewportClampedPosition(menu, blockMenuPosition.value)
-}
-
 function clampSlashMenuToViewport() {
   const menu = slashMenuElement.value
   if (!menu || !slashMenu.value) return
@@ -809,97 +544,8 @@ function clampSlashMenuToViewport() {
 }
 
 function clampFloatingMenusToViewport() {
-  clampBlockMenuToViewport()
+  blockControls.clampBlockMenuToViewport()
   clampSlashMenuToViewport()
-}
-
-function openBlockTransformMenu() {
-  blockTransformMenuOpen.value = true
-  nextTick(clampBlockMenuToViewport)
-}
-
-function toggleBlockMenu(index: number, anchor: HTMLElement) {
-  if (blockMenuOpen.value) {
-    closeBlockMenu()
-    return
-  }
-  selectBlock(index)
-  const anchorRect = anchor.getBoundingClientRect()
-  blockMenuPosition.value = {
-    top: anchorRect.bottom + 4,
-    left: anchorRect.left,
-  }
-  blockMenuOpen.value = true
-  blockTransformMenuOpen.value = false
-  contextMenuPosition.value = null
-  nextTick(() => {
-    clampBlockMenuToViewport()
-  })
-}
-
-function createBlockControls(index: number) {
-  const controls = document.createElement('div')
-  controls.className = 'visual-block-controls'
-  controls.contentEditable = 'false'
-  controls.dataset.blockIndex = String(index)
-
-  const menuButton = document.createElement('button')
-  menuButton.type = 'button'
-  menuButton.className = 'visual-block-control visual-block-menu-trigger'
-  menuButton.setAttribute('aria-label', 'Block menu')
-  menuButton.dataset.testid = 'visual-block-menu-trigger'
-  menuButton.innerHTML = '<span class="visual-block-menu-icon" aria-hidden="true">•••</span>'
-  menuButton.addEventListener('pointerdown', (event) => {
-    event.preventDefault()
-    event.stopPropagation()
-  })
-  menuButton.addEventListener('click', (event) => {
-    event.preventDefault()
-    event.stopPropagation()
-    toggleBlockMenu(index, menuButton)
-  })
-
-  const dragButton = document.createElement('button')
-  dragButton.type = 'button'
-  dragButton.className = 'visual-block-control visual-block-handle'
-  dragButton.setAttribute('aria-label', 'Block actions')
-  dragButton.dataset.testid = 'visual-block-handle'
-  dragButton.innerHTML = '<span class="visual-block-grip-icon" aria-hidden="true"></span>'
-  dragButton.addEventListener('pointerdown', (event) => prepareBlockDrag(event, index))
-  dragButton.addEventListener('click', (event) => {
-    event.preventDefault()
-    event.stopPropagation()
-    handleBlockHandleClick()
-  })
-
-  controls.append(menuButton, dragButton)
-  return controls
-}
-
-function selectBlock(index: number, extend = false) {
-  if (!editor.value || index < 0 || index >= editor.value.state.doc.childCount) return
-  if (extend && selectedBlockIndices.value.length) {
-    const anchor = selectedBlockIndices.value[0]
-    const from = Math.min(anchor, index)
-    const to = Math.max(anchor, index)
-    selectedBlockIndices.value = Array.from({ length: to - from + 1 }, (_, offset) => from + offset)
-  } else {
-    selectedBlockIndices.value = [index]
-  }
-  blockSelectionPinned = true
-  activeBlockIndex.value = index
-  editor.value.view.dispatch(
-    editor.value.state.tr.setSelection(
-      NodeSelection.create(editor.value.state.doc, positionBeforeBlock(index)),
-    ),
-  )
-  syncBlockDecorations()
-}
-
-function selectedIndices() {
-  if (selectedBlockIndices.value.length)
-    return [...selectedBlockIndices.value].sort((a, b) => a - b)
-  return activeBlockIndex.value === null ? [] : [activeBlockIndex.value]
 }
 
 function replaceTopLevelNodes(nodes: ProseMirrorNode[], exactMarkdown?: string) {
@@ -920,236 +566,36 @@ function replaceTopLevelNodes(nodes: ProseMirrorNode[], exactMarkdown?: string) 
   }
 }
 
-function moveSelectedBlocks(targetIndex: number) {
-  if (!editor.value) return
-  const indices = selectedIndices()
-  if (!indices.length) return
-  const selected = new Set(indices)
-  const nodes = Array.from({ length: editor.value.state.doc.childCount }, (_, index) =>
-    editor.value!.state.doc.child(index),
-  )
-  const moving = nodes.filter((_, index) => selected.has(index))
-  const remaining = nodes.filter((_, index) => !selected.has(index))
-  const removedBefore = indices.filter((index) => index < targetIndex).length
-  const insertion = Math.max(0, Math.min(targetIndex - removedBefore, remaining.length))
-  const reordered = [...remaining.slice(0, insertion), ...moving, ...remaining.slice(insertion)]
-  if (nodes.every((node, index) => node === reordered[index])) return
-  const exactMarkdown = serializeVisualDocumentLosslessly(editor.value, reordered)
-  replaceTopLevelNodes(reordered, exactMarkdown)
-  selectedBlockIndices.value = moving.map((_, offset) => insertion + offset)
-  activeBlockIndex.value = insertion
-  syncBlockDecorations()
-}
-
-function duplicateSelectedBlocks() {
-  if (!editor.value) return
-  const indices = selectedIndices()
-  if (!indices.length) return
-  const nodes = Array.from({ length: editor.value.state.doc.childCount }, (_, index) =>
-    editor.value!.state.doc.child(index),
-  )
-  const copies = indices.map((index) => nodes[index].copy(nodes[index].content))
-  const insertion = indices.at(-1)! + 1
-  replaceTopLevelNodes([...nodes.slice(0, insertion), ...copies, ...nodes.slice(insertion)])
-  selectedBlockIndices.value = copies.map((_, offset) => insertion + offset)
-  activeBlockIndex.value = insertion
-  closeBlockMenu()
-  syncBlockDecorations()
-}
-
-function deleteSelectedBlocks() {
-  if (!editor.value) return
-  const selected = new Set(selectedIndices())
-  if (!selected.size) return
-  const nodes = Array.from({ length: editor.value.state.doc.childCount }, (_, index) =>
-    editor.value!.state.doc.child(index),
-  ).filter((_, index) => !selected.has(index))
-  replaceTopLevelNodes(nodes.length ? nodes : [editor.value.schema.nodes.paragraph.create()])
-  selectedBlockIndices.value = []
-  activeBlockIndex.value = null
-  closeBlockMenu()
-  syncBlockDecorations()
-}
-
-function insertBlock(relative: 'above' | 'below') {
-  if (!editor.value || activeBlockIndex.value === null) return
-  const index = activeBlockIndex.value + (relative === 'below' ? 1 : 0)
-  const position = positionBeforeBlock(index)
-  editor.value.commands.insertContentAt(position, { type: 'paragraph' })
-  closeBlockMenu()
-  clearBlockSelection()
-  activeBlockIndex.value = index
-  editor.value
-    .chain()
-    .focus()
-    .setTextSelection(position + 1)
-    .run()
-}
+const blockControls = useVisualBlockControls({
+  editor,
+  scrollHost,
+  blockMenuElement,
+  replaceTopLevelNodes,
+  serializeTopLevelNodes: serializeVisualDocumentLosslessly,
+  updateContextMenu,
+})
+const {
+  activeBlockIndex,
+  blockMenuOpen,
+  blockTransformMenuOpen,
+  blockMenuPosition,
+  isBlockDragging,
+  dropBlockIndex,
+  activateBlock,
+  closeBlockMenu,
+  openBlockTransformMenu,
+  duplicateSelectedBlocks,
+  deleteSelectedBlocks,
+  insertBlock,
+  finishBlockDrag,
+  handleDocumentPointerDown,
+  handleDocumentKeydown,
+  topLevelElements,
+} = blockControls
 
 function transformActiveBlock(command: EditorCommand) {
   runEditorCommand(command)
   closeBlockMenu()
-}
-
-function removeBlockPointerListeners() {
-  window.removeEventListener('pointermove', handleBlockPointerMove)
-  window.removeEventListener('pointerup', handleBlockPointerUp)
-  window.removeEventListener('pointercancel', cancelBlockPointerDrag)
-  window.removeEventListener('blur', cancelBlockPointerDrag)
-}
-
-function stopBlockAutoScroll() {
-  if (blockAutoScrollFrame !== null) cancelAnimationFrame(blockAutoScrollFrame)
-  blockAutoScrollFrame = null
-}
-
-function finishBlockDrag() {
-  removeBlockPointerListeners()
-  stopBlockAutoScroll()
-  if (
-    pointerCaptureElement &&
-    pointerDrag &&
-    pointerCaptureElement.hasPointerCapture(pointerDrag.pointerId)
-  ) {
-    pointerCaptureElement.releasePointerCapture(pointerDrag.pointerId)
-  }
-  pointerCaptureElement = null
-  isBlockDragging.value = false
-  dropBlockIndex.value = null
-  blockDragGhost?.remove()
-  blockDragGhost = null
-  pointerDrag = null
-  syncBlockDecorations()
-}
-
-function prepareBlockDrag(event: PointerEvent, index: number) {
-  if (event.button !== 0) return
-  event.preventDefault()
-  event.stopPropagation()
-  if (blockMenuOpen.value) closeBlockMenu()
-  editor.value?.view.focus()
-  activeBlockIndex.value = index
-  if (!selectedBlockIndices.value.includes(index) || event.shiftKey) {
-    selectBlock(index, event.shiftKey)
-  }
-  pendingBlockClickSelection = {
-    activeIndex: index,
-    indices: [...selectedBlockIndices.value],
-  }
-  contextMenuPosition.value = null
-  pointerDrag = {
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    clientX: event.clientX,
-    clientY: event.clientY,
-  }
-  pointerCaptureElement = event.currentTarget as HTMLElement
-  pointerCaptureElement.setPointerCapture?.(event.pointerId)
-  window.addEventListener('pointermove', handleBlockPointerMove, { passive: false })
-  window.addEventListener('pointerup', handleBlockPointerUp)
-  window.addEventListener('pointercancel', cancelBlockPointerDrag)
-  window.addEventListener('blur', cancelBlockPointerDrag)
-}
-
-function createBlockDragGhost() {
-  const ghost = document.createElement('div')
-  ghost.className = 'visual-block-drag-ghost'
-  ghost.textContent = `${selectedIndices().length} block${selectedIndices().length === 1 ? '' : 's'}`
-  document.body.append(ghost)
-  blockDragGhost = ghost
-}
-
-function updateBlockDropTarget(clientY: number) {
-  const blocks = topLevelElements()
-  const firstAfterPointer = blocks.findIndex((block) => {
-    const rect = block.getBoundingClientRect()
-    return clientY < rect.top + rect.height / 2
-  })
-  dropBlockIndex.value = firstAfterPointer < 0 ? blocks.length : firstAfterPointer
-}
-
-function blockAutoScrollDelta(clientY: number) {
-  const viewport = scrollHost.value?.getBoundingClientRect()
-  if (!viewport) return 0
-  if (clientY < viewport.top + 48) return -14
-  if (clientY > viewport.bottom - 48) return 14
-  return 0
-}
-
-function runBlockAutoScroll() {
-  blockAutoScrollFrame = null
-  if (!pointerDrag || !isBlockDragging.value || !scrollHost.value) return
-  const delta = blockAutoScrollDelta(pointerDrag.clientY)
-  if (!delta) return
-  scrollHost.value.scrollBy({ top: delta })
-  updateBlockDropTarget(pointerDrag.clientY)
-  blockAutoScrollFrame = requestAnimationFrame(runBlockAutoScroll)
-}
-
-function updateBlockDragAt(clientX: number, clientY: number) {
-  if (blockDragGhost) {
-    blockDragGhost.style.transform = `translate3d(${clientX + 14}px, ${clientY + 14}px, 0)`
-  }
-  updateBlockDropTarget(clientY)
-  if (blockAutoScrollDelta(clientY)) {
-    if (blockAutoScrollFrame === null)
-      blockAutoScrollFrame = requestAnimationFrame(runBlockAutoScroll)
-  } else {
-    stopBlockAutoScroll()
-  }
-}
-
-function handleBlockPointerMove(event: PointerEvent) {
-  if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return
-  pointerDrag.clientX = event.clientX
-  pointerDrag.clientY = event.clientY
-  if (!isBlockDragging.value) {
-    const distance = Math.hypot(
-      event.clientX - pointerDrag.startX,
-      event.clientY - pointerDrag.startY,
-    )
-    if (distance < 5) return
-    isBlockDragging.value = true
-    pendingBlockClickSelection = null
-    createBlockDragGhost()
-  }
-  event.preventDefault()
-  updateBlockDragAt(event.clientX, event.clientY)
-}
-
-function handleBlockPointerUp(event: PointerEvent) {
-  if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return
-  if (isBlockDragging.value && dropBlockIndex.value !== null) {
-    moveSelectedBlocks(dropBlockIndex.value)
-  }
-  finishBlockDrag()
-}
-
-function cancelBlockPointerDrag() {
-  pendingBlockClickSelection = null
-  finishBlockDrag()
-}
-
-function handleBlockHandleClick() {
-  const pendingSelection = pendingBlockClickSelection
-  pendingBlockClickSelection = null
-  if (!editor.value || !pendingSelection) return
-  requestAnimationFrame(() => {
-    if (!editor.value) return
-    editor.value.view.focus()
-    selectedBlockIndices.value = pendingSelection.indices
-    activeBlockIndex.value = pendingSelection.activeIndex
-    editor.value.view.dispatch(
-      editor.value.state.tr.setSelection(
-        NodeSelection.create(
-          editor.value.state.doc,
-          positionBeforeBlock(pendingSelection.activeIndex),
-        ),
-      ),
-    )
-    syncBlockDecorations()
-  })
 }
 
 const slashCommands: { label: string; command: EditorCommand }[] = [
@@ -1246,12 +692,7 @@ function handleVisualKeydown(event: KeyboardEvent) {
     emit('history-command', 'redo')
     return true
   }
-  if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-    const index = activeBlockIndex.value ?? editor.value?.state.selection.$from.index(0) ?? 0
-    selectBlock(index)
-    moveSelectedBlocks(event.key === 'ArrowUp' ? index - 1 : index + 2)
-    return true
-  }
+  if (blockControls.handleBlockKeydown(event)) return true
   if (slashMenu.value && filteredSlashCommands.value.length) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       const direction = event.key === 'ArrowDown' ? 1 : -1
@@ -1279,45 +720,19 @@ function handleVisualScroll() {
 }
 
 function handleVisualFrameKeydown(event: KeyboardEvent) {
-  const keepsBlockSelection = event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')
-  const modifierOnly = ['Alt', 'Control', 'Meta', 'Shift'].includes(event.key)
-  if (blockSelectionPinned && !blockMenuOpen.value && !keepsBlockSelection && !modifierOnly) {
-    clearBlockSelection()
-  }
+  blockControls.prepareFrameKeydown(event)
   if (!handleVisualKeydown(event)) return
   event.preventDefault()
   event.stopPropagation()
 }
 
 function markVisualInput(event: Event) {
+  blockControls.markBlockInput(event)
   if (event.type === 'pointerdown') {
     const target = event.target as HTMLElement | null
-    if (
-      blockMenuOpen.value &&
-      target?.closest('.tiptap') &&
-      !target.closest('.visual-block-menu-trigger')
-    ) {
-      closeBlockMenu()
-    }
-    const block = target?.closest<HTMLElement>('.visual-block-node')
-    const index = Number(block?.dataset.blockIndex)
-    if (block && Number.isInteger(index)) activateBlock(index)
     if (!target?.matches('input[type="checkbox"]')) return
   }
   allowUnfocusedVisualUpdate = true
-}
-
-function handleDocumentPointerDown(event: PointerEvent) {
-  if (!blockMenuOpen.value) return
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.visual-block-menu, .visual-block-menu-trigger')) return
-  closeBlockMenu()
-}
-
-function handleDocumentKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || !blockMenuOpen.value) return
-  event.preventDefault()
-  closeBlockMenu()
 }
 
 async function editSelectedImage() {

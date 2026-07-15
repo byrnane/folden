@@ -71,26 +71,37 @@ const machine = {
   cpuModel: os.cpus()[0]?.model ?? 'unknown',
 }
 const baselinePath = path.join(rootDir, 'tests', 'performance', 'baseline.json')
+const budgetsPath = path.join(rootDir, 'tests', 'performance', 'budgets.json')
 if (!existsSync(baselinePath))
   throw new Error(`Missing accepted performance baseline: ${baselinePath}`)
+if (!existsSync(budgetsPath))
+  throw new Error(`Missing accepted performance budgets: ${budgetsPath}`)
 const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'))
+const budgets = JSON.parse(readFileSync(budgetsPath, 'utf8'))
 const sameMachine =
   baseline.machine?.platform === machine.platform &&
   baseline.machine?.arch === machine.arch &&
   baseline.machine?.cpuModel === machine.cpuModel
 const baselineMetrics = baseline.metrics ?? {}
+const measurementFloor = budgets.measurementFloorMs ?? 1
+const relativeFactor = 1 + (budgets.relativeRegressionPercent ?? 15) / 100
 const regressions = Object.entries(metrics).flatMap(([name, value]) => {
   if (!sameMachine) return []
   const baselineValue = baselineMetrics[name]
-  const measurementFloor = 1
   if (
     typeof value !== 'number' ||
     typeof baselineValue !== 'number' ||
-    Math.max(value, measurementFloor) <= Math.max(baselineValue, measurementFloor) * 1.15
+    Math.max(value, measurementFloor) <= Math.max(baselineValue, measurementFloor) * relativeFactor
   ) {
     return []
   }
   return [{ name, baseline: baselineValue, current: value }]
+})
+const budgetViolations = Object.entries(metrics).flatMap(([name, value]) => {
+  const maxMs = budgets.metrics?.[name]?.maxMs
+  return typeof value === 'number' && typeof maxMs === 'number' && value > maxMs
+    ? [{ name, maxMs, current: value }]
+    : []
 })
 
 writeFileSync(
@@ -104,16 +115,25 @@ writeFileSync(
       workspace,
       metrics,
       baseline,
+      budgets,
       machine,
       relativeComparison: sameMachine ? 'applied' : 'skipped-machine-mismatch',
       regressions,
+      budgetViolations,
     },
     null,
     2,
   ),
 )
 
+if (budgetViolations.length > 0) {
+  console.error(`Performance budget exceeded: ${JSON.stringify(budgetViolations)}`)
+  process.exit(1)
+}
+
 if (regressions.length > 0) {
-  console.error(`Performance regression exceeded 15%: ${JSON.stringify(regressions)}`)
+  console.error(
+    `Performance regression exceeded ${budgets.relativeRegressionPercent}%: ${JSON.stringify(regressions)}`,
+  )
   process.exit(1)
 }
