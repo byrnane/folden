@@ -10,6 +10,7 @@ type VisualBlockControlsOptions = {
   blockMenuElement: Ref<HTMLDivElement | null>
   replaceTopLevelNodes: (nodes: ProseMirrorNode[], exactMarkdown?: string) => void
   serializeTopLevelNodes: (editor: Editor, nodes: ProseMirrorNode[]) => string
+  blockIdAtIndex: (index: number) => string | null
   updateContextMenu: () => void
 }
 
@@ -172,10 +173,12 @@ export function useVisualBlockControls(options: VisualBlockControlsOptions) {
               const decorations: Decoration[] = []
               state.doc.forEach((node, offset, index) => {
                 const selected = selectedBlockIndices.value.includes(index)
+                const blockId = options.blockIdAtIndex(index)
                 decorations.push(
                   Decoration.node(offset, offset + node.nodeSize, {
                     class: `visual-block-node${selected ? ' visual-block-selected' : ''}`,
                     'data-block-index': String(index),
+                    ...(blockId ? { 'data-block-id': blockId } : {}),
                   }),
                   Decoration.widget(offset, () => createBlockControls(index), {
                     key: `block-controls-${index}`,
@@ -522,6 +525,7 @@ export function useVisualBlockControls(options: VisualBlockControlsOptions) {
     handleDocumentPointerDown,
     handleDocumentKeydown,
     finishBlockDrag,
+    syncBlockDecorations,
     topLevelElements,
   }
 }

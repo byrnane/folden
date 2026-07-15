@@ -85,6 +85,9 @@ const sameMachine =
 const baselineMetrics = baseline.metrics ?? {}
 const measurementFloor = budgets.measurementFloorMs ?? 1
 const relativeFactor = 1 + (budgets.relativeRegressionPercent ?? 15) / 100
+const missingMetrics = Object.keys(budgets.metrics ?? {}).filter(
+  (name) => !Number.isFinite(metrics[name]),
+)
 const regressions = Object.entries(metrics).flatMap(([name, value]) => {
   if (!sameMachine) return []
   const baselineValue = baselineMetrics[name]
@@ -99,7 +102,7 @@ const regressions = Object.entries(metrics).flatMap(([name, value]) => {
 })
 const budgetViolations = Object.entries(metrics).flatMap(([name, value]) => {
   const maxMs = budgets.metrics?.[name]?.maxMs
-  return typeof value === 'number' && typeof maxMs === 'number' && value > maxMs
+  return Number.isFinite(value) && Number.isFinite(maxMs) && value > maxMs
     ? [{ name, maxMs, current: value }]
     : []
 })
@@ -118,6 +121,7 @@ writeFileSync(
       budgets,
       machine,
       relativeComparison: sameMachine ? 'applied' : 'skipped-machine-mismatch',
+      missingMetrics,
       regressions,
       budgetViolations,
     },
@@ -125,6 +129,11 @@ writeFileSync(
     2,
   ),
 )
+
+if (missingMetrics.length > 0) {
+  console.error(`Performance metrics missing or invalid: ${JSON.stringify(missingMetrics)}`)
+  process.exit(1)
+}
 
 if (budgetViolations.length > 0) {
   console.error(`Performance budget exceeded: ${JSON.stringify(budgetViolations)}`)

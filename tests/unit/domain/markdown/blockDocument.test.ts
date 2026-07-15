@@ -229,4 +229,19 @@ describe('Markdown block document', () => {
     }
     expect(() => assertMarkdownBlockDocument(corrupt)).toThrow('Block Document invariant failed')
   })
+
+  it('keeps block identity when an edit changes its kind at the block boundary', () => {
+    const source = 'Paragraph\n\nNext\n'
+    const document = parseMarkdownBlockDocument(source)
+    const nextSource = `# ${source}`
+    const updated = updateMarkdownBlockDocument(document, nextSource, {
+      from: 0,
+      to: 0,
+      insert: '# ',
+    })
+
+    expect(updated.blocks[0].kind).toBe('heading')
+    expect(updated.blocks[0].id).toBe(document.blocks[0].id)
+    expect(updated.blocks[1].id).toBe(document.blocks[1].id)
+  })
 })

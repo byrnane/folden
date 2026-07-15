@@ -260,20 +260,36 @@ function reconcileBlockIds(
       if (nextIndex >= 0) preserve(previousIndex, nextIndex)
     })
 
+    previousDocument.blocks.forEach((previousBlock, previousIndex) => {
+      if (matchedPrevious.has(previousIndex)) return
+      const nextIndex = result.findIndex(
+        (nextBlock, candidateIndex) =>
+          !matchedNext.has(candidateIndex) && sameBlockIdentity(previousBlock, nextBlock),
+      )
+      if (nextIndex >= 0) preserve(previousIndex, nextIndex)
+    })
+
+    const touchesChangedRange = (from: number, to: number, rangeFrom: number, rangeTo: number) =>
+      rangeFrom === rangeTo
+        ? from <= rangeFrom && to >= rangeFrom
+        : from < rangeTo && to > rangeFrom
     const changedPrevious = previousDocument.blocks
       .map((block, index) => ({ block, index }))
       .filter(
         ({ index, block }) =>
           !matchedPrevious.has(index) &&
-          block.from < change.previousTo &&
-          block.to > change.previousFrom,
+          touchesChangedRange(block.from, block.to, change.previousFrom, change.previousTo),
       )
     const changedNext = result
       .map((block, index) => ({ block, index }))
       .filter(
         ({ index, block }) =>
-          !matchedNext.has(index) && block.from < change.nextTo && block.to > change.nextFrom,
+          !matchedNext.has(index) &&
+          touchesChangedRange(block.from, block.to, change.nextFrom, change.nextTo),
       )
+    if (changedPrevious.length === 1 && changedNext.length === 1) {
+      preserve(changedPrevious[0].index, changedNext[0].index)
+    }
     for (let index = 0; index < Math.min(changedPrevious.length, changedNext.length); index += 1) {
       if (changedPrevious[index].block.kind === changedNext[index].block.kind) {
         preserve(changedPrevious[index].index, changedNext[index].index)

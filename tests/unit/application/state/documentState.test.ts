@@ -117,12 +117,19 @@ describe('document state', () => {
       ['Two\n\nOne\n\nOne\n', 'delete'],
     ] as const
 
-    for (const [content, group] of revisions) {
+    for (const [index, [content, group]] of revisions.entries()) {
       state.applyDocumentUpdate(document.id, document.revision, content, group)
       expect(() => assertMarkdownBlockDocument(document.blockDocument!)).not.toThrow()
       expect(new Set(document.blockDocument!.blocks.map((block) => block.id)).size).toBe(
         document.blockDocument!.blocks.length,
       )
+      if (index === 0) {
+        expect(document.blockDocument!.blocks.map((block) => block.id)).toEqual([
+          initialIds[1],
+          initialIds[0],
+          initialIds[2],
+        ])
+      }
     }
 
     expect(state.undoDocument(document.id)?.content).toBe(revisions[1][0])

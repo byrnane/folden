@@ -597,36 +597,55 @@ test('keeps a move, duplicate and delete chain stable through undo and redo', as
 
   const surface = page.locator('.visual-editor-content .ProseMirror')
   const blockTexts = () => surface.locator(':scope > p').allTextContents()
+  const blockIds = () =>
+    surface
+      .locator(':scope > .visual-block-node')
+      .evaluateAll((blocks) => blocks.map((block) => block.getAttribute('data-block-id')))
+  const initialIds = await blockIds()
+  expect(initialIds).toHaveLength(3)
+  expect(new Set(initialIds).size).toBe(3)
   await surface.locator(':scope > p').first().hover()
   await blockHandle(surface, 0).click()
   await page.keyboard.press('Alt+ArrowDown')
   await expect.poll(blockTexts).toEqual(['Two', 'One', 'Three'])
+  await expect.poll(blockIds).toEqual([initialIds[1], initialIds[0], initialIds[2]])
 
   await surface.locator(':scope > p').nth(1).hover()
   await blockMenuTrigger(surface, 1).click()
   await page.getByTestId('visual-block-menu').getByRole('button', { name: 'Duplicate' }).click()
   await expect.poll(blockTexts).toEqual(['Two', 'One', 'One', 'Three'])
+  const duplicatedIds = await blockIds()
+  expect(duplicatedIds.slice(0, 2)).toEqual([initialIds[1], initialIds[0]])
+  expect(duplicatedIds[3]).toBe(initialIds[2])
+  expect(new Set(duplicatedIds).size).toBe(4)
 
   await surface.locator(':scope > p').nth(3).hover()
   await blockMenuTrigger(surface, 3).click()
   await page.getByTestId('visual-block-menu').getByRole('button', { name: 'Delete' }).click()
   await expect.poll(blockTexts).toEqual(['Two', 'One', 'One'])
+  await expect.poll(blockIds).toEqual(duplicatedIds.slice(0, 3))
 
   const undo = process.platform === 'darwin' ? 'Meta+z' : 'Control+z'
   const redo = process.platform === 'darwin' ? 'Meta+Shift+z' : 'Control+y'
   await page.keyboard.press(undo)
   await expect.poll(blockTexts).toEqual(['Two', 'One', 'One', 'Three'])
+  await expect.poll(blockIds).toEqual(duplicatedIds)
   await page.keyboard.press(undo)
   await expect.poll(blockTexts).toEqual(['Two', 'One', 'Three'])
+  await expect.poll(blockIds).toEqual([initialIds[1], initialIds[0], initialIds[2]])
   await page.keyboard.press(undo)
   await expect.poll(blockTexts).toEqual(['One', 'Two', 'Three'])
+  await expect.poll(blockIds).toEqual(initialIds)
 
   await page.keyboard.press(redo)
   await expect.poll(blockTexts).toEqual(['Two', 'One', 'Three'])
+  await expect.poll(blockIds).toEqual([initialIds[1], initialIds[0], initialIds[2]])
   await page.keyboard.press(redo)
   await expect.poll(blockTexts).toEqual(['Two', 'One', 'One', 'Three'])
+  await expect.poll(blockIds).toEqual(duplicatedIds)
   await page.keyboard.press(redo)
   await expect.poll(blockTexts).toEqual(['Two', 'One', 'One'])
+  await expect.poll(blockIds).toEqual(duplicatedIds.slice(0, 3))
 })
 
 test('persists Visual to Source undo and redo through save and reopen', async ({ page }) => {

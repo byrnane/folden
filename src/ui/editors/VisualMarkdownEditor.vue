@@ -572,6 +572,7 @@ const blockControls = useVisualBlockControls({
   blockMenuElement,
   replaceTopLevelNodes,
   serializeTopLevelNodes: serializeVisualDocumentLosslessly,
+  blockIdAtIndex: (index) => props.blockDocument?.blocks[index]?.id ?? null,
   updateContextMenu,
 })
 const {
@@ -590,6 +591,7 @@ const {
   finishBlockDrag,
   handleDocumentPointerDown,
   handleDocumentKeydown,
+  syncBlockDecorations,
   topLevelElements,
 } = blockControls
 
@@ -783,6 +785,7 @@ watch(
     if (!isDocumentSwitch && isVisuallyEquivalentMarkdown(lastVisualMarkdown, value)) {
       lastAppliedRevision = revision
       hasVisualChanges = false
+      syncBlockDecorations()
       return
     }
 
