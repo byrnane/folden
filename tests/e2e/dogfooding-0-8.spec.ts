@@ -125,6 +125,7 @@ test('outline navigates visual and source editors', async ({ page }) => {
   })
   await openWorkspace(page)
   await page.getByTestId('workspace-entry-outline.md').click()
+  await page.getByRole('button', { name: 'Outline', exact: true }).click()
 
   const outline = page.getByRole('complementary', { name: 'Document outline' })
   await expect(outline).toBeVisible()
@@ -178,6 +179,7 @@ test('document map scrolls long markdown in visual and source modes', async ({ p
   })
   await openWorkspace(page)
   await page.getByTestId('workspace-entry-map.md').click()
+  await page.getByRole('button', { name: 'Document map' }).click()
 
   const visualMap = page.getByRole('complementary', { name: 'Document map' })
   await expect(visualMap).toBeVisible()
@@ -295,6 +297,7 @@ test('document map appears for short markdown in visual and source modes', async
   })
   await openWorkspace(page)
   await page.getByTestId('workspace-entry-short-map.md').click()
+  await page.getByRole('button', { name: 'Document map' }).click()
 
   const documentMap = page.getByRole('complementary', { name: 'Document map' })
   await expect(documentMap).toBeVisible()

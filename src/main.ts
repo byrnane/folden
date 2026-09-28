@@ -1,6 +1,8 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import { logFrontendEvent } from './infrastructure/tauri/files'
+import '@fontsource-variable/inter/wght.css'
+import './assets/themes/folden-dark.css'
 import './assets/styles/app.css'
 
 function isTauriRuntime() {

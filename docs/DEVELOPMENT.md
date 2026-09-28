@@ -196,7 +196,7 @@ The current Windows executable path is:
 build/desktop/release/app.exe
 ```
 
-`scripts/tauri.mjs` sets `CARGO_TARGET_DIR=build/desktop` so Rust build artifacts stay out of `src-tauri/target`. `vite.config.ts` ignores both `src-tauri/target` and `build/desktop` to avoid Windows watcher conflicts with locked Cargo files.
+`.cargo/config.toml` sends all local Rust builds to `build/desktop` and disables incremental compilation to limit cache growth. `vite.config.ts` ignores both `src-tauri/target` and `build/desktop` to avoid Windows watcher conflicts with locked Cargo files.
 
 The Source and Visual editors are loaded as separate chunks. The 0.8.5 closeout baseline is about 240 KB for the startup chunk, 530 KB for Visual, and 609 KB for Source before gzip. Vite's 500 KB warning remains expected for the editor chunks because CodeMirror and Tiptap load only when their editor is opened; do not hide it by raising the global warning limit.
 

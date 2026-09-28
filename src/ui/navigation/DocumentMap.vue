@@ -21,6 +21,7 @@ const canvasElement = ref<HTMLCanvasElement | null>(null)
 const visibleHeight = ref(0)
 const lineHeight = 5
 let mapResizeObserver: ResizeObserver | null = null
+let themeObserver: MutationObserver | null = null
 let dprMediaQuery: MediaQueryList | null = null
 let drawFrame = 0
 
@@ -71,6 +72,12 @@ function drawMap() {
     canvas.height = Math.ceil(height * ratio)
     const context = canvas.getContext('2d')
     if (!context) return
+    const styles = getComputedStyle(mapElement.value ?? canvas)
+    const mapColors = {
+      heading: styles.getPropertyValue('--map-heading').trim(),
+      list: styles.getPropertyValue('--map-list').trim(),
+      text: styles.getPropertyValue('--map-text').trim(),
+    }
     context.scale(ratio, ratio)
     context.clearRect(0, 0, width, height)
 
@@ -81,10 +88,10 @@ function drawMap() {
       const y = (segmentPosition(segment) / 100) * Math.max(height - 3, 0)
       context.fillStyle =
         segment.kind === 'heading'
-          ? 'rgba(242, 197, 114, 0.78)'
+          ? mapColors.heading
           : segment.kind === 'list'
-            ? 'rgba(90, 169, 167, 0.5)'
-            : 'rgba(174, 183, 197, 0.22)'
+            ? mapColors.list
+            : mapColors.text
       context.fillRect(indent, y, segmentWidth, segment.kind === 'heading' ? 3 : 2)
     }
   })
@@ -151,6 +158,11 @@ onMounted(() => {
     drawMap()
   })
   mapResizeObserver.observe(mapElement.value)
+  const themeHost = mapElement.value.closest('[data-theme]')
+  if (themeHost) {
+    themeObserver = new MutationObserver(drawMap)
+    themeObserver.observe(themeHost, { attributes: true, attributeFilter: ['data-theme'] })
+  }
   window.addEventListener('resize', drawMap)
   watchDevicePixelRatio()
 })
@@ -161,6 +173,8 @@ onBeforeUnmount(() => {
   stopResize()
   mapResizeObserver?.disconnect()
   mapResizeObserver = null
+  themeObserver?.disconnect()
+  themeObserver = null
   window.removeEventListener('resize', drawMap)
   dprMediaQuery?.removeEventListener('change', handleDevicePixelRatioChange)
   dprMediaQuery = null

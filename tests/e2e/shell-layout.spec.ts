@@ -253,6 +253,8 @@ test('protects editor width by temporarily hiding sidebar, map and outline in or
   })
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-layout.md').click()
+  await page.getByRole('button', { name: 'Outline', exact: true }).click()
+  await page.getByRole('button', { name: 'Document map' }).click()
 
   const sidebar = page.locator('.workspace-sidebar')
   const outline = page.locator('.document-outline')

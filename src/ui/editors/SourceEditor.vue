@@ -79,8 +79,8 @@ let resolveInputDialog: ((value: string | null) => void) | null = null
 const sourceTheme = EditorView.theme(
   {
     '&': {
-      backgroundColor: '#15181d',
-      color: '#d9dee7',
+      backgroundColor: 'var(--editor-bg)',
+      color: 'var(--text-secondary)',
       height: '100%',
     },
     '.cm-scroller': {
@@ -88,34 +88,34 @@ const sourceTheme = EditorView.theme(
       lineHeight: '1.65',
     },
     '.cm-content': {
-      caretColor: '#f2c572',
+      caretColor: 'var(--editor-heading)',
       padding: '20px 24px',
     },
     '.cm-gutters': {
-      backgroundColor: '#15181d',
-      color: '#687383',
-      borderRight: '1px solid #2b313a',
+      backgroundColor: 'var(--editor-bg)',
+      color: 'var(--text-faint)',
+      borderRight: '1px solid var(--border)',
     },
     '.cm-activeLine, .cm-activeLineGutter': {
-      backgroundColor: '#20252d',
+      backgroundColor: 'var(--editor-active-line)',
     },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
-      backgroundColor: '#41506a',
+      backgroundColor: 'var(--editor-selection)',
     },
     '.cm-cursor': {
-      borderLeftColor: '#f2c572',
+      borderLeftColor: 'var(--editor-heading)',
     },
   },
   { dark: true },
 )
 
 const markdownHighlightStyle = HighlightStyle.define([
-  { tag: tags.heading, color: '#f2c572', fontWeight: '700' },
-  { tag: [tags.link, tags.url], color: '#86b7ff' },
-  { tag: tags.emphasis, color: '#e0b7ff', fontStyle: 'italic' },
-  { tag: tags.strong, color: '#ffd98f', fontWeight: '700' },
-  { tag: tags.monospace, color: '#8dd7c0' },
-  { tag: tags.quote, color: '#aeb7c5', fontStyle: 'italic' },
+  { tag: tags.heading, color: 'var(--editor-heading)', fontWeight: '700' },
+  { tag: [tags.link, tags.url], color: 'var(--editor-link)' },
+  { tag: tags.emphasis, color: 'var(--editor-emphasis)', fontStyle: 'italic' },
+  { tag: tags.strong, color: 'var(--editor-strong)', fontWeight: '700' },
+  { tag: tags.monospace, color: 'var(--editor-code)' },
+  { tag: tags.quote, color: 'var(--editor-quote)', fontStyle: 'italic' },
 ])
 const sourceHighlightLimitCharacters = 1_000_000
 const markdownExtensions = new Compartment()

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, toRaw, watch } from 'vue'
 import type { ApplicationSettings } from '../../application/settings'
-import { applicationSettingLimits } from '../../application/settings'
+import { applicationSettingLimits, availableThemes } from '../../application/settings'
 
 type SettingsSection = 'editor' | 'files' | 'appearance'
 
@@ -245,6 +245,15 @@ watch(
         /></label>
       </section>
       <section v-else class="settings-section">
+        <label class="settings-row"
+          ><span
+            ><strong>Theme</strong><small>Visual theme for the application interface.</small></span
+          ><select v-model="settings.appearance.theme" data-testid="theme-select">
+            <option v-for="theme in availableThemes" :key="theme.id" :value="theme.id">
+              {{ theme.label }}
+            </option>
+          </select></label
+        >
         <label class="settings-row"
           ><span
             ><strong>UI scale</strong><small>Scale controls and application chrome.</small></span

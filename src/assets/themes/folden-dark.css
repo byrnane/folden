@@ -1,0 +1,117 @@
+:root,
+[data-theme='folden-dark'] {
+  color-scheme: dark;
+
+  /* Typography */
+  --font-ui:
+    'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
+  --font-editor: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-size-ui: 13px;
+  --font-size-caption: 11px;
+  --font-size-body: 16px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Shape and motion */
+  --control-height: 30px;
+  --control-height-comfortable: 34px;
+  --control-radius: 6px;
+  --surface-radius: 8px;
+  --dialog-radius: 12px;
+  --motion-fast: 120ms;
+  --motion-normal: 180ms;
+
+  /* Surfaces */
+  --app-bg: #0e1015;
+  --rail-bg: #0e1015;
+  --sidebar-bg: #11141b;
+  --panel-bg: #151922;
+  --panel-soft-bg: #181c24;
+  --panel-raised-bg: #202530;
+  --editor-bg: #151922;
+  --canvas-bg: #151922;
+  --overlay-bg: rgb(8 10 15 / 76%);
+  --menu-bg: rgb(21 25 34 / 96%);
+
+  /* Text */
+  --text-primary: #f2f4f8;
+  --text-secondary: #d4dae6;
+  --text-muted: #a8b0bf;
+  --text-faint: #747e90;
+  --text-disabled: #596274;
+  --canvas-text: #e5e9f1;
+
+  /* Lines and interactive states */
+  --border-subtle: rgb(168 176 191 / 10%);
+  --border: rgb(168 176 191 / 16%);
+  --border-strong: rgb(168 176 191 / 28%);
+  --hover-bg: rgb(255 255 255 / 5%);
+  --hover-bg-subtle: rgb(255 255 255 / 3%);
+  --neutral-line: rgb(168 176 191 / 22%);
+  --neutral-line-strong: rgb(168 176 191 / 28%);
+  --active-bg: rgb(124 140 255 / 13%);
+  --selected-bg: rgb(124 140 255 / 22%);
+  --drag-bg: rgb(124 140 255 / 16%);
+
+  /* Accent and status */
+  --accent: #7c8cff;
+  --accent-hover: #91a0ff;
+  --accent-strong: #91a0ff;
+  --accent-soft: rgb(124 140 255 / 14%);
+  --accent-border: rgb(124 140 255 / 36%);
+  --focus-ring: rgb(145 160 255 / 48%);
+  --danger: #ff6b7a;
+  --danger-soft: rgb(255 107 122 / 12%);
+  --danger-border: rgb(255 107 122 / 38%);
+  --success: #62c99a;
+  --success-soft: rgb(98 201 154 / 12%);
+  --warning: #efbd68;
+  --warning-soft: rgb(239 189 104 / 12%);
+  --warning-bg: rgb(92 66 24 / 58%);
+  --warning-border: rgb(239 189 104 / 34%);
+  --warning-text: #f6d596;
+  --error-bg: rgb(89 28 40 / 58%);
+  --error-border: rgb(255 107 122 / 36%);
+  --error-text: #ffc2ca;
+
+  /* Editor syntax and document map */
+  --editor-heading: #aeb8ff;
+  --editor-link: #8dbaff;
+  --editor-emphasis: #d6b4ff;
+  --editor-strong: #f1d18d;
+  --editor-code: #82d4ba;
+  --editor-quote: #a8b0bf;
+  --editor-selection: rgb(124 140 255 / 30%);
+  --editor-active-line: rgb(255 255 255 / 4%);
+  --map-heading: rgb(174 184 255 / 80%);
+  --map-list: rgb(124 140 255 / 54%);
+  --map-text: rgb(168 176 191 / 25%);
+
+  /* Depth */
+  --shadow-menu: 0 12px 32px rgb(0 0 0 / 34%);
+  --shadow-dialog: 0 24px 72px rgb(0 0 0 / 48%);
+  --shadow-focus: 0 0 0 1px var(--accent-border);
+  --shadow-color-subtle: rgb(0 0 0 / 18%);
+  --shadow-color-soft: rgb(0 0 0 / 28%);
+  --shadow-color: rgb(0 0 0 / 35%);
+  --shadow-color-strong: rgb(0 0 0 / 45%);
+  --surface-translucent: rgb(21 25 34 / 82%);
+
+  /* Legacy semantic aliases kept local to the theme */
+  --muted-text: var(--text-muted);
+  --soft-text: var(--text-secondary);
+  --strong-text: var(--text-primary);
+}

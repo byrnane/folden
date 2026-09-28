@@ -8,6 +8,7 @@ import type {
   LayoutSettings,
   WorkspaceSettings,
 } from './types'
+import { isThemeId } from './themes'
 
 function clampNumber(value: unknown, minimum: number, maximum: number, fallback: number) {
   return typeof value === 'number' && Number.isFinite(value)
@@ -109,6 +110,9 @@ export function normalizeApplicationSettings(value: unknown): ApplicationSetting
           : defaultApplicationSettings.editor.defaultMarkdownMode,
     },
     appearance: {
+      theme: isThemeId(appearance.theme)
+        ? appearance.theme
+        : defaultApplicationSettings.appearance.theme,
       uiScale: clampNumber(
         appearance.uiScale,
         applicationSettingLimits.uiScale.min,

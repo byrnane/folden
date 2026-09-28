@@ -104,6 +104,26 @@ test('keeps settings number input editable and stores autosave delay as millisec
     .toContain('"debounceMs":2500')
 })
 
+test('applies and persists the selected application theme', async ({ page }) => {
+  await openApp(page)
+
+  await expect(page.getByTestId('app-shell')).toHaveAttribute('data-theme', 'folden-dark')
+  await page.locator('button[title="Settings"]').click()
+  await page.getByRole('button', { name: 'Appearance' }).click()
+  await expect(page.getByTestId('theme-select')).toHaveValue('folden-dark')
+  await page.getByLabel('UI scale').fill('1.1')
+  await page.getByLabel('UI scale').blur()
+
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        (storageKey) => window.localStorage.getItem(storageKey),
+        applicationSettingsStorageKey,
+      ),
+    )
+    .toContain('"theme":"folden-dark"')
+})
+
 test('autosaves existing files but does not autosave scratch documents', async ({ page }) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()

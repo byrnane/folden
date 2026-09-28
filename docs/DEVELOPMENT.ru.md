@@ -198,7 +198,7 @@ build/desktop/
 build/desktop/release/app.exe
 ```
 
-`scripts/tauri.mjs` устанавливает `CARGO_TARGET_DIR=build/desktop`, поэтому артефакты Rust не попадают в `src-tauri/target`. `vite.config.ts` игнорирует и `src-tauri/target`, и `build/desktop`, чтобы избежать конфликтов Windows watcher с заблокированными файлами Cargo.
+`.cargo/config.toml` направляет все локальные сборки Rust в `build/desktop` и отключает инкрементальную компиляцию, чтобы кэш не разрастался. `vite.config.ts` игнорирует и `src-tauri/target`, и `build/desktop`, чтобы избежать конфликтов Windows watcher с заблокированными файлами Cargo.
 
 Source- и Visual-редакторы загружаются отдельными chunks. Baseline после closeout 0.8.5: около 240 KB для стартового chunk, 530 KB для Visual и 609 KB для Source до gzip. Предупреждение Vite с порогом 500 KB ожидаемо остаётся для editor chunks, потому что CodeMirror и Tiptap загружаются только при открытии соответствующего редактора; не скрывайте его повышением глобального warning limit.
 

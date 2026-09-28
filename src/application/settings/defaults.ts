@@ -1,5 +1,6 @@
 import type { ApplicationSettings, LayoutSettings } from './types'
 import { applicationSettingLimits, layoutSettingLimits } from './limits'
+import { defaultThemeId } from './themes'
 
 export const defaultApplicationSettings: ApplicationSettings = {
   autosave: {
@@ -19,6 +20,7 @@ export const defaultApplicationSettings: ApplicationSettings = {
     defaultMarkdownMode: 'visual',
   },
   appearance: {
+    theme: defaultThemeId,
     uiScale: applicationSettingLimits.uiScale.fallback,
     density: 'compact',
     showStatusBar: true,
@@ -42,7 +44,7 @@ export const defaultLayoutSettings: LayoutSettings = {
   splitRatio: layoutSettingLimits.splitRatio.fallback,
   outlineWidth: layoutSettingLimits.outlineWidth.fallback,
   documentMapWidth: layoutSettingLimits.documentMapWidth.fallback,
-  showDocumentOutline: true,
-  showDocumentMap: true,
+  showDocumentOutline: false,
+  showDocumentMap: false,
   focusMode: false,
 }

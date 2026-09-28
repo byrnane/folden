@@ -1,3 +1,5 @@
+import type { ThemeId } from './themes'
+
 export type AutosaveSettings = {
   enabled: boolean
   debounceMs: number
@@ -22,6 +24,7 @@ export type EditorSettings = {
 }
 
 export type AppearanceSettings = {
+  theme: ThemeId
   uiScale: number
   density: 'compact' | 'comfortable'
   showStatusBar: boolean

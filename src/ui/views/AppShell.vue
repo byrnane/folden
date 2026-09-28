@@ -476,6 +476,7 @@ onBeforeUnmount(() => {
       'settings-page': showSettingsView,
     }"
     :style="shellStyle"
+    :data-theme="appSettings.appearance.theme"
     data-testid="app-shell"
   >
     <ActivityRail

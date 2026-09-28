@@ -48,6 +48,22 @@ describe('application settings', () => {
     })
   })
 
+  it('normalizes theme settings without changing the storage format', () => {
+    expect(
+      normalizeApplicationSettings({
+        appearance: { theme: 'folden-dark' },
+      }).appearance.theme,
+    ).toBe('folden-dark')
+
+    expect(
+      normalizeApplicationSettings({
+        appearance: { theme: 'unknown-theme' },
+      }).appearance.theme,
+    ).toBe(defaultApplicationSettings.appearance.theme)
+
+    expect(normalizeApplicationSettings({ appearance: {} }).appearance.theme).toBe('folden-dark')
+  })
+
   it('normalizes persisted layout state without document ownership', () => {
     expect(
       normalizeLayoutSettings({
