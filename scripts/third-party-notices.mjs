@@ -158,9 +158,10 @@ for (const target of targets) {
   const options = { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }
   let result = spawnSync('cargo', metadataArgs, options)
   if (result.status !== 0) {
+    // metadata filters resolve, but still reads dependency manifests for every platform.
     const fetched = spawnSync(
       'cargo',
-      ['fetch', '--locked', '--manifest-path', 'src-tauri/Cargo.toml', '--target', target],
+      ['fetch', '--locked', '--manifest-path', 'src-tauri/Cargo.toml'],
       options,
     )
     if (fetched.status !== 0)

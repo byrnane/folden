@@ -29,7 +29,7 @@ npm run test:e2e
 npm run test:performance
 ```
 
-Из корня создайте и проверьте notices. Генератор загружает четыре поддерживаемых dependency graphs и проверяет upstream license inputs. Сгенерированные документы входят в пакеты, но не коммитятся:
+Из корня создайте и проверьте notices. Генератор загружает исходники из Cargo.lock, получает графы для четырёх поддерживаемых платформ и проверяет upstream license inputs. Сгенерированные документы входят в пакеты, но не коммитятся:
 
 ```text
 npm run licenses:generate

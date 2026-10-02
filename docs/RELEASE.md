@@ -29,7 +29,7 @@ npm run test:e2e
 npm run test:performance
 ```
 
-Generate and check notices from the repository root. The generator fetches the four supported dependency graphs and verifies upstream license inputs; generated legal documents are included in packages, not committed:
+Generate and check notices from the repository root. The generator fetches locked Cargo sources, reads the four supported dependency graphs and verifies upstream license inputs; generated legal documents are included in packages, not committed:
 
 ```text
 npm run licenses:generate
