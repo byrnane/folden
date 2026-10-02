@@ -18,9 +18,20 @@ import {
   stagedPackageNames,
   additionalReleaseFiles,
   checkInstallerNativePayload,
+  command,
 } from './release-verify.mjs'
 import { classifyCargoGraph, dependencyTargets, releaseTargets } from './release-dependencies.mjs'
 import { checkNativeAttribution } from './release-native-audit.mjs'
+
+assert.equal(
+  command(process.execPath, ['-e', 'process.stdin.pipe(process.stdout)'], { input: 'Y\n' }),
+  'Y\n',
+)
+assert.throws(
+  () =>
+    command(process.execPath, ['-e', "process.stderr.write('inspection failed'); process.exit(1)"]),
+  /Package inspection failed: .* \(exit 1\): inspection failed/,
+)
 
 assert.deepEqual(findPrivacyIssues('Public Markdown and https://example.com'), [])
 assert(findPrivacyIssues('ghp_' + 'A'.repeat(30)).includes('access token'))

@@ -135,13 +135,18 @@ export function checkWindowsArchitecture(payload) {
   }
 }
 
-function command(name, args, options = {}) {
+export function command(name, args, options = {}) {
   const result = spawnSync(name, args, {
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
     ...options,
   })
-  if (result.status !== 0) throw new Error(`Package inspection failed: ${name}`)
+  if (result.status !== 0) {
+    const detail = result.error?.message || result.stderr?.toString().trim()
+    throw new Error(
+      `Package inspection failed: ${name} (exit ${result.status})${detail ? `: ${detail}` : ''}`,
+    )
+  }
   return result.stdout
 }
 
@@ -243,14 +248,11 @@ function inspectUnix(filename, version, target, privateValues) {
       chmodSync(filename, 0o755)
       command(path.resolve(filename), ['--appimage-extract'], { cwd: path.resolve(temporary) })
     } else {
-      command('hdiutil', [
-        'attach',
-        '-readonly',
-        '-nobrowse',
-        '-mountpoint',
-        path.resolve(temporary),
-        filename,
-      ])
+      command(
+        'hdiutil',
+        ['attach', '-readonly', '-nobrowse', '-mountpoint', path.resolve(temporary), filename],
+        { input: 'Y\n' }, // The generated DMG presents our own bundled LICENSE.md.
+      )
       mounted = true
       const application = readdirSync(temporary).find((name) => name === 'Folden.app')
       if (!application) throw new Error('Disk image has no Folden.app')
