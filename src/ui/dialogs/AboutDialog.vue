@@ -45,7 +45,11 @@ async function showLegal(kind: 'terms' | 'third-party') {
     </div>
     <p>{{ t('A local writing editor. Your Markdown stays yours.') }}</p>
     <p>
-      {{ t('Free for personal and commercial use. Source code is available for inspection only.') }}
+      {{
+        t(
+          'Free for personal and commercial use. Source available for inspection and private Linux self-build under the usage terms.',
+        )
+      }}
     </p>
     <p>
       {{

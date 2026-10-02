@@ -10,8 +10,8 @@ export const russianMessages = {
   'Public beta': 'Публичная бета',
   'A local writing editor. Your Markdown stays yours.':
     'Локальный редактор текстов. Ваш Markdown принадлежит вам.',
-  'Free for personal and commercial use. Source code is available for inspection only.':
-    'Бесплатно для личных и рабочих задач. Исходники доступны только для ознакомления.',
+  'Free for personal and commercial use. Source available for inspection and private Linux self-build under the usage terms.':
+    'Бесплатно для личных и рабочих задач. Исходники доступны для ознакомления и приватной Linux-сборки на условиях лицензии.',
   'No accounts or telemetry. Remote images load only with your permission. Local diagnostics are exported only when you ask.':
     'Без аккаунтов и телеметрии. Сетевые изображения загружаются с вашего разрешения. Локальная диагностика экспортируется по вашему запросу.',
   Help: 'Помощь',
