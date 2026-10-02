@@ -44,6 +44,7 @@ import DocumentMap from '../navigation/DocumentMap.vue'
 import DocumentOutline from '../navigation/DocumentOutline.vue'
 import {
   parseMarkdownBlockDocument,
+  updateMarkdownBlockDocument,
   type MarkdownBlockDocument,
 } from '../../domain/markdown/blockDocument'
 import type { LogicalSelectionAnchor } from '../../domain/markdown/blockDocument'
@@ -324,26 +325,44 @@ function trailingBlockWhitespace(value: string) {
   return /(?:\r?\n[\t ]*)+$/u.exec(value)?.[0] ?? '\n\n'
 }
 
-function snapshotVisualNodes(currentEditor: CoreEditor, source: string) {
+function snapshotVisualNodes(
+  currentEditor: CoreEditor,
+  source: string,
+  blockDocument = props.blockDocument,
+) {
   const blocks =
-    props.blockDocument?.source === source
-      ? props.blockDocument.blocks
-      : parseMarkdownBlockDocument(source, props.blockDocument ?? undefined).blocks
+    blockDocument?.source === source
+      ? blockDocument.blocks
+      : parseMarkdownBlockDocument(source, blockDocument ?? undefined).blocks
+  const previousSnapshots = new Map(
+    visualNodeSnapshots.map((snapshot, index) => [
+      snapshot.blockId,
+      { snapshot, hasFollowingBlock: index < visualNodeSnapshots.length - 1 },
+    ]),
+  )
   let nodeIndex = 0
   visualNodeSnapshots = blocks.map((block, index) => {
-    const projection = buildVisualMarkdownProjection(block.rawSource, {
-      source: block.rawSource,
-      blocks: [block],
-    })
     // A following heading gives whitespace the same inter-block context as the
     // complete document. Parsing an isolated block treats its separator as an
     // extra empty paragraph in current Tiptap versions.
     const hasFollowingBlock = index < blocks.length - 1
-    const parsedNodeCount =
-      currentEditor.storage.markdown.manager.parse(
-        hasFollowingBlock ? `${projection}# Folden snapshot boundary` : projection,
-      ).content?.length ?? 0
-    const nodeCount = parsedNodeCount - (hasFollowingBlock ? 1 : 0)
+    const previous = previousSnapshots.get(block.id)
+    let nodeCount = previous?.snapshot.nodes.length ?? 0
+    if (
+      !previous ||
+      previous.snapshot.rawSource !== block.rawSource ||
+      previous.hasFollowingBlock !== hasFollowingBlock
+    ) {
+      const projection = buildVisualMarkdownProjection(block.rawSource, {
+        source: block.rawSource,
+        blocks: [block],
+      })
+      const parsedNodeCount =
+        currentEditor.storage.markdown.manager.parse(
+          hasFollowingBlock ? `${projection}# Folden snapshot boundary` : projection,
+        ).content?.length ?? 0
+      nodeCount = parsedNodeCount - (hasFollowingBlock ? 1 : 0)
+    }
     const nodes: ProseMirrorNode[] = []
     for (
       let offset = 0;
@@ -450,6 +469,10 @@ function commitVisualContent(currentEditor: CoreEditor, nextContent: string) {
   if (isVisuallyEquivalentMarkdown(nextContent, lastVisualMarkdown)) return
   const patch = createDocumentPatch(lastVisualMarkdown, nextContent)
   if (!patch) return
+  const blockDocument =
+    props.blockDocument?.source === lastVisualMarkdown
+      ? updateMarkdownBlockDocument(props.blockDocument, nextContent, patch)
+      : null
   emit('document-update', {
     documentId: props.documentId,
     originViewId: props.viewId,
@@ -461,7 +484,7 @@ function commitVisualContent(currentEditor: CoreEditor, nextContent: string) {
   lastAppliedRevision += 1
   lastVisualMarkdown = nextContent
   hasVisualChanges = true
-  snapshotVisualNodes(currentEditor, nextContent)
+  snapshotVisualNodes(currentEditor, nextContent, blockDocument)
 }
 
 function reparseRawBlock(rawSource: string, position: number) {

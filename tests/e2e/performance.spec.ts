@@ -10,6 +10,8 @@ const budgets = JSON.parse(readFileSync(resolve('tests/performance/budgets.json'
 
 test.skip(!process.env.FOLDEN_PERFORMANCE, 'runs through npm run test:performance')
 test.setTimeout(60_000)
+// DOM snapshots and video recording add work to the timings being measured.
+test.use({ trace: 'off', video: 'off' })
 
 function percentile(values: number[], percentileValue: number) {
   const sorted = [...values].sort((left, right) => left - right)
@@ -144,15 +146,15 @@ test('large document analysis stays off the editing hot path', async ({ page }) 
   })
   const inputP95Ms = percentile(metrics.inputDurationsMs, 0.95)
   const analysisMedianMs = median(analysisRunsMs)
-  expect(inputP95Ms).toBeLessThanOrEqual(budgets.metrics.inputP95Ms.maxMs)
-  expect(analysisMedianMs).toBeLessThanOrEqual(budgets.metrics.documentSettledMedianMs.maxMs)
-  expect(metrics.longTasks.filter(({ duration }) => duration >= 50)).toEqual([])
   writePerformanceReport('browser-document.json', {
     inputDurationsMs: metrics.inputDurationsMs,
     inputP95Ms,
     analysisRunsMs,
     analysisMedianMs,
   })
+  expect(inputP95Ms).toBeLessThanOrEqual(budgets.metrics.inputP95Ms.maxMs)
+  expect(analysisMedianMs).toBeLessThanOrEqual(budgets.metrics.documentSettledMedianMs.maxMs)
+  expect(metrics.longTasks.filter(({ duration }) => duration >= 50)).toEqual([])
 })
 
 test('a 1k-entry directory renders inside the expansion budget', async ({ page }) => {
@@ -168,39 +170,51 @@ test('a 1k-entry directory renders inside the expansion budget', async ({ page }
   const directoryRunsMs: number[] = []
   for (let run = 0; run < 3; run += 1) {
     const directory = `large-${run}`
-    const started = await page.evaluate((testId) => {
-      const target = window as typeof window & { __foldenFirstWorkspaceRender?: number }
-      delete target.__foldenFirstWorkspaceRender
-      const observer = new MutationObserver(() => {
-        if (document.querySelector(`[data-testid="${CSS.escape(testId)}"]`)) {
-          target.__foldenFirstWorkspaceRender = performance.now()
-          observer.disconnect()
-        }
-      })
-      observer.observe(document.body, { childList: true, subtree: true })
-      return performance.now()
-    }, `workspace-entry-${directory}\\file-0.md`)
+    await page.evaluate(
+      ({ directoryId, fileId }) => {
+        const target = window as typeof window & { __foldenWorkspaceRenderMs?: number }
+        delete target.__foldenWorkspaceRenderMs
+        let started = 0
+        document.querySelector(`[data-testid="${directoryId}"]`)!.addEventListener(
+          'click',
+          () => {
+            started = performance.now()
+          },
+          { capture: true, once: true },
+        )
+        const observer = new MutationObserver(() => {
+          if (started && document.querySelector(`[data-testid="${CSS.escape(fileId)}"]`)) {
+            target.__foldenWorkspaceRenderMs = performance.now() - started
+            observer.disconnect()
+          }
+        })
+        observer.observe(document.body, { childList: true, subtree: true })
+      },
+      {
+        directoryId: `workspace-entry-${directory}`,
+        fileId: `workspace-entry-${directory}\\file-0.md`,
+      },
+    )
     await page.getByTestId(`workspace-entry-${directory}`).click()
     await expect
       .poll(() =>
         page.evaluate(
           () =>
-            (window as typeof window & { __foldenFirstWorkspaceRender?: number })
-              .__foldenFirstWorkspaceRender,
+            (window as typeof window & { __foldenWorkspaceRenderMs?: number })
+              .__foldenWorkspaceRenderMs,
         ),
       )
       .not.toBeUndefined()
-    const firstRender = await page.evaluate(
+    const renderDuration = await page.evaluate(
       () =>
-        (window as typeof window & { __foldenFirstWorkspaceRender: number })
-          .__foldenFirstWorkspaceRender,
+        (window as typeof window & { __foldenWorkspaceRenderMs: number }).__foldenWorkspaceRenderMs,
     )
-    directoryRunsMs.push(firstRender - started)
+    directoryRunsMs.push(renderDuration)
     await expect(page.getByTestId(`workspace-entry-${directory}\\file-999.md`)).toBeVisible()
   }
   const directoryMedianMs = median(directoryRunsMs)
-  expect(directoryMedianMs).toBeLessThanOrEqual(budgets.metrics.directoryRenderMedianMs.maxMs)
   writePerformanceReport('browser-workspace.json', { directoryRunsMs, directoryMedianMs })
+  expect(directoryMedianMs).toBeLessThanOrEqual(budgets.metrics.directoryRenderMedianMs.maxMs)
 })
 
 test('a long game document stays responsive in Visual', async ({ page }) => {
