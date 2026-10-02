@@ -171,7 +171,12 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
           {{ t('Error') }}
         </span>
 
-        <span class="tree-actions" @pointerdown.stop @dragstart.stop.prevent>
+        <span
+          v-if="pathMatches(activePath, entry.path) || pathMatches(selectedPath, entry.path)"
+          class="tree-actions"
+          @pointerdown.stop
+          @dragstart.stop.prevent
+        >
           <button
             type="button"
             class="tree-action icon-button"
