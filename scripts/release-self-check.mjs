@@ -19,7 +19,7 @@ import {
   additionalReleaseFiles,
   checkInstallerNativePayload,
 } from './release-verify.mjs'
-import { classifyCargoGraph, releaseTargets } from './release-dependencies.mjs'
+import { classifyCargoGraph, dependencyTargets, releaseTargets } from './release-dependencies.mjs'
 import { checkNativeAttribution } from './release-native-audit.mjs'
 
 assert.deepEqual(findPrivacyIssues('Public Markdown and https://example.com'), [])
@@ -130,9 +130,10 @@ assert.deepEqual([...graph.get('library')], ['runtime'])
 assert.deepEqual([...graph.get('macro')], ['build'])
 assert.deepEqual([...graph.get('builder')], ['build'])
 assert.deepEqual(
-  Object.values(releaseTargets).sort(),
+  Object.values(dependencyTargets).sort(),
   Object.keys((await import('./release-verify.mjs')).releaseFormats).sort(),
 )
+assert.deepEqual(Object.keys(releaseTargets), ['Windows x64', 'macOS x64', 'macOS arm64'])
 const executable = Buffer.alloc(80)
 executable.write('MZ')
 executable.writeUInt32LE(64, 60)

@@ -6,14 +6,15 @@ Folden 0.12 is a beta. The workflow prepares a **draft prerelease** for owner re
 
 ## Packages
 
-| Target              | Runner         | Artifact          |
-| ------------------- | -------------- | ----------------- |
-| Windows x64         | Windows 2022   | NSIS .exe         |
-| Linux x64           | Ubuntu 22.04   | AppImage and .deb |
-| macOS Intel         | macOS 15 Intel | .dmg              |
-| macOS Apple Silicon | macOS 15 ARM   | .dmg              |
+| Target              | Runner         | Artifact  |
+| ------------------- | -------------- | --------- |
+| Windows x64         | Windows 2022   | NSIS .exe |
+| macOS Intel         | macOS 15 Intel | .dmg      |
+| macOS Apple Silicon | macOS 15 ARM   | .dmg      |
 
 macOS deployment minimum is 14. Windows requires WebView2; its installer can download Microsoft's runtime. Windows packages are unsigned. macOS packages are ad-hoc signed and are not notarized. This matrix defines the supported baseline, not evidence that a native smoke test passed.
+
+Linux is outside official beta packaging and native acceptance. The [private self-build instructions](DEVELOPMENT.md#linux-self-build) preserve Linux source support and dependency notices without promising official packages.
 
 ## Local gates
 
@@ -29,7 +30,7 @@ npm run test:e2e
 npm run test:performance
 ```
 
-Generate and check notices from the repository root. The generator fetches locked Cargo sources, reads the four supported dependency graphs and verifies upstream license inputs; generated legal documents are included in packages, not committed:
+Generate and check notices from the repository root. The generator fetches locked Cargo sources, reads platform dependency graphs (including Linux self-builds) and verifies upstream license inputs; generated legal documents are included in packages, not committed:
 
 ```text
 npm run licenses:generate
@@ -51,11 +52,9 @@ npm run release:build -- --target x86_64-pc-windows-msvc
 npm run release:verify -- --target x86_64-pc-windows-msvc
 ```
 
-Use the matching target from the table for Linux/macOS. Verification extracts the **final package**, checks version, architecture, legal resources and privacy, and stages only reviewed formats with SHA256SUMS.txt. Linux payloads must match the current version-checked build. Source maps, dumps, logs, private build paths and old smoke installers fail the gate.
+Use x86_64-apple-darwin or aarch64-apple-darwin for the matching macOS architecture. Verification extracts the **final package**, checks version, architecture, legal resources and privacy, and stages only reviewed formats with SHA256SUMS.txt. Source maps, dumps, logs, private build paths and old smoke installers fail the gate.
 
-THIRD_PARTY_NOTICES.md is a conservative npm/Cargo inventory with runtime/build scopes; it is not a complete inventory of OS libraries copied into an AppImage. The Linux package audit must identify every shipped ELF component and the AppImage runtime, record license/source provenance, and resolve unknown components before release.
-
-Windows distribution additionally contains the unmodified NSIS 3.11 corresponding source archive, nsis-3.11-src.tar.bz2, with its pinned SHA-256 in the same checksum file. It accompanies the installer under NSIS/LZMA terms and is not an installation package. The Linux report must classify the **whole** payload, including non-ELF AppRun scripts, fonts, XML/configuration, themes and assets. It must reconcile finalized attribution inside both Linux packages and the About licenses view; a separate ELF report/companion does not complete that requirement. Unknown native components and unfinished payload attribution keep Linux publication blocked.
+THIRD_PARTY_NOTICES.md is a conservative npm/Cargo inventory with runtime/build scopes. Windows distribution additionally contains the unmodified NSIS 3.11 corresponding source archive, nsis-3.11-src.tar.bz2, with its pinned SHA-256 in the same checksum file. It accompanies the installer under NSIS/LZMA terms and is not an installation package. Linux release scripts retain their payload audit guards, but no Linux package enters this beta's official artifact list.
 
 ## Isolated candidate and draft
 
@@ -65,12 +64,12 @@ After reviewing the sanitized tree/history and approving a candidate push, run C
 
 After explicit approval, create the existing v0.12.0 tag at the tested commit. Manually dispatch **Draft beta release** with that tag as both the workflow ref and tag input. The web UI dispatch button depends on default-branch workflow availability. A candidate push registers/runs this workflow; after that, use CLI/API dispatch with the exact approved tag as workflow ref if the UI button is unavailable. For example: `gh workflow run release.yml --ref v0.12.0 -f tag=v0.12.0 -F create_draft=true`. If GitHub rejects dispatch, retain the candidate artifacts for review rather than changing public history just to expose a button. The optional create_draft input is false by default. Only the final draft job has repository write permission; it creates a draft prerelease, refuses to replace an existing release, and never publishes it. Configure the release-draft environment with owner approval before enabling this step.
 
-Review all five packages, the aggregate checksum file, license/notices, and [release notes](releases/v0.12.0.md). Publish only after native acceptance on all supported OS targets: clean launch, save/reopen, RU/EN, recovery/conflicts, local images/links, printing, installation/update/uninstall. Record results in [BETA-0.12.0.md](BETA-0.12.0.md); browser mocks do not prove native dialogs or installer behavior.
+Review all three packages, the aggregate checksum file, license/notices, and [release notes](releases/v0.12.0.md). Publish only after native acceptance on the Windows and macOS targets: clean launch, save/reopen, RU/EN, recovery/conflicts, local images/links, printing, installation/update/uninstall. Record results in [BETA-0.12.0.md](BETA-0.12.0.md); browser mocks do not prove native dialogs or installer behavior.
 
-A dispatched build creates fresh packages: native-test the **final draft files** before publication, even if an earlier candidate was accepted. To preserve already accepted candidate packages instead, download that exact run's four artifacts into `build/release/folden-<target>/` in a clean checkout of the tested commit. After tag approval, set `RELEASE_TAG=v0.12.0` and `RELEASE_COMMIT=<tested SHA>`, then run `node scripts/release-draft.mjs`. It verifies canonical filenames, each downloaded checksum, matching legal resources, a clean checkout and the remote tag's immutable commit. It copies those accepted bytes without rebuilding, and creates only a draft prerelease. Publish only the exact native-accepted files.
+A dispatched build creates fresh packages: native-test the **final draft files** before publication, even if an earlier candidate was accepted. To preserve already accepted candidate packages instead, download that exact run's three artifacts into `build/release/folden-<target>/` in a clean checkout of the tested commit. After tag approval, set `RELEASE_TAG=v0.12.0` and `RELEASE_COMMIT=<tested SHA>`, then run `node scripts/release-draft.mjs`. It verifies canonical filenames, each downloaded checksum, matching legal resources, a clean checkout and the remote tag's immutable commit. It copies those accepted bytes without rebuilding, and creates only a draft prerelease. Publish only the exact native-accepted files.
 
 ## Repository settings
 
 Review [the settings payload](../.github/repository-settings.json) and [setup instructions](../.github/REPOSITORY_SETUP.md). Repository metadata, topics, private vulnerability reporting, secret scanning, push protection and the release-draft environment were applied and verified on 2026-10-02. Branch protection remains deferred until the separately approved public-history replacement. History replacement, commits, pushes, tags and publication remain separately approved steps.
 
-The official binary may be used free of charge for personal and commercial work. Author source is provided for inspection under [LICENSE.md](../LICENSE.md). Third-party terms and user content ownership are separate.
+The official binary may be used free of charge for personal and commercial work. Author source is provided for inspection with a limited private Linux self-build permission under [LICENSE.md](../LICENSE.md). Third-party terms and user content ownership are separate.

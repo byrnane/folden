@@ -2,7 +2,7 @@
 
 [English](DEVELOPMENT.md) · [Архитектура](ARCHITECTURE.ru.md) · [Релиз](RELEASE.ru.md)
 
-Инструкция предназначена для владельца проекта. Публичный доступ к исходникам не разрешает их изменение и распространение; условия находятся в [LICENSE.md](../LICENSE.md).
+Инструкция предназначена для владельца проекта; ниже также описана ограниченно разрешённая самостоятельная сборка на Linux. Публичный доступ к исходникам не разрешает их изменение и распространение; условия находятся в [LICENSE.md](../LICENSE.md).
 
 Зафиксированы **Node 24.16.0** (.nvmrc) и **Rust 1.96.0** (rust-toolchain.toml). Установите [prerequisites Tauri](https://v2.tauri.app/start/prerequisites/): C++ Build Tools и WebView2 для Windows, Xcode Command Line Tools для macOS либо WebKitGTK 4.1 и библиотеки разработки для Ubuntu 22.04. Пакеты macOS требуют систему 14+.
 
@@ -12,6 +12,21 @@ npm run app:dev
 ```
 
 Разработка использует com.folden.editor.dev с отдельными settings/session/recovery. app:run запускает release-профиль. Замена установленного приложения и очистка профилей требуют разрешения и проверенного backup.
+
+## Самостоятельная сборка на Linux
+
+Официальные пакеты беты выпускаются для Windows и macOS. На Linux разрешена только приватная локальная сборка неизменённых исходников для собственной личной или коммерческой работы по [LICENSE.md](../LICENSE.md), без гарантии установки и приёмки на реальной ОС. Установите закреплённые версии Node/Rust и [зависимости Tauri для Linux](https://v2.tauri.app/start/prerequisites/#linux); база сборки — Ubuntu 22.04 с WebKitGTK 4.1. Из корня репозитория:
+
+```text
+npm ci
+npm run app:build
+npm run licenses:check
+npm run app:run
+```
+
+Так создаётся локальный executable без установщика. Сохраняйте сгенерированные notices, лицензии и права на исходники зависимостей. Изменять или распространять эту сборку и представлять её официальным релизом запрещено. Подготовка Linux-пакетов и атрибуция содержимого AppImage в эту бету не входят.
+
+## Проверки владельца проекта
 
 | Команда                  | Назначение                                                    |
 | ------------------------ | ------------------------------------------------------------- |
@@ -28,11 +43,11 @@ npm run app:dev
 | npm run privacy:check    | Приватные данные в source и исторические identities           |
 | npm run licenses:check   | Детерминированный inventory установленных locked dependencies |
 
-Native checks из src-tauri: cargo fmt --check, cargo clippy --locked --all-targets -- -D warnings, cargo test --locked. CI проверяет native code на четырёх release targets; browser E2E запускается на Windows. Приёмка реальных OS-сценариев проводится отдельно.
+Native checks из src-tauri: cargo fmt --check, cargo clippy --locked --all-targets -- -D warnings, cargo test --locked. CI проверяет native code на трёх официальных release targets; browser E2E запускается на Windows. Приёмка реальных OS-сценариев проводится отдельно.
 
 Frontend output — dist/, Cargo — build/desktop/, incremental compilation отключена. Release targets создают build/desktop/<target>/release/. После проверки финального пакета публикуемые файлы готовятся в build/release/<target>/. Для исторических checkout используйте отдельный target-dir, чтобы bundler не получил старый executable.
 
-Dev и frontend builds автоматически создают THIRD_PARTY_NOTICES.md. Этот файл и загруженные upstream license inputs игнорируются Git; полные notices входят в приложение, установщики и release artifacts. Генератор загружает исходники из Cargo.lock, получает графы для четырёх поддерживаемых платформ и проверяет закреплённые тексты лицензий по SHA-256. Первый запуск требует сети, следующие используют проверенные license inputs из .cache/. После изменения зависимостей выполните npm ci, npm run licenses:generate, проверьте notices/provenance и npm run licenses:check. Дополнительные OS-библиотеки AppImage проверяются в финальном payload.
+Dev и frontend builds автоматически создают THIRD_PARTY_NOTICES.md. Этот файл и загруженные upstream license inputs игнорируются Git; полные notices входят в приложение, установщики и release artifacts. Генератор загружает исходники из Cargo.lock, получает платформенные графы зависимостей и проверяет закреплённые тексты лицензий по SHA-256. Linux notices сохраняются для самостоятельных сборок. Первый запуск требует сети, следующие используют проверенные license inputs из .cache/. После изменения зависимостей выполните npm ci, npm run licenses:generate, проверьте notices/provenance и npm run licenses:check.
 
 Кеши, диагностика, личные документы и .codex исключаются из публичного экспорта. Privacy checks показывают только имена файлов и причины. Для synthetic paths допускаются только точные file/literal allowlists, без исключения всех тестов. Оригинальный Git не меняется при подготовке отдельной очищенной истории.
 

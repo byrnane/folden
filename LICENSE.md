@@ -10,7 +10,9 @@ This permission does not transfer ownership of Folden. It does not permit resale
 
 ## Source code, documentation, and project assets
 
-The Folden source code, documentation, and project assets are made publicly visible for reading and inspection. They are source-available, not open-source software. No permission is granted to reuse, modify, compile, redistribute, sublicense, or incorporate these materials into another work, except where applicable law provides otherwise.
+The Folden source code, documentation, and project assets are made publicly visible for reading and inspection. They are source-available, not open-source software. Except for the Linux self-build permission below, no permission is granted to reuse, modify, compile, redistribute, sublicense, or incorporate these materials into another work, except where applicable law provides otherwise.
+
+You may make a private copy of the unmodified Folden source code, compile it for Linux, and run the resulting local build free of charge for your own personal or commercial work. You may not modify or redistribute the Folden source code or the resulting build, or incorporate the author's materials into another work. This limited permission does not change the independent rights granted by third-party licenses.
 
 Nothing in these terms restricts the rights to view and fork a public repository on GitHub that are provided by GitHub's applicable Terms of Service. That platform permission does not grant additional rights to use or distribute the Folden source code outside those terms.
 

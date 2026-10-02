@@ -1,6 +1,6 @@
 {
   "repository": {
-    "description": "Local-first Markdown editor with Source and Visual modes. Windows, Linux, macOS. RU/EN. Source available for inspection.",
+    "description": "Local-first Markdown editor with Source and Visual modes. Windows/macOS beta, Linux self-build. RU/EN. Source available for inspection.",
     "homepage": "https://github.com/byrnane/folden#readme",
     "has_issues": true,
     "has_wiki": false,
@@ -27,7 +27,6 @@
       "contexts": [
         "Quality and Windows browser tests",
         "Native x86_64-pc-windows-msvc",
-        "Native x86_64-unknown-linux-gnu",
         "Native x86_64-apple-darwin",
         "Native aarch64-apple-darwin"
       ]

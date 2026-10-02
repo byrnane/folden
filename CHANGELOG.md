@@ -11,9 +11,9 @@
 - Добавлены оригинальное оформление, документация RU/EN и About с версией, лицензией и ссылками проекта.
 - Добавлены платформенные native paths и операции с файлами для Windows, Linux и macOS с совместимым чтением прежних путей.
 - Добавлены Command shortcuts и native printing для macOS.
-- Подготовлены Windows NSIS, Linux AppImage/deb и macOS Intel/Apple Silicon DMG; сохранены прежние Windows publisher/identifier.
-- Зафиксированы Node/Rust, добавлены native CI четырёх платформ, проверка финальных пакетов и SHA-256.
-- Добавлены условия бесплатного использования официальных бинарников и ознакомления с source, third-party attribution и privacy checks.
+- Подготовлены Windows NSIS и macOS Intel/Apple Silicon DMG; сохранены прежние Windows publisher/identifier. Linux оставлен для приватной самостоятельной сборки.
+- Зафиксированы Node/Rust, добавлены native CI трёх официальных targets, проверка финальных пакетов и SHA-256.
+- Добавлены условия бесплатного использования официальных бинарников, ознакомления с source и приватной Linux-сборки, third-party attribution и privacy checks.
 - Добавлен ручной workflow черновика prerelease; публичная публикация остаётся отдельным решением владельца.
 
 ## 0.11.0 - 2026-09-30

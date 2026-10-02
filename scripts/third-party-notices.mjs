@@ -12,7 +12,7 @@ import {
 import path from 'node:path'
 import process from 'node:process'
 import { format } from 'prettier'
-import { classifyCargoGraph, releaseTargets } from './release-dependencies.mjs'
+import { classifyCargoGraph, dependencyTargets } from './release-dependencies.mjs'
 
 function verifyLicenseBytes(bytes, expected) {
   if (
@@ -98,7 +98,7 @@ if (process.argv.includes('--self-check')) {
   process.exit(0)
 }
 
-const targets = Object.values(releaseTargets)
+const targets = Object.values(dependencyTargets)
 const root = process.cwd()
 const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'))
 const records = []

@@ -1,9 +1,13 @@
-export const releaseTargets = {
+export const dependencyTargets = {
   'Windows x64': 'x86_64-pc-windows-msvc',
   'Linux x64': 'x86_64-unknown-linux-gnu',
   'macOS x64': 'x86_64-apple-darwin',
   'macOS arm64': 'aarch64-apple-darwin',
 }
+
+export const releaseTargets = Object.fromEntries(
+  Object.entries(dependencyTargets).filter(([platform]) => platform !== 'Linux x64'),
+)
 
 export function classifyCargoGraph(metadata) {
   const nodes = new Map(metadata.resolve.nodes.map((node) => [node.id, node]))
