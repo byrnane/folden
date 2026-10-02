@@ -1,5 +1,14 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  rmSync,
+} from 'node:fs'
 import path from 'node:path'
 import { findPrivacyIssues, sourcePrivacyIssues } from './privacy-check.mjs'
 import {
@@ -133,18 +142,115 @@ checkWindowsArchitecture(executable)
 executable.writeUInt16LE(0x14c, 68)
 assert.throws(() => checkWindowsArchitecture(executable))
 mkdirSync('.cache', { recursive: true })
-const directory = mkdtempSync(path.join('.cache', 'release-check-'))
-assert.equal(path.dirname(path.resolve(directory)), path.resolve('.cache'))
+const directory = path.resolve(mkdtempSync(path.join('.cache', 'release-check-')))
+assert.equal(path.dirname(directory), path.resolve('.cache'))
 try {
+  const licenseCheck = spawnSync(
+    process.execPath,
+    ['scripts/third-party-notices.mjs', '--self-check'],
+    {
+      encoding: 'utf8',
+    },
+  )
+  assert.equal(licenseCheck.status, 0, licenseCheck.stderr)
   const filename = path.join(directory, 'example.txt')
   writeFileSync(filename, 'abc')
   assert.equal(
     checksumLines([filename]),
     'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  example.txt\n',
   )
+  const version = '0.12.0'
+  const notices = Buffer.from('Third-party fixture\r\n')
+  mkdirSync(path.join(directory, 'scripts'))
+  writeFileSync(
+    path.join(directory, 'scripts', 'native-distribution-licenses.json'),
+    readFileSync('scripts/native-distribution-licenses.json'),
+  )
+  writeFileSync(path.join(directory, 'package.json'), JSON.stringify({ version }))
+  writeFileSync(path.join(directory, 'LICENSE.md'), 'Fixture usage terms\n')
+  for (const target of Object.values(releaseTargets)) {
+    const artifact = path.join(directory, 'build', 'release', `folden-${target}`)
+    mkdirSync(artifact, { recursive: true })
+    const names = [
+      ...stagedPackageNames(version, target),
+      ...additionalReleaseFiles(target),
+      'LICENSE.md',
+      'THIRD_PARTY_NOTICES.md',
+    ]
+    for (const name of names)
+      writeFileSync(
+        path.join(artifact, name),
+        name === 'THIRD_PARTY_NOTICES.md'
+          ? notices
+          : name === 'LICENSE.md'
+            ? 'Fixture usage terms\n'
+            : 'Fixture payload\n',
+      )
+    writeFileSync(
+      path.join(artifact, 'SHA256SUMS.txt'),
+      checksumLines(names.map((name) => path.join(artifact, name))),
+    )
+  }
+  const preload = path.join(directory, 'mock-commands.cjs')
+  writeFileSync(
+    preload,
+    `
+const { writeFileSync } = require('node:fs')
+require('node:child_process').spawnSync = (command, args) => {
+  if (command === 'git') return {
+    status: 0,
+    stdout: args[0] === 'status' ? '' : args[0] === 'ls-remote'
+      ? process.env.RELEASE_COMMIT + '\\trefs/tags/' + process.env.RELEASE_TAG + '\\n'
+      : process.env.RELEASE_COMMIT + '\\n',
+  }
+  if (command === 'gh' && args[0] === 'release' && args[1] === 'view') return { status: 1 }
+  if (command === 'gh' && args[0] === 'release' && args[1] === 'create') {
+    writeFileSync('gh-created.json', JSON.stringify(args))
+    return { status: 0 }
+  }
+  throw new Error('Unexpected test command: ' + command)
+}
+require('node:module').syncBuiltinESMExports()
+`,
+  )
+  const runDraft = () =>
+    spawnSync(process.execPath, ['--require', preload, path.resolve('scripts/release-draft.mjs')], {
+      cwd: directory,
+      env: { ...process.env, RELEASE_TAG: `v${version}`, RELEASE_COMMIT: 'a'.repeat(40) },
+      encoding: 'utf8',
+    })
+  const created = path.join(directory, 'gh-created.json')
+  const draft = path.join(directory, 'build', 'draft', `v${version}`)
+  assert(!existsSync(path.join(directory, 'THIRD_PARTY_NOTICES.md')))
+  const successfulDraft = runDraft()
+  assert.equal(successfulDraft.status, 0, successfulDraft.stderr)
+  assert(existsSync(created))
+  assert(readFileSync(path.join(draft, 'THIRD_PARTY_NOTICES.md')).equals(notices))
+  assert(draft.startsWith(`${directory}${path.sep}`))
+  rmSync(draft, { recursive: true })
+  rmSync(created)
+  const changedArtifact = path.join(
+    directory,
+    'build',
+    'release',
+    `folden-${Object.values(releaseTargets).at(-1)}`,
+  )
+  writeFileSync(path.join(changedArtifact, 'THIRD_PARTY_NOTICES.md'), 'Different notices\n')
+  writeFileSync(
+    path.join(changedArtifact, 'SHA256SUMS.txt'),
+    checksumLines(
+      readdirSync(changedArtifact)
+        .filter((name) => name !== 'SHA256SUMS.txt')
+        .map((name) => path.join(changedArtifact, name)),
+    ),
+  )
+  const rejectedDraft = runDraft()
+  assert.notEqual(rejectedDraft.status, 0)
+  assert.match(rejectedDraft.stderr, /inconsistent third-party notices/)
+  assert(!existsSync(created))
 } finally {
   rmSync(directory, { recursive: true, force: true })
 }
 console.log(
-  'Release self-check passed: privacy patterns, exact artifact selection, and SHA-256 manifest.',
+  'Release self-check passed: privacy patterns, exact artifact selection, SHA-256 manifest, and draft artifact notices.',
 )

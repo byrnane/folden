@@ -2,6 +2,8 @@ node_modules/
 dist/
 build/
 .cache/
+THIRD_PARTY_NOTICES.md
+scripts/licenses/
 .codex/
 AGENTS.md
 AGENTS.universal.md

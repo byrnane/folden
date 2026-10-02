@@ -29,11 +29,16 @@ npm run test:e2e
 npm run test:performance
 ```
 
-From src-tauri, fetch only the supported targets, then check generated notices:
+Generate and check notices from the repository root. The generator fetches the four supported dependency graphs and verifies upstream license inputs; generated legal documents are included in packages, not committed:
 
 ```text
-cargo fetch --locked --target x86_64-pc-windows-msvc --target x86_64-unknown-linux-gnu --target x86_64-apple-darwin --target aarch64-apple-darwin
-npm --prefix .. run licenses:check
+npm run licenses:generate
+npm run licenses:check
+```
+
+From src-tauri:
+
+```text
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked

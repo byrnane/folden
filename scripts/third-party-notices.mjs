@@ -1,10 +1,102 @@
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { readFileSync, readdirSync, writeFileSync, renameSync, existsSync } from 'node:fs'
+import assert from 'node:assert/strict'
+import {
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  renameSync,
+  existsSync,
+  mkdirSync,
+} from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { format } from 'prettier'
 import { classifyCargoGraph, releaseTargets } from './release-dependencies.mjs'
+
+function verifyLicenseBytes(bytes, expected) {
+  if (
+    !/^[a-f0-9]{64}$/.test(expected) ||
+    createHash('sha256').update(bytes).digest('hex') !== expected
+  )
+    throw new Error('Third-party license input checksum mismatch')
+  return bytes
+}
+
+function licenseInputText(bytes, input) {
+  let text = bytes.toString('utf8').replace(/\r\n/g, '\n')
+  if (input.format === 'rust-library-html') {
+    // This pinned provider document uses only decimal entities; preserve its complete body.
+    text = text
+      .match(/<body>([\s\S]*?)<\/body>/)[1]
+      .replace(/<\/(?:h\d|p|li|pre|div)>/g, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&#(\d+);/g, (_, value) => String.fromCodePoint(Number(value)))
+  }
+  return text.trim()
+}
+
+async function acquireLicenseInput(input) {
+  if (new globalThis.URL(input.url).protocol !== 'https:')
+    throw new Error('License source must use HTTPS')
+  const expected = input.contentSha256 || input.sha256
+  if (!/^[a-f0-9]{64}$/.test(expected)) throw new Error('Invalid license input checksum')
+  const directory = path.join('.cache', 'license-inputs')
+  mkdirSync(directory, { recursive: true })
+  const filename = path.join(directory, expected)
+  let bytes
+  if (existsSync(filename)) bytes = verifyLicenseBytes(readFileSync(filename), expected)
+  else {
+    if (input.toolchainFile) {
+      const sysroot = spawnSync('rustc', ['--print', 'sysroot'], { encoding: 'utf8' })
+      const source = sysroot.status === 0 && path.join(sysroot.stdout.trim(), input.toolchainFile)
+      if (source && existsSync(source)) {
+        const installed = readFileSync(source)
+        if (createHash('sha256').update(installed).digest('hex') === expected) bytes = installed
+      }
+    }
+    if (!bytes) {
+      const archive = path.join(directory, `${input.sha256}.tar.xz`)
+      let downloaded
+      if (input.archiveMember && existsSync(archive)) {
+        downloaded = verifyLicenseBytes(readFileSync(archive), input.sha256)
+      } else {
+        const response = await globalThis.fetch(input.url, {
+          signal: globalThis.AbortSignal.timeout(60000),
+        })
+        if (!response.ok) throw new Error(`Cannot obtain third-party license: ${input.url}`)
+        downloaded = verifyLicenseBytes(Buffer.from(await response.arrayBuffer()), input.sha256)
+      }
+      if (input.archiveMember) {
+        if (!existsSync(archive)) writeFileSync(archive, downloaded)
+        const extracted = spawnSync('tar', ['-xOf', archive, input.archiveMember], {
+          maxBuffer: 2 * 1024 * 1024,
+        })
+        if (extracted.status !== 0) throw new Error('Cannot extract Rust provider license notice')
+        bytes = extracted.stdout
+      } else bytes = downloaded
+    }
+    verifyLicenseBytes(bytes, expected)
+    writeFileSync(filename, bytes)
+  }
+  return licenseInputText(bytes, input)
+}
+
+if (process.argv.includes('--self-check')) {
+  const bytes = Buffer.from('abc')
+  const checksum = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+  assert.equal(verifyLicenseBytes(bytes, checksum), bytes)
+  assert.throws(() => verifyLicenseBytes(Buffer.from('changed'), checksum), /checksum mismatch/)
+  assert.throws(() => verifyLicenseBytes(bytes, '../invalid'), /checksum mismatch/)
+  assert.equal(
+    licenseInputText(Buffer.from('<body><h1>Notice</h1><pre>Terms &#34;all&#34;</pre></body>'), {
+      format: 'rust-library-html',
+    }),
+    'Notice\nTerms "all"',
+  )
+  console.log('License input self-check passed: pinned bytes and complete provider text.')
+  process.exit(0)
+}
 
 const targets = Object.values(releaseTargets)
 const root = process.cwd()
@@ -52,25 +144,31 @@ for (const [directory, entry] of Object.entries(lock.packages)) {
 const crates = new Map()
 const nativeScopes = new Map()
 for (const target of targets) {
-  const result = spawnSync(
-    'cargo',
-    [
-      'metadata',
-      '--offline',
-      '--locked',
-      '--format-version',
-      '1',
-      '--filter-platform',
-      target,
-      '--manifest-path',
-      'src-tauri/Cargo.toml',
-    ],
-    { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
-  )
+  const metadataArgs = [
+    'metadata',
+    '--offline',
+    '--locked',
+    '--format-version',
+    '1',
+    '--filter-platform',
+    target,
+    '--manifest-path',
+    'src-tauri/Cargo.toml',
+  ]
+  const options = { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }
+  let result = spawnSync('cargo', metadataArgs, options)
   if (result.status !== 0) {
-    throw new Error(
-      `Cargo metadata failed for ${target}; run cargo fetch --locked --manifest-path src-tauri/Cargo.toml --target ${target} first.`,
+    const fetched = spawnSync(
+      'cargo',
+      ['fetch', '--locked', '--manifest-path', 'src-tauri/Cargo.toml', '--target', target],
+      options,
     )
+    if (fetched.status !== 0)
+      throw new Error(`Cargo source fetch failed for ${target}: ${fetched.stderr}`)
+    result = spawnSync('cargo', metadataArgs, options)
+  }
+  if (result.status !== 0) {
+    throw new Error(`Cargo metadata failed for ${target}: ${result.stderr}`)
   }
   const metadata = JSON.parse(result.stdout)
   const resolved = classifyCargoGraph(metadata)
@@ -100,12 +198,13 @@ for (const crate of crates.values()) {
   })
 }
 for (const component of distributions.components) {
-  const ids = component.licenseFiles.map((filename) => {
-    const text = readFileSync(filename, 'utf8').replace(/\r\n/g, '\n').trim()
+  const ids = []
+  for (const input of component.licenseInputs) {
+    const text = await acquireLicenseInput(input)
     const id = createHash('sha256').update(text).digest('hex').slice(0, 12)
     texts.set(id, text)
-    return id
-  })
+    ids.push(id)
+  }
   records.push({
     name: component.name,
     version: component.version,

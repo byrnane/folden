@@ -82,6 +82,11 @@ test('shows About and lazy usage terms while blocking background editor shortcut
   expect((await legalText.textContent())!.trim().length).toBeGreaterThan(300)
   await expect(dialog.locator('details')).toHaveAttribute('open', '')
 
+  await dialog.getByRole('button', { name: 'Third-party licenses', exact: true }).click()
+  await expect(legalText).toContainText('Third-party notices')
+  await expect(legalText).toContainText('MPL source availability')
+  await expect(legalText).toContainText('native:rust-standard-library')
+
   await dialog.getByRole('button', { name: 'Close', exact: true }).focus()
   await page.keyboard.press('Enter')
   await expect(dialog).toHaveCount(0)

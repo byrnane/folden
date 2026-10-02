@@ -26,6 +26,7 @@ const tool = path.join(directory, 'git-filter-repo.py')
 const toolHash = '39d35fb2c35637a9d555353b6a8b53a223a227d3beb61a0ac7e1180bfa5572f1'
 const bundle = path.resolve('.cache', 'private-release-backup-20261002', 'original.bundle')
 const historicalExclusions = [...excludedPublicPaths, 'test_files/test.png']
+const sourceExclusions = [...excludedPublicPaths, 'THIRD_PARTY_NOTICES.md', 'scripts/licenses/']
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 function command(name, args, cwd = root, binary = false) {
   const result = spawnSync(name, args, {
@@ -168,7 +169,7 @@ mkdirSync(exportDirectory, { recursive: true })
 const sourceFiles = command('git', ['ls-files', '-co', '--exclude-standard']).trim().split('\n')
 const manifest = []
 for (const filename of [...new Set(sourceFiles)].sort()) {
-  if (!filename || excluded(filename, excludedPublicPaths) || !existsSync(filename)) continue
+  if (!filename || excluded(filename, sourceExclusions) || !existsSync(filename)) continue
   const bytes = readFileSync(filename)
   if (
     !bytes.includes(0) &&
@@ -200,7 +201,7 @@ const report = {
   checkedBlobs,
   checkedTags: tags.length,
   excludedHistoryPaths: historicalExclusions,
-  excludedSourcePaths: excludedPublicPaths,
+  excludedSourcePaths: sourceExclusions,
   privateToolingRefsExcluded: nonPublicRefs.length,
   privateIdentitiesRemaining: identities.length,
   originalRefsPreserved: true,

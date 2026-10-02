@@ -29,11 +29,16 @@ npm run test:e2e
 npm run test:performance
 ```
 
+Из корня создайте и проверьте notices. Генератор загружает четыре поддерживаемых dependency graphs и проверяет upstream license inputs. Сгенерированные документы входят в пакеты, но не коммитятся:
+
+```text
+npm run licenses:generate
+npm run licenses:check
+```
+
 Из src-tauri:
 
 ```text
-cargo fetch --locked --target x86_64-pc-windows-msvc --target x86_64-unknown-linux-gnu --target x86_64-apple-darwin --target aarch64-apple-darwin
-npm --prefix .. run licenses:check
 cargo fmt --check
 cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked

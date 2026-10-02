@@ -64,6 +64,6 @@ The visual editor handles common Markdown; source mode remains available for syn
 
 [Report a problem](https://github.com/byrnane/folden/issues) with your OS, Folden version, and steps to reproduce. **Settings → Appearance → About Folden** contains help, version information, and licenses. See the [security policy](SECURITY.md) before reporting vulnerabilities; do not post sensitive documents or vulnerability details in public issues.
 
-Official binaries are **free for personal and commercial use**. Your documents belong to you. The author's code is available for inspection; reuse and redistribution of third-party Folden builds are prohibited. This is a **source-available** project. See the [usage terms](LICENSE.md) and [third-party notices](THIRD_PARTY_NOTICES.md); third-party components retain their own licenses.
+Official binaries are **free for personal and commercial use**. Your documents belong to you. The author's code is available for inspection; reuse and redistribution of third-party Folden builds are prohibited. This is a **source-available** project. See the [usage terms](LICENSE.md) and [third-party rights](LICENSE.md#third-party-components). Full third-party notices accompany official packages and are available in About → Licenses.
 
 Created by **byrnane**. Technical instructions are in [Development](docs/DEVELOPMENT.md) and [Release](docs/RELEASE.md).

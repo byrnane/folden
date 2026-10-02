@@ -17,7 +17,12 @@
         "NSISdl.dll": "ddf40229dd9d6b268902d8dea88c8a04aacf1af218dd29f6dcd35babc54ac08d",
         "modern-wizard.bmp": "3ad2dc318056d0a2024af1804ea741146cfc18cc404649a44610cbf8b2056cf2"
       },
-      "licenseFiles": ["scripts/licenses/NSIS-3.11-COPYING.txt"],
+      "licenseInputs": [
+        {
+          "url": "https://raw.githubusercontent.com/kichik/nsis/7359413009afd4f0fff472d841fc2f2cc0e0a5f8/COPYING",
+          "sha256": "dc0f74a312c08ffc900548a67ae9a3670ed28ad25a3afda1fe0504da16f89361"
+        }
+      ],
       "platform": "x86_64-pc-windows-msvc",
       "scope": "installer runtime",
       "includes": [
@@ -39,9 +44,15 @@
       "source": "https://github.com/tauri-apps/nsis-tauri-utils/tree/13d9edd27b69310e108d6fbd49f90992f8a05390",
       "payloadSha256": "5ba143b5db4a87d32d6e7802e033330aae56cbceabe0d1e3ba41948385ad4709",
       "payloadFilename": "nsis_tauri_utils.dll",
-      "licenseFiles": [
-        "scripts/licenses/nsis-tauri-utils-0.5.3-LICENSE-MIT.txt",
-        "scripts/licenses/nsis-tauri-utils-0.5.3-LICENSE-APACHE-2.0.txt"
+      "licenseInputs": [
+        {
+          "url": "https://raw.githubusercontent.com/tauri-apps/nsis-tauri-utils/13d9edd27b69310e108d6fbd49f90992f8a05390/LICENSE_MIT",
+          "sha256": "1c1020fa10a6bf318717e82c911bcc54ebdfb9bb280460ae332bcb2f82f57fbe"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/tauri-apps/nsis-tauri-utils/13d9edd27b69310e108d6fbd49f90992f8a05390/LICENSE_APACHE-2.0",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        }
       ],
       "platform": "x86_64-pc-windows-msvc",
       "scope": "installer runtime",
@@ -57,11 +68,27 @@
       "version": "1.96.0",
       "license": "MIT OR Apache-2.0; additional upstream library notices reproduced in full",
       "source": "https://github.com/rust-lang/rust/tree/1.96.0/library",
-      "licenseFiles": [
-        "scripts/licenses/Rust-1.96.0-COPYRIGHT-library.txt",
-        "scripts/licenses/Rust-1.96.0-LICENSE-MIT.txt",
-        "scripts/licenses/Rust-1.96.0-LICENSE-APACHE.txt",
-        "scripts/licenses/Rust-1.96.0-Unicode-3.0.txt"
+      "licenseInputs": [
+        {
+          "url": "https://static.rust-lang.org/dist/2026-05-28/rustc-1.96.0-x86_64-pc-windows-msvc.tar.xz",
+          "sha256": "cfba935dbd6d0deaf0a02339f9b6c0573b30f41697919ba7532b60ef2e6306b4",
+          "archiveMember": "rustc-1.96.0-x86_64-pc-windows-msvc/rustc/share/doc/rust/COPYRIGHT-library.html",
+          "contentSha256": "78c163fcec50e64bfd85fedb850c273595602fafa2b41f30f75d4e410b80ee83",
+          "toolchainFile": "share/doc/rust/COPYRIGHT-library.html",
+          "format": "rust-library-html"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/rust-lang/rust/1.96.0/LICENSE-MIT",
+          "sha256": "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/rust-lang/rust/1.96.0/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/rust-lang/rust/1.96.0/LICENSES/Unicode-3.0.txt",
+          "sha256": "f5062c9a188d81dfe66b56db4182dcf9e4b17c0d9b0d311a8e20b3a1b075c443"
+        }
       ],
       "platform": "all",
       "scope": "runtime provider notice (conservative upstream library graph)",
@@ -75,7 +102,12 @@
       "version": "0.1.160 (Rust 1.96.0 sysroot)",
       "license": "MIT AND Apache-2.0 WITH LLVM-exception AND (MIT OR Apache-2.0)",
       "source": "https://github.com/rust-lang/rust/tree/1.96.0/library/compiler-builtins",
-      "licenseFiles": ["scripts/licenses/Rust-1.96.0-compiler-builtins-LICENSE.txt"],
+      "licenseInputs": [
+        {
+          "url": "https://raw.githubusercontent.com/rust-lang/rust/1.96.0/library/compiler-builtins/LICENSE.txt",
+          "sha256": "ab6eec6caf0fa5775e411c7a8bc6a45c4ef2956b0980b157ab74fc5cd62a928b"
+        }
+      ],
       "platform": "all",
       "scope": "runtime builtins",
       "includes": [

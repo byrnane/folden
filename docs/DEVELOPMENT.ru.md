@@ -32,7 +32,7 @@ Native checks из src-tauri: cargo fmt --check, cargo clippy --locked --all-tar
 
 Frontend output — dist/, Cargo — build/desktop/, incremental compilation отключена. Release targets создают build/desktop/<target>/release/. После проверки финального пакета публикуемые файлы готовятся в build/release/<target>/. Для исторических checkout используйте отдельный target-dir, чтобы bundler не получил старый executable.
 
-После изменения зависимостей загрузите четыре Cargo targets из RELEASE.ru.md, установите npm lock, выполните npm run licenses:generate, проверьте notices/provenance и npm run licenses:check. Inventory разделяет native runtime/build и содержит консервативный npm production graph; для архивов без лицензий явно указаны upstream и canonical texts. Дополнительные OS-библиотеки AppImage проверяются в финальном payload.
+Dev и frontend builds автоматически создают THIRD_PARTY_NOTICES.md. Этот файл и загруженные upstream license inputs игнорируются Git; полные notices входят в приложение, установщики и release artifacts. Генератор загружает четыре locked Cargo dependency graphs и проверяет закреплённые тексты лицензий по SHA-256. Первый запуск требует сети, следующие используют проверенные license inputs из .cache/. После изменения зависимостей выполните npm ci, npm run licenses:generate, проверьте notices/provenance и npm run licenses:check. Дополнительные OS-библиотеки AppImage проверяются в финальном payload.
 
 Кеши, диагностика, личные документы и .codex исключаются из публичного экспорта. Privacy checks показывают только имена файлов и причины. Для synthetic paths допускаются только точные file/literal allowlists, без исключения всех тестов. Оригинальный Git не меняется при подготовке отдельной очищенной истории.
 

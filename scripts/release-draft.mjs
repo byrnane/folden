@@ -39,6 +39,7 @@ const destination = path.join('build', 'draft', tag)
 mkdirSync(path.join('build', 'draft'), { recursive: true })
 mkdirSync(destination)
 const files = []
+let notices
 for (const target of Object.values(releaseTargets)) {
   const directory = path.join('build', 'release', `folden-${target}`)
   const packages = stagedPackageNames(version, target)
@@ -50,10 +51,12 @@ for (const target of Object.values(releaseTargets)) {
   const checksums = checksumLines(names.map((name) => path.join(directory, name)))
   if (readFileSync(path.join(directory, 'SHA256SUMS.txt'), 'utf8') !== checksums)
     throw new Error(`Downloaded ${target} artifact checksum mismatch`)
-  for (const name of ['LICENSE.md', 'THIRD_PARTY_NOTICES.md']) {
-    if (!readFileSync(path.join(directory, name)).equals(readFileSync(name)))
-      throw new Error(`Artifact contains stale ${name}`)
-  }
+  if (!readFileSync(path.join(directory, 'LICENSE.md')).equals(readFileSync('LICENSE.md')))
+    throw new Error('Artifact contains stale LICENSE.md')
+  const artifactNotices = readFileSync(path.join(directory, 'THIRD_PARTY_NOTICES.md'))
+  if (notices && !artifactNotices.equals(notices))
+    throw new Error('Package artifacts contain inconsistent third-party notices')
+  notices = artifactNotices
   for (const name of packages) {
     const output = path.join(destination, name)
     copyFileSync(path.join(directory, name), output)
@@ -65,11 +68,12 @@ for (const target of Object.values(releaseTargets)) {
     files.push(output)
   }
 }
-for (const name of ['LICENSE.md', 'THIRD_PARTY_NOTICES.md']) {
-  const output = path.join(destination, name)
-  copyFileSync(name, output)
-  files.push(output)
-}
+const terms = path.join(destination, 'LICENSE.md')
+copyFileSync('LICENSE.md', terms)
+files.push(terms)
+const noticesPath = path.join(destination, 'THIRD_PARTY_NOTICES.md')
+writeFileSync(noticesPath, notices)
+files.push(noticesPath)
 const sums = path.join(destination, 'SHA256SUMS.txt')
 writeFileSync(sums, checksumLines(files))
 files.push(sums)
