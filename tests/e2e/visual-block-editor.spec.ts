@@ -1,9 +1,85 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
 import { applicationSettingsStorageKey, openApp } from './helpers'
 
+for (const [name, prefix] of [
+  ['nested list', '- first\n  - nested\n- final\n\n'],
+  ['continued list', '- first\n\n  continuation\n- final\n\n'],
+  ['reference definitions', '[link][ref]\n\n[ref]: https://example.com\n\n'],
+  ['blank separators', '# Heading\n\n\n\nParagraph\n\n\n\n'],
+] as const) {
+  test(`preserves ${name} when editing a neighboring Visual paragraph`, async ({ page }) => {
+    const source = `${prefix}Tail\n`
+    await openApp(page, { mockOptions: { initialFiles: { 'boundaries.md': source } } })
+    await page.getByTestId('open-folder-empty').click()
+    await page.getByTestId('workspace-entry-boundaries.md').click()
+    const surface = page.locator('.visual-editor-content .ProseMirror')
+    await surface
+      .locator('p')
+      .filter({ hasText: /^Tail$/ })
+      .click()
+    await page.keyboard.press('End')
+    await page.keyboard.type(' changed')
+    await page.getByTestId('save-document').click()
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          (
+            window as Window & { __FOLDEN_TAURI_MOCK__?: { readFile(path: string): string | null } }
+          ).__FOLDEN_TAURI_MOCK__?.readFile('boundaries.md'),
+        ),
+      )
+      .toBe(`${prefix}Tail changed\n`)
+    if (name === 'reference definitions') {
+      await expect(surface.getByRole('link', { name: 'link', exact: true })).toHaveAttribute(
+        'href',
+        'https://example.com',
+      )
+    }
+    await page.getByRole('button', { name: 'Source', exact: true }).click()
+    await page.keyboard.press('Control+z')
+    await expect(page.getByTestId('source-editor')).not.toContainText('Tail changed')
+    await page.keyboard.press('Control+y')
+    await expect(page.getByTestId('source-editor')).toContainText('Tail changed')
+  })
+}
+
 function blockHandle(surface: Locator, index: number) {
   return surface.locator('.visual-block-controls').nth(index).getByTestId('visual-block-handle')
 }
+
+test('keeps mixed text and images lossless while editing Enter in Visual source blocks', async ({
+  page,
+}) => {
+  const source = '# Heading\n\nOriginal content.\n![image](./image.png)\n\nTail\n'
+  await openApp(page, { mockOptions: { initialFiles: { 'inline-image.md': source } } })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-inline-image.md').click()
+  const raw = page.locator('.raw-markdown-block')
+  await expect(raw).toHaveCount(1)
+  await raw.getByRole('button', { name: /Source block/ }).click()
+  const field = raw.getByLabel('Edit raw Markdown block')
+  await expect(field).toHaveValue('Original content.\n![image](./image.png)\n\n')
+  await field.evaluate((element) => (element as HTMLTextAreaElement).setSelectionRange(8, 8))
+  await field.press('Enter')
+  await field.blur()
+  const expected = source.replace('Original content.', 'Original\n content.')
+  await page.getByRole('button', { name: 'Source', exact: true }).click()
+  await expect(page.getByTestId('source-editor')).toContainText('Original\n content.')
+  await expect(page.getByTestId('source-editor')).toContainText('![image](./image.png)')
+  await page.getByTestId('save-document').click()
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (
+          window as Window & { __FOLDEN_TAURI_MOCK__?: { readFile(path: string): string | null } }
+        ).__FOLDEN_TAURI_MOCK__?.readFile('inline-image.md'),
+      ),
+    )
+    .toBe(expected)
+  await page.getByRole('button', { name: 'Visual', exact: true }).click()
+  await expect(page.locator('.visual-editor-content .ProseMirror p').last()).toHaveText('Tail')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
 
 function blockMenuTrigger(surface: Locator, index: number) {
   return surface
@@ -180,6 +256,7 @@ test('selects, duplicates, transforms and moves blocks from the handle', async (
   await page.getByTestId('visual-block-menu').getByText('Turn into').click()
   await page.getByTestId('visual-block-menu').getByRole('button', { name: 'Heading 2' }).click()
   await expect(surface.locator('h2')).toHaveText('First')
+  await expect(surface).toBeFocused()
 
   await page.keyboard.press('Alt+ArrowDown')
   await expect(surface.locator(':scope > .visual-block-node').nth(2)).toHaveText('First')
@@ -244,7 +321,11 @@ test('moves a block with pointer drag and keeps the drop cursor active', async (
 })
 
 test('does not show inline formatting for a whole-block selection', async ({ page }) => {
-  await openApp(page)
+  await openApp(page, {
+    mockOptions: { initialFiles: { 'select.md': '# Selected heading\n\nSecond paragraph.\n' } },
+  })
+  await page.getByTestId('open-folder-empty').click()
+  await page.getByTestId('workspace-entry-select.md').click()
   const block = page.locator('.visual-editor-content .ProseMirror > .visual-block-node').first()
   const surface = page.locator('.visual-editor-content .ProseMirror')
   await block.hover()

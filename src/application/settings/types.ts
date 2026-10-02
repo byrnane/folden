@@ -1,4 +1,5 @@
 import type { ThemeId } from './themes'
+import type { Language } from '../systemLanguage'
 
 export type AutosaveSettings = {
   enabled: boolean
@@ -33,6 +34,7 @@ export type AppearanceSettings = {
 }
 
 export type ApplicationSettings = {
+  language: Language
   autosave: AutosaveSettings
   editor: EditorSettings
   appearance: AppearanceSettings

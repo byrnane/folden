@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { onBeforeUnmount, watch } from 'vue'
 import AppDialog from './AppDialog.vue'
 
@@ -33,11 +34,6 @@ function handleKeydown(event: KeyboardEvent) {
     emit('cancel')
     return
   }
-
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    emit('confirm')
-  }
 }
 
 watch(
@@ -64,10 +60,10 @@ onBeforeUnmount(() => {
 
     <template #actions>
       <button type="button" @click="emit('cancel')">
-        {{ cancelLabel }}
+        {{ t(cancelLabel) }}
       </button>
       <button type="button" :class="{ danger: confirmTone === 'danger' }" @click="emit('confirm')">
-        {{ confirmLabel }}
+        {{ t(confirmLabel) }}
       </button>
     </template>
   </AppDialog>

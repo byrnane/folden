@@ -9,6 +9,9 @@ import {
   isTextFileFormat,
   isWorkspaceDescriptor,
   isWorkspaceEntry,
+  isWorkspaceSearchBatch,
+  isWorkspaceSearchResult,
+  isWorkspaceFilesResult,
 } from '../../../src/domain/native'
 import { isNativeError } from '../../../src/domain/nativeError'
 
@@ -23,6 +26,9 @@ describe('native contracts', () => {
     expect(isPersistedSessionState(contracts.persistedSessionState)).toBe(true)
     expect(isRecoverySnapshot(contracts.recoverySnapshot)).toBe(true)
     expect(isNativeFsEvent(contracts.nativeFsEvent)).toBe(true)
+    expect(isWorkspaceSearchResult(contracts.workspaceSearchResult)).toBe(true)
+    expect(isWorkspaceSearchBatch(contracts.workspaceSearchBatch)).toBe(true)
+    expect(isWorkspaceFilesResult(contracts.workspaceFilesResult)).toBe(true)
   })
 
   it('rejects drifted native wire shapes', () => {
@@ -45,6 +51,18 @@ describe('native contracts', () => {
       isNativeError({
         ...contracts.nativeError,
         code: 'brand_new_error',
+      }),
+    ).toBe(false)
+    expect(isWorkspaceSearchResult({ ...contracts.workspaceSearchResult, skipped: -1 })).toBe(false)
+    expect(
+      isWorkspaceSearchBatch({
+        ...contracts.workspaceSearchBatch,
+        matches: [
+          {
+            ...contracts.workspaceSearchBatch.matches[0],
+            from: -1,
+          },
+        ],
       }),
     ).toBe(false)
   })

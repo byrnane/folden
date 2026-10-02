@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import type { MarkdownHeading } from '../../domain/markdown/outline'
 
@@ -74,7 +75,7 @@ onBeforeUnmount(stopResize)
 </script>
 
 <template>
-  <aside class="document-outline" aria-label="Document outline">
+  <aside class="document-outline" :aria-label="t('Document outline')">
     <button
       v-for="(heading, index) in headings"
       :key="`${heading.line}:${heading.id}`"
@@ -92,7 +93,7 @@ onBeforeUnmount(stopResize)
     <span
       class="outline-resize-handle"
       role="separator"
-      aria-label="Resize outline"
+      :aria-label="t('Resize outline')"
       @pointerdown="beginResize"
     />
   </aside>

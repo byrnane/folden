@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="graphite" x1="32" y1="8" x2="232" y2="248" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#30303e" />
+      <stop offset="1" stop-color="#17171f" />
+    </linearGradient>
+    <linearGradient id="violet" x1="44" y1="40" x2="212" y2="216" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e0d6ff" />
+      <stop offset="1" stop-color="#a88af4" />
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#graphite)" />
+  <path
+    fill="url(#violet)"
+    fill-rule="evenodd"
+    d="M76 40h104q32 0 32 32v72h-68v44l-28 28H76q-32 0-32-32V72q0-32 32-32Zm0 32v112h36v-44l28-28h40V72Z"
+  />
+  <path fill="#8061c7" d="m112 140 32 4v44Z" />
+</svg>

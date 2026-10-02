@@ -35,6 +35,7 @@ test('large document analysis stays off the editing hot path', async ({ page }) 
     storageEntries: {
       [applicationSettingsStorageKey]: JSON.stringify({
         ...defaultApplicationSettings,
+        language: 'en',
         editor: { ...defaultApplicationSettings.editor, defaultMarkdownMode: 'source' },
       }),
     },
@@ -200,4 +201,82 @@ test('a 1k-entry directory renders inside the expansion budget', async ({ page }
   const directoryMedianMs = median(directoryRunsMs)
   expect(directoryMedianMs).toBeLessThanOrEqual(budgets.metrics.directoryRenderMedianMs.maxMs)
   writePerformanceReport('browser-workspace.json', { directoryRunsMs, directoryMedianMs })
+})
+
+test('a long game document stays responsive in Visual', async ({ page }) => {
+  const content = Array.from({ length: 60 }, (_, section) =>
+    [
+      `## Game system ${section}`,
+      ...Array.from(
+        { length: 10 },
+        (_, paragraph) =>
+          `System ${section}, decision ${paragraph}: the player has a clear goal, useful feedback and a meaningful choice. ${'Design context and implementation notes. '.repeat(3)}`,
+      ),
+      '- Goal: clear feedback\n- Risk: unclear progression\n- Check: playtest with a new player',
+      '| Stage | Outcome |\n| --- | --- |\n| Prototype | Playable core loop |',
+    ].join('\n\n'),
+  ).join('\n\n')
+  await openApp(page, { mockOptions: { initialFiles: { 'game-design.md': content } } })
+  await page.getByTestId('open-folder-empty').click()
+  const openedAt = await page.evaluate(() => performance.now())
+  await page.getByTestId('workspace-entry-game-design.md').click()
+  const surface = page.locator('.visual-editor-content .ProseMirror')
+  await expect(surface.locator('h2')).toHaveCount(60)
+  const openLatencyMs = (await page.evaluate(() => performance.now())) - openedAt
+  await expect(page.getByRole('complementary', { name: 'Document map' })).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: 'Outline' })).toHaveCount(0)
+  const paragraph = surface.locator('p').first()
+  await paragraph.click()
+  await page.keyboard.press('End')
+  await page.keyboard.type(' warmup')
+  await expect(paragraph).toContainText('warmup')
+  await page.evaluate(() => {
+    const target = window as typeof window & {
+      __foldenInputDurations: number[]
+      __foldenLongTasks: { duration: number; startTime: number }[]
+    }
+    target.__foldenInputDurations = []
+    target.__foldenLongTasks = []
+    window.addEventListener(
+      'beforeinput',
+      () => {
+        const started = performance.now()
+        queueMicrotask(() => target.__foldenInputDurations.push(performance.now() - started))
+      },
+      true,
+    )
+    new PerformanceObserver((list) => {
+      target.__foldenLongTasks.push(
+        ...list.getEntries().map((entry) => ({
+          duration: entry.duration,
+          startTime: entry.startTime,
+        })),
+      )
+    }).observe({ type: 'longtask', buffered: false })
+  })
+  const typingRunsMs: number[] = []
+  for (let run = 0; run < 3; run += 1) {
+    const started = await page.evaluate(() => performance.now())
+    await page.keyboard.type(` sample${run}`)
+    await expect(paragraph).toContainText(`sample${run}`)
+    typingRunsMs.push((await page.evaluate(() => performance.now())) - started)
+  }
+  const metrics = await page.evaluate(() => {
+    const target = window as typeof window & {
+      __foldenInputDurations: number[]
+      __foldenLongTasks: { duration: number; startTime: number }[]
+    }
+    return { inputDurationsMs: target.__foldenInputDurations, longTasks: target.__foldenLongTasks }
+  })
+  const inputP95Ms = percentile(metrics.inputDurationsMs, 0.95)
+  writePerformanceReport('browser-visual-document.json', {
+    paragraphs: 600,
+    characters: content.length,
+    openLatencyMs,
+    inputP95Ms,
+    typingRunsMs,
+    ...metrics,
+  })
+  expect(inputP95Ms).toBeLessThanOrEqual(budgets.metrics.inputP95Ms.maxMs)
+  expect(metrics.longTasks.filter(({ duration }) => duration >= 50)).toEqual([])
 })

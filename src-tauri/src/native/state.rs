@@ -6,6 +6,7 @@ pub(crate) struct NativeAppState {
     pub(crate) watched_paths: HashMap<String, WatchPathMode>,
     pub(crate) workspace_watch_paths: HashSet<String>,
     pub(crate) workspace_traversal_cancel: Arc<AtomicBool>,
+    pub(crate) workspace_scans: HashMap<String, (String, Arc<AtomicBool>)>,
     pub(crate) self_write_suppressions: Arc<Mutex<HashMap<String, u64>>>,
 }
 #[derive(Clone)]
@@ -38,6 +39,7 @@ impl Default for NativeAppState {
             watched_paths: HashMap::new(),
             workspace_watch_paths: HashSet::new(),
             workspace_traversal_cancel: Arc::new(AtomicBool::new(false)),
+            workspace_scans: HashMap::new(),
             self_write_suppressions: Arc::new(Mutex::new(HashMap::new())),
         }
     }

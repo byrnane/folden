@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { type Editor as CoreEditor } from '@tiptap/core'
+import { t, language } from '../../application/i18n'
+import { Extension, type Editor as CoreEditor } from '@tiptap/core'
 import { Editor } from '@tiptap/vue-3'
 import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model'
-import { NodeSelection, TextSelection } from '@tiptap/pm/state'
+import { NodeSelection, TextSelection, Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import {
   ArrowDownToLine,
   ArrowUpToLine,
@@ -50,6 +52,8 @@ import { createVisualEditor } from './visualEditorSetup'
 import { useVisualBlockControls } from './useVisualBlockControls'
 import VisualContextToolbar from './VisualContextToolbar.vue'
 import type { VisualContextToolbarContext } from './VisualContextToolbar.vue'
+import { findTextMatches, type TextMatch } from '../../domain/markdown/editorSearch'
+import { imageFileFromTransfer } from './editorImageInput'
 
 const props = defineProps<{
   documentId: string
@@ -74,6 +78,8 @@ const emit = defineEmits<{
   'toolbar-state': [state: { disabledCommands: EditorCommand[] }]
   'set-outline-width': [width: number]
   'set-document-map-width': [width: number]
+  'navigate-link': [href: string]
+  'image-import': [file: File | null]
 }>()
 
 const scrollHost = ref<HTMLDivElement | null>(null)
@@ -94,6 +100,7 @@ let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
 let mapResizeObserver: ResizeObserver | null = null
 let scrollFrame = 0
+let viewRestoreFrame = 0
 type VisualNodeSnapshot = {
   blockId: string
   nodes: ProseMirrorNode[]
@@ -108,6 +115,169 @@ let visualOperationSequence = 0
 let allowUnfocusedVisualUpdate = false
 let acceptVisualUpdates = false
 let forcedVisualMarkdown: string | null = null
+type VisualSearchMatch = TextMatch & { rawFrom?: number; rawTo?: number }
+let searchMatches: VisualSearchMatch[] = []
+let activeSearchIndex = 0
+const searchPluginKey = new PluginKey<DecorationSet>('foldenSearch')
+const searchControls = Extension.create({
+  name: 'foldenSearch',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: searchPluginKey,
+        state: {
+          init: () => DecorationSet.empty,
+          apply: (transaction, decorations) =>
+            transaction.getMeta('foldenSearch')
+              ? DecorationSet.create(
+                  transaction.doc,
+                  searchMatches.map((match) =>
+                    match.rawFrom === undefined
+                      ? Decoration.inline(match.from, match.to, { class: 'editor-search-match' })
+                      : Decoration.node(match.from, match.to, { class: 'editor-search-match' }),
+                  ),
+                )
+              : decorations.map(transaction.mapping, transaction.doc),
+        },
+        props: { decorations: (state) => searchPluginKey.getState(state) },
+      }),
+    ]
+  },
+})
+
+function search(query: string, caseSensitive: boolean) {
+  if (!query && !searchMatches.length) return 0
+  searchMatches = []
+  if (query)
+    editor.value?.state.doc.descendants((node, position) => {
+      if (node.type.name === 'rawMarkdownBlock') {
+        searchMatches.push(
+          ...findTextMatches(String(node.attrs.rawSource ?? ''), query, caseSensitive).map(
+            (match) => ({
+              from: position,
+              to: position + node.nodeSize,
+              rawFrom: match.from,
+              rawTo: match.to,
+            }),
+          ),
+        )
+        return false
+      }
+      if (!node.isTextblock) return
+      const text = node.textBetween(0, node.content.size, '\n', '\n')
+      searchMatches.push(
+        ...findTextMatches(text, query, caseSensitive).map((match) => ({
+          from: position + 1 + match.from,
+          to: position + 1 + match.to,
+        })),
+      )
+      return false
+    })
+  editor.value?.view.dispatch(editor.value.state.tr.setMeta('foldenSearch', true))
+  return searchMatches.length
+}
+
+function revealSearch(index: number) {
+  const match = searchMatches[index]
+  if (!match || !editor.value) return
+  cancelAnimationFrame(viewRestoreFrame)
+  activeSearchIndex = index
+  if (match.rawFrom !== undefined) {
+    editor.value.commands.setNodeSelection(match.from)
+    const dom = editor.value.view.nodeDOM(match.from) as HTMLElement | null
+    const field = dom?.querySelector<HTMLTextAreaElement>('textarea')
+    if (field) {
+      field.hidden = false
+      dom?.classList.add('raw-markdown-block-expanded')
+      field.setSelectionRange(match.rawFrom, match.rawTo ?? match.rawFrom)
+    }
+  } else {
+    editor.value.commands.setTextSelection({ from: match.from, to: match.to })
+  }
+  editor.value.commands.scrollIntoView()
+}
+
+function replaceSearch(replacement: string, all: boolean) {
+  const matches = all
+    ? searchMatches
+    : searchMatches.slice(activeSearchIndex, activeSearchIndex + 1)
+  if (!editor.value || !matches.length) return
+  const referencesChanged = matches.some(
+    (match) =>
+      match.rawFrom !== undefined &&
+      editor.value?.state.doc.nodeAt(match.from)?.attrs.rawKind === 'reference',
+  )
+  beginVisualOperation('replace')
+  const transaction = editor.value.state.tr
+  for (const match of [...matches].reverse()) {
+    if (match.rawFrom !== undefined) {
+      const node = transaction.doc.nodeAt(match.from)
+      if (!node) continue
+      const source = String(node.attrs.rawSource ?? '')
+      transaction.setNodeMarkup(match.from, undefined, {
+        ...node.attrs,
+        rawSource: source.slice(0, match.rawFrom) + replacement + source.slice(match.rawTo),
+      })
+    } else transaction.insertText(replacement, match.from, match.to)
+  }
+  searchMatches = []
+  editor.value.view.dispatch(transaction)
+  if (referencesChanged) applyExternalContent(lastVisualMarkdown, lastAppliedRevision, true)
+}
+
+function revealSourceRange(from: number, to: number) {
+  if (!editor.value || !props.blockDocument) return
+  const block = props.blockDocument.blocks.find(
+    (candidate) => from >= candidate.from && from < candidate.to,
+  )
+  const snapshot = visualNodeSnapshots.find((candidate) => candidate.blockId === block?.id)
+  if (!snapshot?.nodes.length) return
+  let position = 0
+  for (let index = 0; index < editor.value.state.doc.childCount; index += 1) {
+    const node = editor.value.state.doc.child(index)
+    if (node === snapshot.nodes[0]) {
+      const query = props.modelValue.slice(from, to)
+      let revealed = false
+      node.descendants((child, offset) => {
+        if (revealed || !child.isTextblock) return
+        const match = findTextMatches(child.textContent, query, true)[0]
+        if (match) {
+          editor.value?.commands.setTextSelection({
+            from: position + offset + 2 + match.from,
+            to: position + offset + 2 + match.to,
+          })
+          revealed = true
+        }
+        return false
+      })
+      if (!revealed && node.isTextblock) {
+        const match = findTextMatches(node.textContent, query, true)[0]
+        editor.value.commands.setTextSelection({
+          from: position + 1 + (match?.from ?? 0),
+          to: position + 1 + (match?.to ?? 0),
+        })
+      } else if (!revealed) editor.value.commands.setNodeSelection(position)
+      editor.value.commands.focus()
+      editor.value.commands.scrollIntoView()
+      return
+    }
+    position += node.nodeSize
+  }
+}
+
+function insertImportedImage(url: string) {
+  runCommand(() => editor.value?.chain().focus().setImage({ src: url }).run())
+}
+
+function importTransferImage(event: ClipboardEvent | DragEvent) {
+  const file = imageFileFromTransfer(
+    'clipboardData' in event ? event.clipboardData : event.dataTransfer,
+  )
+  if (!file) return
+  event.preventDefault()
+  event.stopPropagation()
+  emit('image-import', file)
+}
 
 function beginVisualOperation(kind: string) {
   const group = `visual-${kind}-${visualOperationSequence++}`
@@ -160,14 +330,20 @@ function snapshotVisualNodes(currentEditor: CoreEditor, source: string) {
       ? props.blockDocument.blocks
       : parseMarkdownBlockDocument(source, props.blockDocument ?? undefined).blocks
   let nodeIndex = 0
-  visualNodeSnapshots = blocks.map((block) => {
+  visualNodeSnapshots = blocks.map((block, index) => {
     const projection = buildVisualMarkdownProjection(block.rawSource, {
       source: block.rawSource,
       blocks: [block],
     })
+    // A following heading gives whitespace the same inter-block context as the
+    // complete document. Parsing an isolated block treats its separator as an
+    // extra empty paragraph in current Tiptap versions.
+    const hasFollowingBlock = index < blocks.length - 1
     const parsedNodeCount =
-      currentEditor.storage.markdown.manager.parse(projection.trimEnd()).content?.length ?? 0
-    const nodeCount = Math.max(parsedNodeCount, 1)
+      currentEditor.storage.markdown.manager.parse(
+        hasFollowingBlock ? `${projection}# Folden snapshot boundary` : projection,
+      ).content?.length ?? 0
+    const nodeCount = parsedNodeCount - (hasFollowingBlock ? 1 : 0)
     const nodes: ProseMirrorNode[] = []
     for (
       let offset = 0;
@@ -199,31 +375,33 @@ function serializeVisualDocumentLosslessly(
     currentEditor.state.doc.child(index),
   ),
 ) {
-  const snapshotPositions = new Map<number, { snapshot: VisualNodeSnapshot; isLast: boolean }>()
+  const snapshotPositions = new Map<
+    number,
+    { snapshot: VisualNodeSnapshot; snapshotIndex: number }
+  >()
   let snapshotPosition = 0
-  for (const snapshot of visualNodeSnapshots) {
+  for (const [snapshotIndex, snapshot] of visualNodeSnapshots.entries()) {
     snapshot.nodes.forEach((_, offset) => {
       snapshotPositions.set(snapshotPosition + offset, {
         snapshot,
-        isLast: offset === snapshot.nodes.length - 1,
+        snapshotIndex,
       })
     })
     snapshotPosition += snapshot.nodes.length
   }
 
-  const rendered: string[] = []
+  const rendered: { source: string; snapshotIndex: number | null }[] = []
+  const snapshotsByNode = new Map(
+    visualNodeSnapshots
+      .map((snapshot, snapshotIndex) => ({ snapshot, snapshotIndex }))
+      .filter(({ snapshot }) => snapshot.nodes.length)
+      .map((entry) => [entry.snapshot.nodes[0], entry]),
+  )
   for (let index = 0; index < currentNodes.length;) {
-    const reusable = visualNodeSnapshots.find(
-      (snapshot) =>
-        snapshot.nodes[0] === currentNodes[index] &&
-        snapshot.nodes.every(
-          (node, offset) =>
-            node === currentNodes[index + offset] && currentNodes[index + offset]?.eq(node),
-        ),
-    )
-    if (reusable) {
-      rendered.push(reusable.rawSource)
-      index += reusable.nodes.length
+    const reusable = snapshotsByNode.get(currentNodes[index])
+    if (reusable?.snapshot.nodes.every((node, offset) => node === currentNodes[index + offset])) {
+      rendered.push({ source: reusable.snapshot.rawSource, snapshotIndex: reusable.snapshotIndex })
+      index += reusable.snapshot.nodes.length
       continue
     }
 
@@ -233,19 +411,39 @@ function serializeVisualDocumentLosslessly(
       type: 'doc',
       content: [node.toJSON()],
     })
-    const whitespace = positional
-      ? positional.isLast
-        ? trailingBlockWhitespace(positional.snapshot.rawSource)
-        : ''
+    // Positional whitespace belongs to one unchanged block boundary. Once a
+    // block splits, or nodes are inserted, its old interior separator cannot
+    // safely join the new top-level nodes.
+    const preservesBoundary =
+      positional?.snapshot.nodes.length === 1 &&
+      currentNodes.length === snapshotPosition &&
+      positional.snapshot.nodes[0].type === node.type
+    const whitespace = preservesBoundary
+      ? trailingBlockWhitespace(positional.snapshot.rawSource)
       : '\n\n'
-    rendered.push(`${serialized.trimEnd()}${whitespace}`)
+    rendered.push({
+      source: `${serialized.replace(/^\n+/u, '').trimEnd()}${whitespace}`,
+      snapshotIndex: preservesBoundary ? positional.snapshotIndex : null,
+    })
     index += 1
   }
-  return rendered
-    .join('')
-    .replace(/\n\n$/u, (ending) =>
-      lastVisualMarkdown.endsWith('\n\n') ? ending : lastVisualMarkdown.endsWith('\n') ? '\n' : '',
-    )
+  let source = ''
+  for (const [index, fragment] of rendered.entries()) {
+    const previous = rendered[index - 1]
+    const originalBoundary =
+      previous &&
+      previous.snapshotIndex !== null &&
+      fragment.snapshotIndex !== null &&
+      fragment.snapshotIndex === previous.snapshotIndex + 1
+    if (previous && !originalBoundary && fragment.source.trim() && source) {
+      if (!/\n[\t ]*\n[\t ]*$/u.test(previous.source))
+        source += previous.source.endsWith('\n') ? '\n' : '\n\n'
+    }
+    source += fragment.source
+  }
+  return source.replace(/\n\n$/u, (ending) =>
+    lastVisualMarkdown.endsWith('\n\n') ? ending : lastVisualMarkdown.endsWith('\n') ? '\n' : '',
+  )
 }
 
 function commitVisualContent(currentEditor: CoreEditor, nextContent: string) {
@@ -268,6 +466,10 @@ function commitVisualContent(currentEditor: CoreEditor, nextContent: string) {
 
 function reparseRawBlock(rawSource: string, position: number) {
   if (!editor.value) return
+  if (editor.value.state.doc.nodeAt(position)?.attrs.rawKind === 'reference') {
+    applyExternalContent(lastVisualMarkdown, lastAppliedRevision, true)
+    return
+  }
   const parsedDocument = parseMarkdownBlockDocument(rawSource)
   if (parsedDocument.blocks.length !== 1 || parsedDocument.blocks[0].kind === 'raw') return
   const currentNode = editor.value.state.doc.nodeAt(position)
@@ -295,7 +497,11 @@ function applyExternalContent(value: string, revision: number, preserveViewState
   acceptVisualUpdates = false
 
   try {
-    editor.value.commands.setContent(buildVisualMarkdownProjection(value, props.blockDocument), {
+    const blockDocument =
+      props.blockDocument?.source === value
+        ? props.blockDocument
+        : parseMarkdownBlockDocument(value, props.blockDocument ?? undefined)
+    editor.value.commands.setContent(buildVisualMarkdownProjection(value, blockDocument), {
       contentType: 'markdown',
       emitUpdate: false,
     })
@@ -303,7 +509,14 @@ function applyExternalContent(value: string, revision: number, preserveViewState
     if (nextMaxPosition > 0) {
       const from = Math.max(1, Math.min(selection.from, nextMaxPosition))
       const to = Math.max(1, Math.min(selection.to, nextMaxPosition))
-      editor.value.commands.setTextSelection({ from, to })
+      editor.value.view.dispatch(
+        editor.value.state.tr.setSelection(
+          TextSelection.between(
+            editor.value.state.doc.resolve(from),
+            editor.value.state.doc.resolve(to),
+          ),
+        ),
+      )
     }
     lastAppliedRevision = revision
     lastVisualMarkdown = value
@@ -332,10 +545,11 @@ function createEditor(element: HTMLDivElement) {
   return createVisualEditor({
     element,
     content: buildVisualMarkdownProjection(props.modelValue, props.blockDocument),
-    allowRemoteImages: props.allowRemoteImages,
-    documentPath: props.documentPath,
-    workspaceRootPath: props.workspaceRootPath,
+    allowRemoteImages: () => props.allowRemoteImages,
+    documentPath: () => props.documentPath,
+    workspaceRootPath: () => props.workspaceRootPath,
     blockControls: blockControls.extension,
+    searchControls,
     onRawEdit: () => beginVisualOperation('raw'),
     onRawCollapse: reparseRawBlock,
     onKeyDown: handleVisualKeydown,
@@ -409,11 +623,14 @@ function findAnchorTarget(hash: string) {
     return exactIdTarget
   }
 
-  return (
-    Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')).find(
-      (element) => slugifyHeading(element.textContent ?? '') === anchor,
-    ) ?? null
-  )
+  const slugCounts = new Map<string, number>()
+  for (const element of root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')) {
+    const slug = slugifyHeading(element.textContent ?? '')
+    const seenCount = slugCounts.get(slug) ?? 0
+    slugCounts.set(slug, seenCount + 1)
+    if ((seenCount ? `${slug}-${seenCount}` : slug) === anchor) return element
+  }
+  return null
 }
 
 function openVisualLink(href: string) {
@@ -424,16 +641,18 @@ function openVisualLink(href: string) {
   }
 
   if (href.startsWith('#')) {
+    cancelAnimationFrame(viewRestoreFrame)
     findAnchorTarget(href)?.scrollIntoView({ block: 'start' })
     return
   }
 
-  if (/^https?:\/\//iu.test(href)) {
+  if (/^(?:https?:\/\/|mailto:)/iu.test(href)) {
     window.open(href, '_blank', 'noopener,noreferrer')
-  }
+  } else emit('navigate-link', href)
 }
 
 function scrollToHeading(id: string) {
+  cancelAnimationFrame(viewRestoreFrame)
   findAnchorTarget(`#${encodeURIComponent(id)}`)?.scrollIntoView({ block: 'start' })
   requestAnimationFrame(updateMapViewport)
 }
@@ -612,12 +831,16 @@ const slashCommands: { label: string; command: EditorCommand }[] = [
   { label: 'Code block', command: 'code-block' },
   { label: 'Divider', command: 'horizontal-rule' },
   { label: 'Image', command: 'image' },
+  { label: 'Image URL', command: 'image-url' },
   { label: 'Table', command: 'insert-table' },
 ]
 
 const filteredSlashCommands = computed(() => {
   const query = slashMenu.value?.query.toLowerCase() ?? ''
-  return slashCommands.filter((item) => item.label.toLowerCase().includes(query))
+  return slashCommands.filter(
+    (item) =>
+      t(item.label).toLowerCase().includes(query) || item.label.toLowerCase().includes(query),
+  )
 })
 
 function updateSlashMenu() {
@@ -749,12 +972,12 @@ async function editSelectedImageAlt() {
   if (!editor.value) return
   const attributes = editor.value.getAttributes('image') as { alt?: string }
   const alt = await openInputDialog({
-    title: 'Image alt text',
-    message: 'Describe the image for readers using assistive technology.',
+    title: t('Image alt text'),
+    message: t('Describe the image for readers using assistive technology.'),
     initialValue: attributes.alt ?? '',
-    placeholder: 'Short image description',
-    inputLabel: 'Alt text',
-    confirmLabel: 'Save',
+    placeholder: t('Short image description'),
+    inputLabel: t('Alt text'),
+    confirmLabel: t('Save'),
   })
   if (alt === null) return
   runCommand(() => editor.value?.chain().focus().updateAttributes('image', { alt }).run())
@@ -793,27 +1016,6 @@ watch(
   },
 )
 
-watch(
-  () => props.allowRemoteImages,
-  (allowed) => {
-    editorHost.value
-      ?.querySelectorAll<
-        HTMLDivElement & { renderWithPermission?: (nextAllowed: boolean) => void }
-      >('.visual-image-node')
-      .forEach((node) => {
-        node.renderWithPermission?.(allowed)
-        if (!allowed || node.querySelector('img')) return
-        const source = node.dataset.imageSource ?? ''
-        if (!/^https?:\/\//iu.test(source)) return
-        const image = document.createElement('img')
-        image.src = source
-        image.alt = ''
-        image.loading = 'lazy'
-        node.replaceChildren(image)
-      })
-  },
-)
-
 onMounted(() => {
   if (!editorHost.value) {
     return
@@ -838,6 +1040,7 @@ onMounted(() => {
 })
 
 watch(headings, () => nextTick(measureHeadingPositions))
+watch(language, syncBlockDecorations)
 
 function flushContent() {
   if (!hasVisualChanges) return props.modelValue
@@ -855,8 +1058,15 @@ function flushContent() {
 defineExpose({
   captureViewState,
   flushContent,
+  hasOpenDialog: () => !!inputDialog.value,
   restoreViewState,
   runCommand: runEditorCommand,
+  search,
+  revealSearch,
+  replaceSearch,
+  revealSourceRange,
+  revealAnchor: scrollToHeading,
+  insertImportedImage,
 })
 
 function runCommand(command: () => void) {
@@ -867,7 +1077,7 @@ function runCommand(command: () => void) {
   beginVisualOperation('command')
   try {
     command()
-    editor.value.commands.focus()
+    editor.value.view.focus()
   } finally {
     updateContextMenu()
   }
@@ -933,20 +1143,6 @@ async function setLink() {
   )
 }
 
-async function setImage() {
-  if (!editor.value) {
-    return
-  }
-
-  const url = await openInputDialog(createImageInputDialog())
-
-  if (!url) {
-    return
-  }
-
-  runCommand(() => editor.value?.chain().focus().setImage({ src: url }).run())
-}
-
 function captureViewState() {
   const selection = editor.value?.state.selection
 
@@ -1008,11 +1204,19 @@ function restoreViewState(
         : toVisualSelectionState(viewState.selectionState, nextMaxPosition)
 
     if (selection) {
-      editor.value.commands.setTextSelection({ from: selection.from, to: selection.to })
+      editor.value.view.dispatch(
+        editor.value.state.tr.setSelection(
+          TextSelection.between(
+            editor.value.state.doc.resolve(selection.from),
+            editor.value.state.doc.resolve(selection.to),
+          ),
+        ),
+      )
     }
   }
 
-  requestAnimationFrame(() => {
+  cancelAnimationFrame(viewRestoreFrame)
+  viewRestoreFrame = requestAnimationFrame(() => {
     if (scrollHost.value) {
       scrollHost.value.scrollTop = viewState.scrollTop
       updateMapViewport()
@@ -1059,7 +1263,11 @@ function runEditorCommand(command: EditorCommand) {
     quote: () => runCommand(() => editor.value?.chain().focus().toggleBlockquote().run()),
     'code-block': () => runCommand(() => editor.value?.chain().focus().toggleCodeBlock().run()),
     link: () => setLink(),
-    image: () => setImage(),
+    image: () => emit('image-import', null),
+    'image-url': async () => {
+      const url = await openInputDialog(createImageInputDialog())
+      if (url) insertImportedImage(url)
+    },
     'horizontal-rule': () =>
       runCommand(() => editor.value?.chain().focus().setHorizontalRule().run()),
     'insert-table': () =>
@@ -1110,6 +1318,7 @@ onBeforeUnmount(() => {
   mapResizeObserver?.disconnect()
   mapResizeObserver = null
   window.cancelAnimationFrame(scrollFrame)
+  window.cancelAnimationFrame(viewRestoreFrame)
   editor.value?.destroy()
   editor.value = null
   resolveInputDialog?.(null)
@@ -1145,6 +1354,8 @@ onBeforeUnmount(() => {
       @keydown.capture="handleVisualFrameKeydown"
       @beforeinput.capture="markVisualInput"
       @pointerdown.capture="markVisualInput"
+      @paste.capture="importTransferImage"
+      @drop.capture="importTransferImage"
     >
       <div
         v-if="dropBlockIndex !== null"
@@ -1163,27 +1374,27 @@ onBeforeUnmount(() => {
         data-testid="visual-block-menu"
       >
         <template v-if="!blockTransformMenuOpen">
-          <div class="visual-block-menu-title">Block actions</div>
+          <div class="visual-block-menu-title">{{ t('Block actions') }}</div>
           <button type="button" @click="insertBlock('above')">
             <ArrowUpToLine :size="16" />
-            <span>Insert above</span>
+            <span>{{ t('Insert above') }}</span>
           </button>
           <button type="button" @click="insertBlock('below')">
             <ArrowDownToLine :size="16" />
-            <span>Insert below</span>
+            <span>{{ t('Insert below') }}</span>
           </button>
           <button type="button" @click="duplicateSelectedBlocks">
             <Copy :size="16" />
-            <span>Duplicate</span>
+            <span>{{ t('Duplicate') }}</span>
           </button>
           <button type="button" @click="openBlockTransformMenu">
             <ChevronRight :size="16" />
-            <span>Turn into</span>
+            <span>{{ t('Turn into') }}</span>
           </button>
           <div class="visual-block-menu-separator" />
           <button type="button" class="danger" @click="deleteSelectedBlocks">
             <Trash2 :size="16" />
-            <span>Delete</span>
+            <span>{{ t('Delete') }}</span>
           </button>
         </template>
         <template v-else>
@@ -1193,57 +1404,57 @@ onBeforeUnmount(() => {
             @click="blockTransformMenuOpen = false"
           >
             <ChevronLeft :size="16" />
-            <span>Turn into</span>
+            <span>{{ t('Turn into') }}</span>
           </button>
           <div class="visual-block-menu-separator" />
           <div class="visual-block-transform-list">
             <button type="button" @click="transformActiveBlock('clear-formatting')">
               <Type :size="16" />
-              <span>Text</span>
+              <span>{{ t('Text') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('heading-1')">
               <Heading1 :size="16" />
-              <span>Heading 1</span>
+              <span>{{ t('Heading 1') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('heading-2')">
               <Heading2 :size="16" />
-              <span>Heading 2</span>
+              <span>{{ t('Heading 2') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('heading-3')">
               <Heading3 :size="16" />
-              <span>Heading 3</span>
+              <span>{{ t('Heading 3') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('heading-4')">
               <Heading4 :size="16" />
-              <span>Heading 4</span>
+              <span>{{ t('Heading 4') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('heading-5')">
               <Heading5 :size="16" />
-              <span>Heading 5</span>
+              <span>{{ t('Heading 5') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('heading-6')">
               <Heading6 :size="16" />
-              <span>Heading 6</span>
+              <span>{{ t('Heading 6') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('bullet-list')">
               <List :size="16" />
-              <span>Bullet list</span>
+              <span>{{ t('Bullet list') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('ordered-list')">
               <ListOrdered :size="16" />
-              <span>Ordered list</span>
+              <span>{{ t('Ordered list') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('task-list')">
               <ListChecks :size="16" />
-              <span>Task list</span>
+              <span>{{ t('Task list') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('quote')">
               <Quote :size="16" />
-              <span>Quote</span>
+              <span>{{ t('Quote') }}</span>
             </button>
             <button type="button" @click="transformActiveBlock('code-block')">
               <Code2 :size="16" />
-              <span>Code block</span>
+              <span>{{ t('Code block') }}</span>
             </button>
           </div>
         </template>
@@ -1262,9 +1473,9 @@ onBeforeUnmount(() => {
           :class="{ active: index === slashMenu.selected }"
           @mousedown.prevent="runSlashCommand(item.command)"
         >
-          {{ item.label }}
+          {{ t(item.label) }}
         </button>
-        <span v-if="filteredSlashCommands.length === 0">No commands</span>
+        <span v-if="filteredSlashCommands.length === 0">{{ t('No commands') }}</span>
       </div>
       <VisualContextToolbar
         v-if="contextMenuPosition"
@@ -1299,8 +1510,8 @@ onBeforeUnmount(() => {
       :message="inputDialog?.message ?? ''"
       :initial-value="inputDialog?.initialValue ?? ''"
       :placeholder="inputDialog?.placeholder ?? ''"
-      :confirm-label="inputDialog?.confirmLabel ?? 'Save'"
-      :input-label="inputDialog?.inputLabel ?? 'Value'"
+      :confirm-label="inputDialog?.confirmLabel ?? t('Save')"
+      :input-label="inputDialog?.inputLabel ?? t('Value')"
       :error="inputDialogError"
       @submit="submitInputDialog"
       @cancel="cancelInputDialog"

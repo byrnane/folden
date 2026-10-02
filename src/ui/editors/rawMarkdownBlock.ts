@@ -1,3 +1,5 @@
+import { t, language } from '../../application/i18n'
+import { watch } from 'vue'
 import { Node, mergeAttributes } from '@tiptap/core'
 import type { RawMarkdownKind } from '../../domain/markdown/blockDocument'
 
@@ -92,7 +94,7 @@ export const RawMarkdownBlock = Node.create<{
       header.className = 'raw-markdown-block-header'
 
       const type = document.createElement('strong')
-      type.textContent = 'Source block'
+      type.textContent = t('Source block')
       const kind = document.createElement('span')
       kind.className = 'raw-markdown-block-kind'
       const preview = document.createElement('code')
@@ -101,13 +103,16 @@ export const RawMarkdownBlock = Node.create<{
 
       const editorField = document.createElement('textarea')
       editorField.className = 'raw-markdown-block-editor'
-      editorField.setAttribute('aria-label', 'Edit raw Markdown block')
+      editorField.setAttribute('aria-label', t('Edit raw Markdown block'))
       editorField.hidden = true
 
       function render(nextNode = node) {
+        type.textContent = t('Source block')
+        editorField.setAttribute('aria-label', t('Edit raw Markdown block'))
         const rawSource = String(nextNode.attrs.rawSource ?? '')
         kind.textContent = String(nextNode.attrs.rawKind ?? 'unknown')
-        preview.textContent = rawSource.trim().replace(/\s+/gu, ' ').slice(0, 120) || 'Empty block'
+        preview.textContent =
+          rawSource.trim().replace(/\s+/gu, ' ').slice(0, 120) || t('Empty block')
         if (document.activeElement !== editorField) editorField.value = rawSource
       }
 
@@ -136,10 +141,12 @@ export const RawMarkdownBlock = Node.create<{
         }
       })
 
+      const stopLanguageWatch = watch(language, () => render())
       dom.append(header, editorField)
       render()
       return {
         dom,
+        destroy: stopLanguageWatch,
         update(updatedNode) {
           if (updatedNode.type.name !== 'rawMarkdownBlock') return false
           node = updatedNode

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { ref, toRaw, watch } from 'vue'
 import type { ApplicationSettings } from '../../application/settings'
 import { applicationSettingLimits, availableThemes } from '../../application/settings'
@@ -15,6 +16,7 @@ const emit = defineEmits<{
   updateSettings: [settings: ApplicationSettings]
   resetLayout: []
   exportDiagnostics: []
+  showAbout: []
 }>()
 
 const settings = ref(structuredClone(toRaw(props.appSettings)))
@@ -127,27 +129,31 @@ watch(
 </script>
 
 <template>
-  <section class="settings-view" aria-label="Settings">
+  <section class="settings-view" :aria-label="t('Settings')">
     <div class="settings-panel">
       <header class="settings-panel-header">
-        <p class="app-kicker">Settings</p>
+        <p class="app-kicker">{{ t('Settings') }}</p>
         <h2>
           {{
             activeSection === 'editor'
-              ? 'Editor'
+              ? t('Editor')
               : activeSection === 'files'
-                ? 'Files'
-                : 'Appearance'
+                ? t('Files')
+                : t('Appearance')
           }}
         </h2>
       </header>
       <section v-if="activeSection === 'editor'" class="settings-section">
         <label class="settings-row"
-          ><span><strong>Source font</strong><small>Font stack for plain text editing.</small></span
+          ><span
+            ><strong>{{ t('Source font') }}</strong
+            ><small>{{ t('Font stack for plain text editing.') }}</small></span
           ><input v-model="settings.editor.sourceFontFamily" type="text"
         /></label>
         <label class="settings-row"
-          ><span><strong>Source size</strong><small>Text size in Source mode.</small></span
+          ><span
+            ><strong>{{ t('Source size') }}</strong
+            ><small>{{ t('Text size in Source mode.') }}</small></span
           ><input
             :value="sourceFontSizeInput"
             type="number"
@@ -158,7 +164,9 @@ watch(
             @blur="updateSourceFontSize"
         /></label>
         <label class="settings-row"
-          ><span><strong>Visual size</strong><small>Text size in Visual mode.</small></span
+          ><span
+            ><strong>{{ t('Visual size') }}</strong
+            ><small>{{ t('Text size in Visual mode.') }}</small></span
           ><input
             :value="visualFontSizeInput"
             type="number"
@@ -169,7 +177,9 @@ watch(
             @blur="updateVisualFontSize"
         /></label>
         <label class="settings-row"
-          ><span><strong>Line height</strong><small>Shared editor line spacing.</small></span
+          ><span
+            ><strong>{{ t('Line height') }}</strong
+            ><small>{{ t('Shared editor line spacing.') }}</small></span
           ><input
             :value="lineHeightInput"
             type="number"
@@ -181,7 +191,9 @@ watch(
             @blur="updateLineHeight"
         /></label>
         <label class="settings-row"
-          ><span><strong>Visual width</strong><small>Maximum readable content width.</small></span
+          ><span
+            ><strong>{{ t('Visual width') }}</strong
+            ><small>{{ t('Maximum readable content width.') }}</small></span
           ><input
             :value="visualMaxWidthInput"
             type="number"
@@ -192,29 +204,32 @@ watch(
             @blur="updateVisualMaxWidth"
         /></label>
         <label class="settings-row settings-toggle-row"
-          ><span><strong>Word wrap</strong><small>Wrap long lines in Source mode.</small></span
+          ><span
+            ><strong>{{ t('Word wrap') }}</strong
+            ><small>{{ t('Wrap long lines in Source mode.') }}</small></span
           ><input v-model="settings.editor.wordWrap" class="settings-switch" type="checkbox"
         /></label>
         <label class="settings-row"
           ><span
-            ><strong>Markdown opens as</strong><small>Default mode for Markdown files.</small></span
+            ><strong>{{ t('Markdown opens as') }}</strong
+            ><small>{{ t('Default mode for Markdown files.') }}</small></span
           ><select v-model="settings.editor.defaultMarkdownMode">
-            <option value="visual">Visual</option>
-            <option value="source">Source</option>
+            <option value="visual">{{ t('Visual') }}</option>
+            <option value="source">{{ t('Source') }}</option>
           </select></label
         >
       </section>
       <section v-else-if="activeSection === 'files'" class="settings-section">
         <label class="settings-row settings-toggle-row"
           ><span
-            ><strong>Autosave</strong
-            ><small>Save changed existing files after a short pause.</small></span
+            ><strong>{{ t('Autosave') }}</strong
+            ><small>{{ t('Save changed existing files after a short pause.') }}</small></span
           ><input v-model="settings.autosave.enabled" class="settings-switch" type="checkbox"
         /></label>
         <label class="settings-row"
           ><span
-            ><strong>Autosave delay</strong
-            ><small>Delay before autosave starts, in seconds.</small></span
+            ><strong>{{ t('Autosave delay') }}</strong
+            ><small>{{ t('Delay before autosave starts, in seconds.') }}</small></span
           ><input
             :value="autosaveDelaySecondsInput"
             type="number"
@@ -227,8 +242,10 @@ watch(
         /></label>
         <label class="settings-row settings-toggle-row"
           ><span
-            ><strong>Save on focus loss</strong
-            ><small>Autosave changed existing files when Folden loses focus.</small></span
+            ><strong>{{ t('Save on focus loss') }}</strong
+            ><small>{{
+              t('Autosave changed existing files when Folden loses focus.')
+            }}</small></span
           ><input
             v-model="settings.autosave.saveOnWindowBlur"
             class="settings-switch"
@@ -236,8 +253,10 @@ watch(
         /></label>
         <label class="settings-row settings-toggle-row"
           ><span
-            ><strong>Save before switching files</strong
-            ><small>Autosave the current file before another document becomes active.</small></span
+            ><strong>{{ t('Save before switching files') }}</strong
+            ><small>{{
+              t('Autosave the current file before another document becomes active.')
+            }}</small></span
           ><input
             v-model="settings.autosave.saveOnDocumentSwitch"
             class="settings-switch"
@@ -245,18 +264,30 @@ watch(
         /></label>
       </section>
       <section v-else class="settings-section">
+        <label class="settings-row">
+          <span>
+            <strong>{{ t('Language') }}</strong>
+            <small>{{ t('Language for the application interface.') }}</small>
+          </span>
+          <select v-model="settings.language" data-testid="language-select">
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+          </select>
+        </label>
         <label class="settings-row"
           ><span
-            ><strong>Theme</strong><small>Visual theme for the application interface.</small></span
+            ><strong>{{ t('Theme') }}</strong
+            ><small>{{ t('Visual theme for the application interface.') }}</small></span
           ><select v-model="settings.appearance.theme" data-testid="theme-select">
             <option v-for="theme in availableThemes" :key="theme.id" :value="theme.id">
-              {{ theme.label }}
+              {{ t(theme.label) }}
             </option>
           </select></label
         >
         <label class="settings-row"
           ><span
-            ><strong>UI scale</strong><small>Scale controls and application chrome.</small></span
+            ><strong>{{ t('UI scale') }}</strong
+            ><small>{{ t('Scale controls and application chrome.') }}</small></span
           ><input
             :value="uiScaleInput"
             type="number"
@@ -268,14 +299,18 @@ watch(
             @blur="updateUiScale"
         /></label>
         <label class="settings-row"
-          ><span><strong>Density</strong><small>Spacing preset for controls.</small></span
+          ><span
+            ><strong>{{ t('Density') }}</strong
+            ><small>{{ t('Spacing preset for controls.') }}</small></span
           ><select v-model="settings.appearance.density">
-            <option value="compact">Compact</option>
-            <option value="comfortable">Comfortable</option>
+            <option value="compact">{{ t('Compact') }}</option>
+            <option value="comfortable">{{ t('Comfortable') }}</option>
           </select></label
         >
         <label class="settings-row settings-toggle-row"
-          ><span><strong>Status bar</strong><small>Show document stats at the bottom.</small></span
+          ><span
+            ><strong>{{ t('Status bar') }}</strong
+            ><small>{{ t('Show document stats at the bottom.') }}</small></span
           ><input
             v-model="settings.appearance.showStatusBar"
             class="settings-switch"
@@ -283,18 +318,20 @@ watch(
         /></label>
         <label class="settings-row settings-toggle-row"
           ><span
-            ><strong>Sidebar</strong><small>Show workspace sidebar outside Settings.</small></span
+            ><strong>{{ t('Sidebar') }}</strong
+            ><small>{{ t('Show workspace sidebar outside Settings.') }}</small></span
           ><input v-model="settings.appearance.showSidebar" class="settings-switch" type="checkbox"
         /></label>
         <div class="settings-actions">
-          <button type="button" @click="emit('resetLayout')">Reset layout</button
+          <button type="button" @click="emit('showAbout')">{{ t('About Folden') }}</button>
+          <button type="button" @click="emit('resetLayout')">{{ t('Reset layout') }}</button
           ><button
             type="button"
             :disabled="!canExportDiagnostics"
             data-testid="export-diagnostics"
             @click="emit('exportDiagnostics')"
           >
-            Export diagnostics
+            {{ t('Export diagnostics') }}
           </button>
         </div>
       </section>

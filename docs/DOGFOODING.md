@@ -2,6 +2,8 @@
 
 Use this file to record real daily usage before starting the next feature cycle.
 
+For the 0.12 beta, automated and native acceptance is recorded separately in [BETA-0.12.0.md](BETA-0.12.0.md). No real daily-use sessions have been recorded for this beta yet. Add genuine sessions here; do not treat a passing mock/browser test as a work session.
+
 ## Sessions
 
 Add one entry per real work session:
@@ -35,7 +37,11 @@ Required coverage:
 - local and remote images;
 - layout and settings persistence between launches;
 - several hours of use;
-- memory use and visible slowdown check.
+- memory use and visible slowdown check;
+- quick open, project search, and Source/Visual find/replace;
+- templates, relative document links, and back/forward navigation;
+- image import/paste and file/folder moves with relative-reference checks;
+- RU/EN persistence and native printing/PDF of a long document.
 
 ## 0.7 Automated Closeout
 

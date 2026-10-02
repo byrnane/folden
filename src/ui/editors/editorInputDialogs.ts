@@ -1,3 +1,4 @@
+import { t } from '../../application/i18n'
 import { validateImageTarget, validateLinkTarget } from '../../domain/markdown/markdownSafety'
 
 export type EditorInputDialogState = {
@@ -13,27 +14,34 @@ export type EditorInputDialogState = {
 
 export function createLinkInputDialog(initialValue = ''): EditorInputDialogState {
   return {
-    title: 'Edit link',
-    message: 'Enter a URL for the selected link. Leave it empty to remove the link.',
+    title: t('Edit link'),
+    message: t('Enter a URL for the selected link. Leave it empty to remove the link.'),
     initialValue,
     placeholder: 'https://example.com',
-    confirmLabel: 'Apply',
-    inputLabel: 'Link URL',
-    validate: (value) => validateLinkTarget(value),
+    confirmLabel: t('Apply'),
+    inputLabel: t('Link URL'),
+    validate: (value) => {
+      const error = validateLinkTarget(value)
+      return error ? t(error) : null
+    },
     normalize: (value) => value.trim(),
   }
 }
 
 export function createImageInputDialog(initialValue = ''): EditorInputDialogState {
   return {
-    title: 'Insert image',
-    message:
+    title: t('Insert image'),
+    message: t(
       'Enter a relative, asset:, data:, http:, or https: image URL to insert into the document.',
+    ),
     initialValue,
     placeholder: './image.png',
-    confirmLabel: 'Insert',
-    inputLabel: 'Image URL',
-    validate: (value) => validateImageTarget(value),
+    confirmLabel: t('Insert'),
+    inputLabel: t('Image URL'),
+    validate: (value) => {
+      const error = validateImageTarget(value)
+      return error ? t(error) : null
+    },
     normalize: (value) => value.trim(),
   }
 }

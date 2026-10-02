@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { shallowRef } from 'vue'
 import type {
   DocumentAnalysisRequest,
@@ -27,7 +28,7 @@ export function createDocumentAnalysisController(options: DocumentAnalysisContro
     options.onError(null)
   })
   worker.addEventListener('error', () => {
-    options.onError('Document analysis worker failed. Navigation data may be stale.')
+    options.onError(t('Document analysis worker failed. Navigation data may be stale.'))
   })
 
   function dispatch(documentId: string) {

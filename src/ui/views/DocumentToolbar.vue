@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import {
   Bold,
   ChevronDown,
@@ -101,6 +102,7 @@ const visualToolbarGroups: Array<{
     items: [
       { command: 'link', title: 'Link', label: 'Link', icon: LinkIcon },
       { command: 'image', title: 'Image', label: 'Image', icon: ImageIcon },
+      { command: 'image-url', title: 'Image URL', label: 'Image URL', icon: ImageIcon },
       { command: 'insert-table', title: 'Insert table', label: 'Table', icon: Table2 },
     ],
   },
@@ -185,35 +187,35 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="shared-toolbar" aria-label="Document toolbar">
+  <section class="shared-toolbar" :aria-label="t('Document toolbar')">
     <div class="format-toolbar shared-format-toolbar">
-      <div class="toolbar-group" aria-label="Headings">
+      <div class="toolbar-group" :aria-label="t('Headings')">
         <button
           v-for="item in primaryHeadingToolbarCommands"
           :key="item.command"
           type="button"
           class="toolbar-button"
-          :title="item.title"
-          :aria-label="item.title"
+          :title="t(item.title)"
+          :aria-label="t(item.title)"
           :disabled="commandDisabled(item.command)"
           @click="runToolbarMenuCommand(item.command)"
         >
           <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbar" />
-          <span>{{ item.label }}</span>
+          <span>{{ t(item.label) }}</span>
         </button>
         <div ref="headingsMenuElement" class="toolbar-menu">
           <button
             ref="headingsMenuTriggerElement"
             type="button"
             class="toolbar-button toolbar-menu-trigger"
-            title="Headings"
-            aria-label="Headings"
+            :title="t('Headings')"
+            :aria-label="t('Headings')"
             :aria-expanded="headingsMenuOpen"
             :aria-controls="headingsMenuId"
             @click="toggleHeadingsMenu"
           >
             <Heading1 :size="uiIconSizes.toolbar" />
-            <span>Headings</span>
+            <span>{{ t('Headings') }}</span>
             <ChevronDown class="toolbar-menu-chevron" :size="uiIconSizes.toolbarChevron" />
           </button>
           <div v-show="headingsMenuOpen" :id="headingsMenuId" class="toolbar-menu-list">
@@ -222,13 +224,13 @@ onBeforeUnmount(() => {
               :key="item.command"
               type="button"
               class="toolbar-menu-item"
-              :title="item.title"
-              :aria-label="item.title"
+              :title="t(item.title)"
+              :aria-label="t(item.title)"
               :disabled="commandDisabled(item.command)"
               @click="runToolbarMenuCommand(item.command)"
             >
               <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbarMenuItem" />
-              <span>{{ item.label }}</span>
+              <span>{{ t(item.label) }}</span>
             </button>
           </div>
         </div>
@@ -236,19 +238,19 @@ onBeforeUnmount(() => {
 
       <template v-for="group in visualToolbarGroups" :key="group.name">
         <span class="toolbar-divider" aria-hidden="true" />
-        <div class="toolbar-group" :aria-label="group.name">
+        <div class="toolbar-group" :aria-label="t(group.name)">
           <button
             v-for="item in group.items"
             :key="item.command"
             type="button"
             class="toolbar-button"
-            :title="item.title"
-            :aria-label="item.title"
+            :title="t(item.title)"
+            :aria-label="t(item.title)"
             :disabled="commandDisabled(item.command)"
             @click="runToolbarMenuCommand(item.command)"
           >
             <component :is="item.icon" v-if="item.icon" :size="uiIconSizes.toolbar" />
-            <span>{{ item.label }}</span>
+            <span>{{ t(item.label) }}</span>
           </button>
         </div>
       </template>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   analyzeMarkdownSafety,
+  hasRemoteMarkdownImages,
   isRemoteImageUrl,
   validateImageTarget,
   validateLinkTarget,
@@ -30,6 +31,39 @@ const unsafeFixtures = [
 ] as const
 
 describe('markdown safety', () => {
+  it('detects remote images through full, collapsed and shortcut references', () => {
+    expect(hasRemoteMarkdownImages('![Frame][Shot]\n\n[shot]: https://example.com/image.png')).toBe(
+      true,
+    )
+    expect(hasRemoteMarkdownImages('![Shot][]\n\n[shot]: <https://example.com/image.png>')).toBe(
+      true,
+    )
+    expect(hasRemoteMarkdownImages('![Shot]\n\n[shot]:\n  https://example.com/image.png')).toBe(
+      true,
+    )
+    expect(hasRemoteMarkdownImages('![Frame][Local]\n\n[local]: ./image.png')).toBe(false)
+    expect(
+      hasRemoteMarkdownImages('![Frame](./image.png)\n\n[Frame]: https://example.com/image.png'),
+    ).toBe(false)
+  })
+
+  it('checks remote image presence without building a safety report', () => {
+    for (const source of [
+      '# Heading\n\nLocal ![image](./image.png)',
+      '[link](https://example.com)',
+      '![image](HTTP://example.com/image.png "Title")',
+      '![image](https://example.com/image.png)',
+      '![image](asset://example/image.png)',
+    ]) {
+      expect(hasRemoteMarkdownImages(source)).toBe(
+        analyzeMarkdownSafety(source).remoteImages.length > 0,
+      )
+      expect(hasRemoteMarkdownImages(source)).toBe(
+        analyzeMarkdownSafety(source).remoteImages.length > 0,
+      )
+    }
+  })
+
   it('accepts a supported markdown subset', () => {
     const report = analyzeMarkdownSafety(
       [

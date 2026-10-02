@@ -67,6 +67,8 @@ function createHarness(document = createDocument()) {
     openTextFileAtPath: vi.fn(),
     openTextFileByPath: vi.fn(),
     saveTextFile: vi.fn(),
+    importImageFromPicker: vi.fn(),
+    importImageData: vi.fn(),
   }
 
   const deps = {
@@ -174,18 +176,30 @@ function createHarness(document = createDocument()) {
     ),
     undoDocument: vi.fn(),
     redoDocument: vi.fn(),
-    markDocumentQueued: vi.fn(() => document),
-    markDocumentSaving: vi.fn(() => document),
+    markDocumentQueued: vi.fn(() => {
+      document.saveState = 'queued'
+      return document
+    }),
+    markDocumentSaving: vi.fn(() => {
+      document.saveState = 'saving'
+      return document
+    }),
     markDocumentSaved: vi.fn(
       (_documentId: string, revision: number, savedDocument: OpenedDocument) => {
         document.persistedRevision = revision
         document.path = savedDocument.path
         document.nativeId = savedDocument.id
         document.relativePath = savedDocument.relativePath
+        document.diskFingerprint = savedDocument.fingerprint
+        document.saveState = 'idle'
         return document
       },
     ),
-    markDocumentSaveError: vi.fn(() => document),
+    markDocumentSaveError: vi.fn((_documentId, error) => {
+      document.saveState = 'error'
+      document.saveError = error
+      return document
+    }),
     replaceDocumentFromDisk: vi.fn((_documentId: string, opened: OpenedDocument) => {
       document.content = opened.content
       document.revision += 1
@@ -194,7 +208,11 @@ function createHarness(document = createDocument()) {
       document.externalState = 'idle'
       return document
     }),
-    markDocumentConflict: vi.fn(() => document),
+    markDocumentConflict: vi.fn((_documentId, message) => {
+      document.externalState = 'conflict'
+      document.externalMessage = message
+      return document
+    }),
     markDocumentMissing: vi.fn(() => document),
     acknowledgeDocumentConflict: vi.fn((_documentId: string, fingerprint) => {
       document.diskFingerprint = fingerprint
@@ -323,6 +341,51 @@ describe('document workflow controller', () => {
       expect.objectContaining({ content: 'from disk' }),
     )
     expect(deps.updateDocumentSessions).toHaveBeenCalled()
+  })
+
+  it('returns cancelled Save As to idle while keeping unsaved changes', async () => {
+    const { controller, deps, document, files } = createHarness()
+    files.saveTextFile.mockResolvedValue(null)
+
+    await controller.saveDocumentAsCopy(document)
+
+    expect(document.saveState).toBe('idle')
+    expect(deps.isDirty(document)).toBe(true)
+    expect(deps.markDocumentSaved).not.toHaveBeenCalled()
+    expect(document.path).toBe('C:\\Docs\\doc.md')
+  })
+
+  it('keeps dirty document content when a debounced reload starts', async () => {
+    const { controller, deps, document } = createHarness()
+
+    await controller.reloadDocumentFromDisk(document.id)
+
+    expect(deps.openWorkspaceFileByPath).not.toHaveBeenCalled()
+    expect(deps.replaceDocumentFromDisk).not.toHaveBeenCalled()
+    expect(document.content).toBe('before')
+    expect(document.externalState).toBe('conflict')
+  })
+
+  it('keeps editor changes made while reading external content', async () => {
+    const { controller, deps, document, paneEditors } = createHarness(
+      createDocument({ revision: 1, persistedRevision: 1 }),
+    )
+    let resolveRead!: (opened: OpenedDocument) => void
+    deps.openWorkspaceFileByPath.mockReturnValue(
+      new Promise<OpenedDocument>((resolve) => {
+        resolveRead = resolve
+      }),
+    )
+
+    const reload = controller.reloadDocumentFromDisk(document.id)
+    paneEditors.value.left.flushContent.mockReturnValue('new local edits')
+    resolveRead(createOpenedDocument({ content: 'external content' }))
+    await reload
+
+    expect(deps.replaceDocumentFromDisk).not.toHaveBeenCalled()
+    expect(document.content).toBe('new local edits')
+    expect(document.externalState).toBe('conflict')
+    expect(deps.isDirty(document)).toBe(true)
   })
 
   it('resolves conflicts by keeping Folden content or applying merged content', async () => {

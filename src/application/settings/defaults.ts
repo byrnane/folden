@@ -1,10 +1,12 @@
 import type { ApplicationSettings, LayoutSettings } from './types'
 import { applicationSettingLimits, layoutSettingLimits } from './limits'
 import { defaultThemeId } from './themes'
+import { systemLanguage } from '../systemLanguage'
 
 export const defaultApplicationSettings: ApplicationSettings = {
+  language: systemLanguage(),
   autosave: {
-    enabled: false,
+    enabled: true,
     debounceMs: applicationSettingLimits.autosaveDebounceMs.fallback,
     saveOnWindowBlur: false,
     saveOnDocumentSwitch: false,

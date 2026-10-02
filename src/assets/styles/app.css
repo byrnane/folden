@@ -653,6 +653,7 @@ h1 {
 }
 
 .workbench {
+  position: relative;
   display: grid;
   grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   min-width: 0;
@@ -2893,4 +2894,125 @@ button.danger:hover:not(:disabled) {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-3);
   }
+}
+/* Project workflows share the existing Folden Dark surfaces. */
+.search-sidebar,
+.create-sidebar {
+  padding: 16px;
+  overflow: auto;
+  min-width: 0;
+}
+.search-sidebar h1,
+.create-sidebar h1 {
+  font-size: 16px;
+  margin: 0 0 16px;
+}
+.search-sidebar > input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.search-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0;
+}
+.search-controls label {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+}
+.search-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  margin: 5px 0;
+  gap: 4px;
+  overflow: hidden;
+}
+.search-result strong,
+.search-result span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.create-sidebar button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 8px 0;
+}
+.find-panel {
+  position: fixed;
+  z-index: 40;
+  top: 88px;
+  right: 24px;
+  max-width: calc(100vw - 48px);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 10px;
+  background: var(--menu-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--shadow-menu);
+  font-size: 11px;
+}
+.find-panel input:not([type='checkbox']) {
+  width: 170px;
+}
+.find-panel label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.find-panel button {
+  min-height: 28px;
+}
+.quick-open-results {
+  display: flex;
+  flex-direction: column;
+  max-height: 400px;
+  overflow: auto;
+  margin-top: 12px;
+}
+.quick-open-results button {
+  text-align: left;
+  border: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-open-results .active {
+  background: var(--selected-bg);
+}
+.welcome-view {
+  position: absolute;
+  top: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 300px;
+  padding: 25px;
+  background: var(--editor-bg);
+  text-align: center;
+  border-radius: var(--surface-radius);
+}
+.welcome-view h1 {
+  margin: 0;
+  font-size: 32px;
+}
+.welcome-view p {
+  color: var(--text-muted);
+  margin: 4px 0;
 }

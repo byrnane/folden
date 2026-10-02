@@ -36,6 +36,7 @@ Application orchestration lives here:
 - `controllers/` owns application state, workflows, dialogs, commands, layout settings, session persistence, external changes, and lifecycle.
 - `state/` contains Vue-backed application stores; pure document types and rules stay in `domain`.
 - `settings/` owns application and layout setting types, defaults, limits, and normalization.
+- `i18n.ts` owns reactive interface translation with English keys; `systemLanguage.ts` detects the initial language without a Vue dependency. Settings own the persisted language.
 - `ports/nativePorts.ts` defines the application-side contracts for native capabilities.
 - helpers and shell types keep application-specific formatting and facade types near the shell.
 
@@ -50,6 +51,7 @@ Framework-independent rules and types live here:
 - Markdown safety, image path resolution, conflict diffing, outline extraction, and document-map construction;
 - native DTO guards and native error shape;
 - workspace filtering rules.
+- document templates, relative document-link resolution, and text-match ranges for Source and Visual search.
 
 `domain` must not depend on Vue, Tauri, UI components, browser storage, or infrastructure adapters.
 
@@ -89,6 +91,7 @@ State-controller responsibilities:
 - `dialogController` owns prompt, confirm, unsaved, Markdown safety, conflict, and recovery dialog state.
 - `commandController` and `applicationCommandController` own command registration and command execution.
 - `layoutController` owns layout state, bounds, visibility actions, reset behavior, and persistence coordination.
+- `searchController` owns project search and quick-open state, request IDs, cancellation, bounded result merging, debounce timers, and the native search-batch subscription.
 - Application settings and layout settings are normalized in `src/application/settings`. Browser storage access stays in `src/infrastructure/settings/settings.ts`.
 
 Workflow-controller responsibilities:
@@ -96,6 +99,7 @@ Workflow-controller responsibilities:
 - `documentWorkflowController` coordinates document open, save, save as copy, close, autosave, reload, conflict handling, pane editor flushing, and undo/redo.
 - `workspaceWorkflowController` coordinates workspace opening, restoration, tree loading, file/folder creation, rename, trash, split opening, and branch refresh after file changes.
 - `applicationLifecycleController` owns mount/dispose behavior, startup restoration, recovery prompting, native event subscriptions, window close handling, final save/session persistence, and listener cleanup.
+- `documentFeaturesController` owns the find/replace panel state, editor search coordination, immutable print snapshots, template creation, image-import workflow, relative-link navigation/history, and explicit workspace moves. It composes `searchController`; `dispose` removes its watchers and disposes search. The shell injects dependencies and exposes these actions.
 
 Lifecycle code belongs in `applicationLifecycleController`. Controllers that create timers or listeners must expose `dispose`.
 
@@ -105,8 +109,8 @@ Application code talks to native capabilities through `src/application/ports/nat
 
 Port groups:
 
-- `DocumentFilePort`: open text files, open workspace files by path, save text files, and close native document handles.
-- `WorkspaceFilePort`: open or restore workspace directories, list directories, open files, create files/directories, rename paths, and move paths to trash.
+- `DocumentFilePort`: open text files, open workspace files by path, save text files, close native document handles, and import images from a picker or supplied bytes.
+- `WorkspaceFilePort`: open or restore workspace directories, list directories, open files, create files/directories, rename/move/trash paths, list project files, and start/cancel project search.
 - `SessionStoragePort`: load/save session state and recovery snapshots.
 - `DiagnosticsPort`: log frontend events, open the logs folder, and export diagnostics.
 - `NativeEventPort`: subscribe to native events and access the current native window close/destroy operations.
@@ -125,7 +129,9 @@ Module responsibilities:
 - `native/paths.rs`: path normalization, validation, root protection, and workspace-safe path helpers.
 - `native/watcher.rs`: filesystem watcher setup, watcher event filtering, and Folden temp-save suppression.
 - `native/documents.rs`: text file open/save, format detection, atomic writes, stale-fingerprint protection, and native document lifecycle.
-- `native/workspace.rs`: workspace authorization, directory listing, workspace file open/create/rename/trash.
+- `native/workspace.rs`: workspace authorization, directory listing, shared bounded traversal, and workspace file open/create/rename/move/trash.
+- `native/search.rs`: cancellable authorized project search and file listing, scan limits, match offsets, and streamed batches.
+- `native/images.rs`: image format/size validation, collision-safe imports into document assets, and preview authorization.
 - `native/persistence.rs`: session and recovery snapshot storage.
 - `native/diagnostics.rs`: frontend event logging, logs-folder opening, and redacted diagnostic export.
 
@@ -165,7 +171,7 @@ Module responsibilities:
 
 1. UI asks the facade to set a pane's document mode.
 2. `applicationShell` rejects Visual mode for non-Markdown paths.
-3. `visualSafetyController` analyzes Markdown safety and prompts when needed.
+3. Unsupported Markdown stays in editable source blocks in the Visual projection; remote images retain per-document permission checks.
 4. The current editor content is flushed before the mode changes.
 5. `paneController` records the selected mode for that pane/document pair.
 
@@ -192,6 +198,22 @@ Module responsibilities:
 3. `externalChangesController` routes the event.
 4. Open documents are marked missing, conflicted, or scheduled for reload.
 5. Workspace branches are refreshed without forcing a full tree reload when possible.
+
+### Project search and quick open
+
+1. `documentFeaturesController` flushes visible editors and coordinates selected-result activation through the document/pane workflows.
+2. `searchController` searches current in-memory document contents and excludes those paths from the native scan so unsaved edits take precedence over disk contents.
+3. `WorkspaceFilePort.startWorkspaceSearch` scans supported files under the authorized root, respecting ignored names and hidden/excluded paths. `listWorkspaceFiles` supplies quick-open candidates.
+4. Rust streams `folden://workspace-search-batch` with workspace/request IDs. The controller ignores stale batches and completion results, merges current matches, and cancels superseded work through `cancelWorkspaceSearch`.
+5. Native scans stop at 100,000 entries or 32 levels, do not follow symbolic links, search files up to 2 MiB, and cap matches at 5,000. Quick open displays at most 100 ranked candidates. Partial/skipped feedback remains visible.
+6. Search results reveal a current text range in Source. Disposal clears debounce work, removes watchers/listeners, and cancels active requests.
+
+### Images, document links, and printing
+
+- Image import first ensures the document is saved, then uses `DocumentFilePort`. Rust validates and writes the asset; the editor inserts its relative reference. Previews use authorized local assets or explicit per-document permission for remote images.
+- Relative Markdown links resolve through the domain helper. `documentFeaturesController` opens the target, reveals an optional heading anchor, and owns back/forward history for the current workspace.
+- Print preparation flushes editors and captures document content and image policy once. `PrintView.vue` renders that snapshot in a read-only print layout using existing Markdown extensions, then calls the system print dialog. Printing does not mutate the document or confirm PDF completion.
+- Explicit moves use the workspace port, remap open document/tree paths, and refresh the workspace. Markdown moves carry a sibling `<stem>.assets` folder, reject destination asset collisions, and attempt to roll back the document if the asset move fails. They do not rewrite links or image references inside documents.
 
 ### External conflict
 
@@ -285,6 +307,7 @@ Current Playwright E2E specs live in `tests/e2e`:
 - `shell-layout.spec.ts`: activity rail, toolbar behavior, layout persistence, fit labels, and reset layout.
 - `visual-safety.spec.ts`: Visual-mode safety and local/remote image behavior.
 - `workspace-save.spec.ts`: workspace open/create/rename/trash and save refresh flows.
+- `beta-workflows.spec.ts`: templates, search/quick open, relative links/history, RU/EN, and mocked print snapshots. WebView2 and installer checks are recorded separately in [BETA-0.12.0.md](BETA-0.12.0.md).
 
 ## Lifecycle and Cleanup
 

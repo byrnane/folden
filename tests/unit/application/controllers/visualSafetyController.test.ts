@@ -28,6 +28,21 @@ function documentFixture(overrides: Partial<OpenDocument> = {}): OpenDocument {
 }
 
 describe('visual safety controller', () => {
+  it('updates remote image presence after edits without retaining revision reports', () => {
+    const controller = createVisualSafetyController({
+      setOpenDocumentMode: vi.fn(),
+      openMarkdownSafetyDialog: vi.fn<() => Promise<boolean>>(),
+    })
+    const document = documentFixture()
+    expect(controller.documentHasRemoteImages(document)).toBe(false)
+    document.content = '![image](https://example.test/image.png)'
+    document.revision++
+    expect(controller.documentHasRemoteImages(document)).toBe(true)
+    document.content = '![image](./image.png)'
+    document.revision++
+    expect(controller.documentHasRemoteImages(document)).toBe(false)
+  })
+
   it('allows unsupported markdown through lossless raw blocks without a warning', async () => {
     const setOpenDocumentMode = vi.fn()
     const openMarkdownSafetyDialog = vi.fn<() => Promise<boolean>>().mockResolvedValueOnce(true)

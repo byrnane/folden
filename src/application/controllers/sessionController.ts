@@ -155,14 +155,11 @@ export function createSessionController(hasNativeRuntime: boolean) {
       (entry) => !excludedKeys.has(entry.key),
     )
     const currentKeys = new Set(currentEntries.map((entry) => entry.key))
-    const mergedEntries = [
-      ...pendingRecoveryEntries.value.filter(
-        (entry) => !excludedKeys.has(entry.key) && !currentKeys.has(entry.key),
-      ),
-      ...currentEntries,
-    ]
+    const pendingEntries = pendingRecoveryEntries.value.filter(
+      (entry) => !excludedKeys.has(entry.key) && !currentKeys.has(entry.key),
+    )
 
-    return pruneRecoverySnapshots(mergedEntries, MAX_RECOVERY_ENTRIES)
+    return [...currentEntries, ...pruneRecoverySnapshots(pendingEntries, MAX_RECOVERY_ENTRIES)]
   }
 
   async function persistSessionAndRecoveryState(persist: () => Promise<void>) {

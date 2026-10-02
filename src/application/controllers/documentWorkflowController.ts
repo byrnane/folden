@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { ComputedRef, Ref } from 'vue'
 import type { FileFingerprint } from '../../domain/document'
 import { createTextFileFormat } from '../../domain/document'
@@ -131,6 +132,13 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     },
     onSaving: (job) => {
       deps.markDocumentSaving(job.documentId)
+    },
+    onCancelled: (job) => {
+      const document = deps.getDocument(job.documentId)
+      if (document) {
+        document.saveState = 'idle'
+        document.saveError = null
+      }
     },
     onSaved: (job, savedDocument) => {
       const nextDocument = deps.markDocumentSaved(job.documentId, job.revision, savedDocument)
@@ -310,7 +318,7 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
   }
 
   function createScratchDocument() {
-    const document = deps.createDocumentDraft('# Untitled\n\n', 'Untitled.md')
+    const document = deps.createDocumentDraft('', 'Untitled.md')
     addDocumentToPane(document)
   }
 
@@ -321,7 +329,7 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
       if (document) {
         openLoadedDocument(document)
       }
-    }, 'Could not open file')
+    }, t('Could not open file'))
   }
 
   async function openWorkspaceFile(entry: WorkspaceEntryRef, paneId = deps.activePaneId.value) {
@@ -334,7 +342,7 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     await deps.runFileTask(async () => {
       const document = await deps.openWorkspaceFileByPath(deps.workspace.value!.id, entry.path)
       openLoadedDocument(document, paneId)
-    }, 'Could not open workspace file')
+    }, t('Could not open workspace file'))
   }
 
   async function saveDocument(
@@ -354,8 +362,9 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
         return
       }
 
-      deps.errorMessage.value =
-        'Resolve the external file conflict before saving to the original path.'
+      deps.errorMessage.value = t(
+        'Resolve the external file conflict before saving to the original path.',
+      )
       return
     }
 
@@ -382,7 +391,7 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
           : suggestFileName(currentDocument.content),
         reason,
       })
-    }, 'Could not save file')
+    }, t('Could not save file'))
   }
 
   function canAutosaveDocument(document: OpenDocument) {
@@ -453,12 +462,15 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
 
   function syncDocumentExternalStateFromSaveError(documentId: string, error: NativeError) {
     if (error.code === 'file_changed_externally') {
-      deps.markDocumentConflict(documentId, 'The file changed on disk before Folden could save it.')
+      deps.markDocumentConflict(
+        documentId,
+        t('The file changed on disk before Folden could save it.'),
+      )
       return
     }
 
     if (error.code === 'not_found') {
-      deps.markDocumentMissing(documentId, 'The original file is no longer available on disk.')
+      deps.markDocumentMissing(documentId, t('The original file is no longer available on disk.'))
     }
   }
 
@@ -506,7 +518,7 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
         suggestedFileName: suggestFileName(currentDocument.content),
         reason: 'manual',
       })
-    }, 'Could not save file copy')
+    }, t('Could not save file copy'))
   }
 
   async function saveDirtyDocuments(documentIds: string[]) {
@@ -576,11 +588,11 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     }
 
     const decision = await deps.openUnsavedDialog({
-      title: `Close ${document.name}?`,
-      message: `Save changes to ${document.name} before closing this document?`,
-      saveLabel: 'Save',
-      discardLabel: 'Discard',
-      cancelLabel: 'Cancel',
+      title: t('Close {name}?', { name: document.name }),
+      message: t('Save changes to {name} before closing this document?', { name: document.name }),
+      saveLabel: t('Save'),
+      discardLabel: t('Discard'),
+      cancelLabel: t('Cancel'),
       showSave: true,
     })
 
@@ -681,7 +693,7 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
     }
 
     const decision = await deps.openConflictDialog({
-      title: `Resolve conflict for ${currentDocument.name}`,
+      title: t('Resolve conflict for {name}', { name: currentDocument.name }),
       path: currentDocument.path,
       foldenContent: currentDocument.content,
       diskContent: diskDocument.content,
@@ -764,15 +776,42 @@ export function createDocumentWorkflowController(deps: DocumentWorkflowDeps) {
   }
 
   async function reloadDocumentFromDisk(documentId: string) {
+    flushVisibleDocumentViews(documentId)
     const document = deps.getDocument(documentId)
 
     if (!document?.path) {
       return
     }
 
+    if (deps.isDirty(document)) {
+      deps.markDocumentConflict(
+        documentId,
+        t('The file changed on disk while you have unsaved edits.'),
+      )
+      return
+    }
+
+    const revisionBeforeRead = document.revision
+    const pathBeforeRead = document.path
     const loadedDocument = await loadCurrentDiskDocument(document)
 
     if (!loadedDocument) {
+      return
+    }
+
+    flushVisibleDocumentViews(documentId)
+    const currentDocument = deps.getDocument(documentId)
+    if (!currentDocument || currentDocument.path !== pathBeforeRead) {
+      return
+    }
+    if (deps.isDirty(currentDocument)) {
+      deps.markDocumentConflict(
+        documentId,
+        t('The file changed on disk while you have unsaved edits.'),
+      )
+      return
+    }
+    if (currentDocument.revision !== revisionBeforeRead) {
       return
     }
 

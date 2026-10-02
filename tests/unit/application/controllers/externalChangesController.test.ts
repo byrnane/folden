@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { language } from '../../../../src/application/i18n'
 import {
   createExternalChangesController,
   externalFileEventDebounceMs,
@@ -34,6 +35,7 @@ function createDocument(overrides: Partial<OpenDocument> = {}): OpenDocument {
 
 describe('external changes controller', () => {
   beforeEach(() => {
+    language.value = 'en'
     vi.useFakeTimers()
   })
 

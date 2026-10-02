@@ -43,8 +43,42 @@ pub(crate) fn decode_text_file(
     path: &Path,
     operation: &str,
 ) -> NativeResult<(String, TextFileFormat, FileFingerprint)> {
-    let bytes = fs::read(path).map_err(|error| io_error(operation, error))?;
-    let metadata = fs::metadata(path).map_err(|error| io_error(operation, error))?;
+    decode_text_file_with_limit(path, None, operation)
+}
+
+pub(crate) fn decode_text_file_with_limit(
+    path: &Path,
+    max_bytes: Option<u64>,
+    operation: &str,
+) -> NativeResult<(String, TextFileFormat, FileFingerprint)> {
+    use std::io::Read;
+    let file = fs::File::open(path).map_err(|error| io_error(operation, error))?;
+    let metadata = file
+        .metadata()
+        .map_err(|error| io_error(operation, error))?;
+    let limit = max_bytes.unwrap_or(u64::MAX);
+    if metadata.len() > limit {
+        return Err(native_error(
+            FileErrorCode::TooLarge,
+            operation,
+            "The file is too large.",
+            None,
+            false,
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|error| io_error(operation, error))?;
+    if bytes.len() as u64 > limit {
+        return Err(native_error(
+            FileErrorCode::TooLarge,
+            operation,
+            "The file is too large.",
+            None,
+            false,
+        ));
+    }
     let has_utf8_bom = bytes.starts_with(&[0xEF, 0xBB, 0xBF]);
     let text_bytes = if has_utf8_bom {
         &bytes[3..]
@@ -119,17 +153,26 @@ pub(crate) fn relative_path_to_string(path: &Path) -> String {
             _ => None,
         })
         .collect::<Vec<_>>()
-        .join("\\")
+        .join("/")
 }
 pub(crate) fn normalize_key(value: &str) -> String {
-    value.replace('/', "\\").to_lowercase()
+    let normalized = value.replace('\\', "/");
+    if cfg!(windows) {
+        normalized.to_lowercase()
+    } else {
+        normalized
+    }
 }
 pub(crate) fn ensure_relative_path(path: &str, operation: &str) -> NativeResult<PathBuf> {
     if path.trim().is_empty() {
         return Ok(PathBuf::new());
     }
-    let relative_path = Path::new(path);
-    if relative_path.is_absolute() {
+    let normalized = path.replace('\\', "/");
+    let relative_path = Path::new(&normalized);
+    if relative_path.is_absolute()
+        || normalized.starts_with('/')
+        || normalized.as_bytes().get(1) == Some(&b':')
+    {
         return Err(native_error(
             FileErrorCode::OutsideWorkspace,
             operation,
@@ -224,6 +267,20 @@ pub(crate) fn validate_name(name: &str) -> NativeResult<String> {
             false,
         ));
     }
+    if trimmed == "."
+        || trimmed == ".."
+        || trimmed
+            .chars()
+            .any(|character| matches!(character, '<' | '>' | ':' | '"' | '|' | '?' | '*'))
+    {
+        return Err(native_error(
+            FileErrorCode::InvalidName,
+            "validate_name",
+            "Name contains characters that are not allowed on Windows.",
+            None,
+            false,
+        ));
+    }
     if trimmed.ends_with(' ') || trimmed.ends_with('.') {
         return Err(native_error(
             FileErrorCode::InvalidName,
@@ -287,6 +344,80 @@ pub(crate) fn replace_existing_path(
             });
     }
     Ok(())
+}
+
+pub(crate) fn is_reparse_path(path: &Path) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return true;
+    };
+    is_reparse_metadata(&metadata)
+}
+
+pub(crate) fn is_reparse_metadata(metadata: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        metadata.file_type().is_symlink()
+    }
+}
+
+pub(crate) fn move_without_overwrite(source: &Path, target: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::MoveFileW;
+        let source: Vec<u16> = source
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let target: Vec<u16> = target
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        if unsafe { MoveFileW(source.as_ptr(), target.as_ptr()) } == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let source = CString::new(source.as_os_str().as_bytes())?;
+        let target = CString::new(target.as_os_str().as_bytes())?;
+        // The OS rejects an existing destination atomically, including symlinks.
+        #[cfg(target_os = "linux")]
+        let result = unsafe {
+            libc::renameat2(
+                libc::AT_FDCWD,
+                source.as_ptr(),
+                libc::AT_FDCWD,
+                target.as_ptr(),
+                libc::RENAME_NOREPLACE,
+            )
+        };
+        #[cfg(target_os = "macos")]
+        let result =
+            unsafe { libc::renamex_np(source.as_ptr(), target.as_ptr(), libc::RENAME_EXCL) };
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Safe file moves are not supported on this platform.",
+        ))
+    }
 }
 #[cfg(windows)]
 pub(crate) fn replace_existing_path_via_backup(

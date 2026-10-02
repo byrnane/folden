@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { X } from 'lucide-vue-next'
 import { defineAsyncComponent, onBeforeUnmount, ref } from 'vue'
 import type { WorkspaceEntry } from '../../domain/native'
@@ -65,6 +66,8 @@ const emit = defineEmits<{
   reorderDocumentInPane: [paneId: EditorPane['id'], documentId: string, targetIndex: number]
   resetLayout: []
   setActivePane: [paneId: EditorPane['id']]
+  navigateLink: [paneId: EditorPane['id'], documentId: string, href: string]
+  imageImport: [paneId: EditorPane['id'], documentId: string, file: File | null]
 }>()
 
 const tabPointerDrag = ref<TabPointerDrag | null>(null)
@@ -93,6 +96,11 @@ function setDropTarget(kind: string, paneId: EditorPane['id']) {
 function clearDropTarget() {
   activeDropTarget.value = null
   nativeDragActive.value = false
+}
+
+function handleImageImport(paneId: EditorPane['id'], documentId: string, file: File | null) {
+  clearDropTarget()
+  emit('imageImport', paneId, documentId, file)
 }
 
 function isDropTarget(kind: string, paneId: EditorPane['id']) {
@@ -460,9 +468,11 @@ onBeforeUnmount(() => {
             @toolbar-state="emit('toolbarState', pane.id, $event)"
             @set-outline-width="emit('setOutlineWidth', $event)"
             @set-document-map-width="emit('setDocumentMapWidth', $event)"
+            @navigate-link="emit('navigateLink', pane.id, pane.activeDocument.document.id, $event)"
+            @image-import="handleImageImport(pane.id, pane.activeDocument.document.id, $event)"
           />
           <template #fallback>
-            <div class="editor-loading" role="status">Loading Visual editor…</div>
+            <div class="editor-loading" role="status">{{ t('Loading Visual editor…') }}</div>
           </template>
         </Suspense>
         <section v-else class="source-editor-frame">
@@ -486,9 +496,10 @@ onBeforeUnmount(() => {
               @history-command="emit('historyCommand', $event)"
               @set-outline-width="emit('setOutlineWidth', $event)"
               @set-document-map-width="emit('setDocumentMapWidth', $event)"
+              @image-import="handleImageImport(pane.id, pane.activeDocument.document.id, $event)"
             />
             <template #fallback>
-              <div class="editor-loading" role="status">Loading Source editor…</div>
+              <div class="editor-loading" role="status">{{ t('Loading Source editor…') }}</div>
             </template>
           </Suspense>
         </section>
@@ -502,7 +513,7 @@ onBeforeUnmount(() => {
       v-if="splitEnabled"
       class="pane-splitter"
       role="separator"
-      aria-label="Resize editor panes"
+      :aria-label="t('Resize editor panes')"
       tabindex="0"
       aria-orientation="vertical"
       aria-valuemin="25"
@@ -522,7 +533,7 @@ onBeforeUnmount(() => {
       @dragleave.self="clearDropTarget"
       @drop="openRightSplitDrop"
     >
-      Drop to split right
+      {{ t('Drop to split right') }}
     </aside>
     <div
       v-if="tabPointerDrag?.dragging"

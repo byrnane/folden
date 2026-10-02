@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { Ref } from 'vue'
 import type { OpenDocument, EditorMode } from '../../domain/documents/documentState'
 import type { NativeFsEvent, OpenedDocument, WorkspaceDescriptor } from '../../domain/native'
@@ -120,7 +121,9 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       await deps.sessionStorage.saveSessionState(buildPersistedSessionState())
       await deps.sessionStorage.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
     } catch (error) {
-      deps.errorMessage.value = `Could not persist session data: ${formatError(error)}`
+      deps.errorMessage.value = t('Could not persist session data: {error}', {
+        error: formatError(error),
+      })
     }
   }
 
@@ -173,7 +176,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
     deps.setPendingRecoveryEntries(recoveryLoadResult.entries)
 
     if (recoveryLoadResult.diagnostics.length > 0) {
-      diagnostics.push(...recoveryLoadResult.diagnostics)
+      diagnostics.push(...recoveryLoadResult.diagnostics.map(formatError))
     }
 
     if (!session) {
@@ -194,7 +197,7 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
           await deps.workspaceFiles.restoreWorkspaceByPath(session.workspaceRootPath),
         )
       } catch (error) {
-        diagnostics.push(`Could not restore workspace: ${formatError(error)}`)
+        diagnostics.push(t('Could not restore workspace: {error}', { error: formatError(error) }))
       }
     }
 
@@ -210,7 +213,9 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
 
         documentIdByKey.set(record.key, document.id)
       } catch (error) {
-        diagnostics.push(`Could not restore ${record.name}: ${formatError(error)}`)
+        diagnostics.push(
+          t('Could not restore {name}: {error}', { name: record.name, error: formatError(error) }),
+        )
       }
     }
 
@@ -315,6 +320,8 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
     if (nextDocument) {
       deps.enforceDocumentVisualSafety(nextDocument)
     }
+
+    return !!nextDocument
   }
 
   async function inspectRecoverySnapshots(documentIdByKey: Map<string, string>) {
@@ -333,10 +340,12 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
       }
 
       const decision = await deps.openRecoveryDialog({
-        title: `Recovered changes for ${entry.name}`,
+        title: t('Recovered changes for {name}', { name: entry.name }),
         message: currentDocument
-          ? `Folden found unsaved changes for ${entry.name}.`
-          : `Folden found unsaved changes, but the original file could not be reopened automatically.`,
+          ? t('Folden found unsaved changes for {name}.', { name: entry.name })
+          : t(
+              'Folden found unsaved changes, but the original file could not be reopened automatically.',
+            ),
         details: entry.path ?? null,
       })
 
@@ -344,30 +353,32 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
         continue
       }
 
-      deps.removePendingRecoveryEntry(entry.key)
-
       if (decision === 'discard') {
+        deps.removePendingRecoveryEntry(entry.key)
         continue
       }
 
-      if (decision === 'open-copy') {
-        const copyDocument = deps.createDocumentDraft('', recoveredCopyName(entry.name))
-        deps.addDocumentToPane(copyDocument, 'left')
-        applyRecoverySnapshotToDocument(copyDocument, entry)
-        continue
+      try {
+        const targetDocument =
+          decision === 'open-copy' || !currentDocument
+            ? deps.createDocumentDraft('', recoveredCopyName(entry.name))
+            : currentDocument
+
+        if (targetDocument !== currentDocument) {
+          deps.addDocumentToPane(targetDocument, 'left')
+        }
+
+        if (!applyRecoverySnapshotToDocument(targetDocument, entry)) {
+          throw new Error(t('Could not apply recovered changes.'))
+        }
+
+        deps.removePendingRecoveryEntry(entry.key)
+      } catch (error) {
+        deps.errorMessage.value = t('Could not restore {name}: {error}', {
+          name: entry.name,
+          error: formatError(error),
+        })
       }
-
-      const targetDocument =
-        currentDocument ?? (await ensureRecoveryDocument(entry, documentIdByKey))
-
-      if (!targetDocument) {
-        const copyDocument = deps.createDocumentDraft('', recoveredCopyName(entry.name))
-        deps.addDocumentToPane(copyDocument, 'left')
-        applyRecoverySnapshotToDocument(copyDocument, entry)
-        continue
-      }
-
-      applyRecoverySnapshotToDocument(targetDocument, entry)
     }
   }
 
@@ -379,11 +390,16 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
     }
 
     const decision = await deps.openUnsavedDialog({
-      title: 'Close Folden?',
-      message: `Save changes to ${dirtyDocumentIds.length} unsaved ${dirtyDocumentIds.length === 1 ? 'document' : 'documents'} before closing?`,
-      saveLabel: 'Save all',
-      discardLabel: 'Discard changes',
-      cancelLabel: 'Cancel',
+      title: t('Close Folden?'),
+      message: t(
+        dirtyDocumentIds.length === 1
+          ? 'Save changes to {count} unsaved document before closing?'
+          : 'Save changes to {count} unsaved documents before closing?',
+        { count: dirtyDocumentIds.length },
+      ),
+      saveLabel: t('Save all'),
+      discardLabel: t('Discard changes'),
+      cancelLabel: t('Cancel'),
       showSave: true,
     })
 
@@ -425,7 +441,9 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
         await deps.sessionStorage.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
       }
     } catch (error) {
-      deps.errorMessage.value = `Could not finalize session data: ${formatError(error)}`
+      deps.errorMessage.value = t('Could not finalize session data: {error}', {
+        error: formatError(error),
+      })
       return false
     }
 
@@ -471,7 +489,9 @@ export function createApplicationLifecycleController(deps: LifecycleDeps) {
 
     void restoreSessionSnapshot(initialText).catch((error) => {
       deps.markRestoreComplete()
-      deps.errorMessage.value = `Could not restore the previous session: ${formatError(error)}`
+      deps.errorMessage.value = t('Could not restore the previous session: {error}', {
+        error: formatError(error),
+      })
     })
 
     void deps.nativeEvents

@@ -18,6 +18,49 @@ export type WorkspaceSettings = {
   ignoredPaths: string[]
 }
 
+export type WorkspaceScanRequest = {
+  workspaceId: string
+  requestId: string
+  ignoredNames: string[]
+  ignoredPaths: string[]
+  excludedPaths?: string[]
+}
+
+export type WorkspaceSearchRequest = WorkspaceScanRequest & {
+  query: string
+  caseSensitive: boolean
+}
+
+export type WorkspaceSearchMatch = {
+  path: string
+  from: number
+  to: number
+  line: number
+  column: number
+  preview: string
+  fingerprint: FileFingerprint
+}
+
+export type WorkspaceSearchBatch = {
+  workspaceId: string
+  requestId: string
+  matches: WorkspaceSearchMatch[]
+}
+
+export type WorkspaceScanSummary = {
+  partial: boolean
+  skipped: number
+  cancelled: boolean
+}
+
+export type WorkspaceSearchResult = WorkspaceScanSummary & {
+  matches: WorkspaceSearchMatch[]
+}
+
+export type WorkspaceFilesResult = WorkspaceScanSummary & {
+  files: string[]
+}
+
 export type OpenedDocument = {
   id: string
   path: string
@@ -140,6 +183,60 @@ export function isWorkspaceSettings(value: unknown): value is WorkspaceSettings 
     isRecord(value) &&
     Array.isArray(value.ignoredPaths) &&
     value.ignoredPaths.every((path) => typeof path === 'string')
+  )
+}
+
+export function isWorkspaceSearchMatch(value: unknown): value is WorkspaceSearchMatch {
+  return (
+    isRecord(value) &&
+    typeof value.path === 'string' &&
+    Number.isSafeInteger(value.from) &&
+    Number(value.from) >= 0 &&
+    Number.isSafeInteger(value.to) &&
+    Number(value.to) > Number(value.from) &&
+    Number.isSafeInteger(value.line) &&
+    Number(value.line) >= 1 &&
+    Number.isSafeInteger(value.column) &&
+    Number(value.column) >= 1 &&
+    typeof value.preview === 'string' &&
+    isFileFingerprint(value.fingerprint)
+  )
+}
+
+export function isWorkspaceSearchBatch(value: unknown): value is WorkspaceSearchBatch {
+  return (
+    isRecord(value) &&
+    typeof value.workspaceId === 'string' &&
+    typeof value.requestId === 'string' &&
+    Array.isArray(value.matches) &&
+    value.matches.every(isWorkspaceSearchMatch)
+  )
+}
+
+function isWorkspaceScanSummary(value: Record<string, unknown>) {
+  return (
+    typeof value.partial === 'boolean' &&
+    typeof value.cancelled === 'boolean' &&
+    Number.isSafeInteger(value.skipped) &&
+    Number(value.skipped) >= 0
+  )
+}
+
+export function isWorkspaceSearchResult(value: unknown): value is WorkspaceSearchResult {
+  return (
+    isRecord(value) &&
+    isWorkspaceScanSummary(value) &&
+    Array.isArray(value.matches) &&
+    value.matches.every(isWorkspaceSearchMatch)
+  )
+}
+
+export function isWorkspaceFilesResult(value: unknown): value is WorkspaceFilesResult {
+  return (
+    isRecord(value) &&
+    isWorkspaceScanSummary(value) &&
+    Array.isArray(value.files) &&
+    value.files.every((path) => typeof path === 'string')
   )
 }
 

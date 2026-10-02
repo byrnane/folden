@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import { createWorkspaceController } from '../../../../src/application/controllers/workspaceController'
+import { cleanDisplayPath } from '../../../../src/application/helpers/pathHelpers'
 import {
   defaultApplicationSettings,
   type ApplicationSettings,
@@ -51,6 +52,26 @@ function directory(path: string, children: WorkspaceEntry[] = []): WorkspaceEntr
 describe('workspace controller', () => {
   beforeEach(() => {
     globalThis.localStorage?.clear()
+  })
+
+  it.each([
+    ['C:\\Docs\\', 'C:\\Docs\\notes\\Draft.md', 'notes/Draft.md'],
+    ['/home/Max/Notes/', '/home/Max/Notes/notes/Draft.md', 'notes/Draft.md'],
+    ['/', '/Draft.md', 'Draft.md'],
+  ])('maps native paths under %s to portable relative paths', (rootPath, path, relativePath) => {
+    const controller = createWorkspaceController(appSettings)
+    controller.setWatcherVisibleWorkspace({ id: 'workspace', rootPath, name: 'Notes' }, [])
+
+    expect(controller.workspaceRelativePathFromAbsolute(path, cleanDisplayPath)).toBe(relativePath)
+    expect(controller.workspaceRelativePathFromAbsolute(rootPath, cleanDisplayPath)).toBe('')
+    if (rootPath !== '/') {
+      expect(
+        controller.workspaceRelativePathFromAbsolute(
+          `${rootPath.replace(/[\\/]+$/, '')}-other/Draft.md`,
+          cleanDisplayPath,
+        ),
+      ).toBeNull()
+    }
   })
 
   it('loads workspace root, filters ignored names, and tracks recent paths', () => {

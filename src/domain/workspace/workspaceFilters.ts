@@ -25,18 +25,20 @@ export function filterWorkspaceEntriesByIgnoredNames(
 }
 
 function normalizeWorkspacePath(path: string) {
-  return path
-    .replaceAll('/', '\\')
-    .replace(/\\+/gu, '\\')
-    .replace(/^\\|\\$/gu, '')
-    .toLowerCase()
+  const normalized = path
+    .replaceAll('\\', '/')
+    .replace(/\/+/gu, '/')
+    .replace(/^\/|\/$/gu, '')
+  return typeof navigator !== 'undefined' && /^Win/.test(navigator.platform)
+    ? normalized.toLowerCase()
+    : normalized
 }
 
 function isSameOrChildPath(path: string, parent: string) {
   const normalizedPath = normalizeWorkspacePath(path)
   const normalizedParent = normalizeWorkspacePath(parent)
 
-  return normalizedPath === normalizedParent || normalizedPath.startsWith(`${normalizedParent}\\`)
+  return normalizedPath === normalizedParent || normalizedPath.startsWith(`${normalizedParent}/`)
 }
 
 export function filterWorkspaceEntries(

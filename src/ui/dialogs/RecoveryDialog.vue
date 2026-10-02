@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { onBeforeUnmount, watch } from 'vue'
 import AppDialog from './AppDialog.vue'
 
@@ -56,10 +57,10 @@ onBeforeUnmount(() => {
     <p v-if="details" class="dialog-details">{{ details }}</p>
 
     <template #actions>
-      <button type="button" @click="emit('later')">Later</button>
-      <button type="button" class="danger" @click="emit('discard')">Discard</button>
-      <button type="button" @click="emit('openCopy')">Open as copy</button>
-      <button type="button" @click="emit('restore')">Restore</button>
+      <button type="button" @click="emit('later')">{{ t('Later') }}</button>
+      <button type="button" class="danger" @click="emit('discard')">{{ t('Discard') }}</button>
+      <button type="button" @click="emit('openCopy')">{{ t('Open as copy') }}</button>
+      <button type="button" @click="emit('restore')">{{ t('Restore') }}</button>
     </template>
   </AppDialog>
 </template>

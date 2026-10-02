@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import { Compartment, EditorSelection } from '@codemirror/state'
+import { Compartment, EditorSelection, StateEffect, StateField } from '@codemirror/state'
+import { Decoration, type DecorationSet } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { basicSetup, EditorView } from 'codemirror'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -10,7 +12,7 @@ import type { DocumentPatch } from '../../domain/documents/documentPatch'
 import type { EditorViewSession } from '../../domain/documents/editorSync'
 import { toSourceSelectionState } from '../../domain/documents/editorViewState'
 import type { EditorCommand } from '../../application/types/shell'
-import { findActiveHeadingByLine } from '../../domain/markdown/outline'
+import { extractMarkdownHeadings, findActiveHeadingByLine } from '../../domain/markdown/outline'
 import type { MarkdownHeading } from '../../domain/markdown/outline'
 import type { DocumentAnalysisResult } from '../../domain/markdown/documentAnalysis'
 import {
@@ -26,6 +28,8 @@ import {
   createLinkInputDialog,
   type EditorInputDialogState,
 } from './editorInputDialogs'
+import { findTextMatches, type TextMatch } from '../../domain/markdown/editorSearch'
+import { imageFileFromTransfer } from './editorImageInput'
 
 const props = defineProps<{
   documentId: string
@@ -47,7 +51,93 @@ const emit = defineEmits<{
   'history-command': [command: 'undo' | 'redo']
   'set-outline-width': [width: number]
   'set-document-map-width': [width: number]
+  'image-import': [file: File | null]
 }>()
+
+let searchMatches: TextMatch[] = []
+let activeSearchIndex = 0
+const searchDecorationEffect = StateEffect.define<DecorationSet>()
+const searchDecorationField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(decorations, transaction) {
+    let next = decorations.map(transaction.changes)
+    for (const effect of transaction.effects) {
+      if (effect.is(searchDecorationEffect)) next = effect.value
+    }
+    return next
+  },
+  provide: (field) => EditorView.decorations.from(field),
+})
+
+function search(query: string, caseSensitive: boolean) {
+  if (!query && !searchMatches.length) return 0
+  searchMatches = query ? findTextMatches(flushContent(), query, caseSensitive) : []
+  editorView?.dispatch({
+    effects: searchDecorationEffect.of(
+      Decoration.set(
+        searchMatches.map((match) =>
+          Decoration.mark({ class: 'editor-search-match' }).range(match.from, match.to),
+        ),
+      ),
+    ),
+  })
+  return searchMatches.length
+}
+
+function revealSourceRange(from: number, to: number) {
+  if (!editorView) return
+  cancelAnimationFrame(viewRestoreFrame)
+  editorView.dispatch({
+    selection: EditorSelection.single(clampPosition(from), clampPosition(to)),
+    scrollIntoView: true,
+  })
+  editorView.focus()
+}
+
+function revealSearch(index: number) {
+  const match = searchMatches[index]
+  if (!match) return
+  cancelAnimationFrame(viewRestoreFrame)
+  activeSearchIndex = index
+  editorView?.dispatch({
+    selection: EditorSelection.single(match.from, match.to),
+    scrollIntoView: true,
+  })
+}
+
+function replaceSearch(replacement: string, all: boolean) {
+  const matches = all
+    ? searchMatches
+    : searchMatches.slice(activeSearchIndex, activeSearchIndex + 1)
+  if (!matches.length || !editorView) return
+  editorView.dispatch({ changes: matches.map((match) => ({ ...match, insert: replacement })) })
+}
+
+function revealAnchor(id: string) {
+  if (!editorView) return
+  const currentHeadings =
+    props.analysis?.documentId === props.documentId &&
+    props.analysis.revision === lastAppliedRevision
+      ? headings.value
+      : extractMarkdownHeadings(editorView.state.doc.toString())
+  const heading = currentHeadings.find((candidate) => candidate.id === id)
+  if (heading) scrollToHeading(heading)
+}
+
+function insertImportedImage(url: string) {
+  const alt = selectedText() || 'image'
+  replaceCurrentSelection(`![${alt}](${url})`, 2, 2 + alt.length)
+}
+
+function importTransferImage(event: ClipboardEvent | DragEvent) {
+  const file = imageFileFromTransfer(
+    'clipboardData' in event ? event.clipboardData : event.dataTransfer,
+  )
+  if (!file) return
+  event.preventDefault()
+  event.stopPropagation()
+  emit('image-import', file)
+}
 
 function handleSourceKeydown(event: KeyboardEvent) {
   const primary = event.ctrlKey || event.metaKey
@@ -72,6 +162,7 @@ const inputDialogError = ref<string | null>(null)
 let editorView: EditorView | null = null
 let mapResizeObserver: ResizeObserver | null = null
 let scrollFrame = 0
+let viewRestoreFrame = 0
 let lastAppliedRevision = props.revision
 let isApplyingExternalContent = false
 let resolveInputDialog: ((value: string | null) => void) | null = null
@@ -241,6 +332,7 @@ function scrollToLine(lineNumber: number) {
   if (!editorView) {
     return
   }
+  cancelAnimationFrame(viewRestoreFrame)
 
   const line = editorView.state.doc.line(
     Math.min(Math.max(lineNumber, 1), editorView.state.doc.lines),
@@ -496,19 +588,13 @@ async function setLink() {
   replaceCurrentSelection(`[${text}](${url})`, 1, 1 + text.length)
 }
 
-async function setImage() {
-  const url = await openInputDialog(createImageInputDialog())
-
-  if (!url) {
-    return
-  }
-
-  const alt = selectedText() || 'image'
-  replaceCurrentSelection(`![${alt}](${url})`, 2, 2 + alt.length)
-}
-
 function insertMarkdownTable() {
   replaceCurrentSelection('| Column 1 | Column 2 |\n| --- | --- |\n| Cell | Cell |\n', 2, 10)
+}
+
+async function insertImageUrl() {
+  const url = await openInputDialog(createImageInputDialog())
+  if (url) insertImportedImage(url)
 }
 
 function runCommand(command: EditorCommand) {
@@ -546,7 +632,8 @@ function runCommand(command: EditorCommand) {
       replaceCurrentSelection(`\`\`\`\n${text}\n\`\`\``, 4, 4 + text.length)
     },
     link: () => setLink(),
-    image: () => setImage(),
+    image: () => emit('image-import', null),
+    'image-url': insertImageUrl,
     'horizontal-rule': () => replaceCurrentSelection('\n---\n', 5),
     'insert-table': () => insertMarkdownTable(),
     'add-row-before': () => undefined,
@@ -571,6 +658,7 @@ onMounted(() => {
     parent: editorHost.value,
     extensions: [
       basicSetup,
+      searchDecorationField,
       sourceTheme,
       markdownExtensions.of(sourceMarkdownExtensions(props.modelValue)),
       ...(props.wordWrap ? [EditorView.lineWrapping] : []),
@@ -733,7 +821,8 @@ function restoreViewState(
     })
   }
 
-  requestAnimationFrame(() => {
+  cancelAnimationFrame(viewRestoreFrame)
+  viewRestoreFrame = requestAnimationFrame(() => {
     if (!editorView) {
       return
     }
@@ -750,13 +839,21 @@ function restoreViewState(
 defineExpose({
   captureViewState,
   flushContent,
+  hasOpenDialog: () => !!inputDialog.value,
   restoreViewState,
   runCommand,
+  search,
+  revealSearch,
+  replaceSearch,
+  revealSourceRange,
+  revealAnchor,
+  insertImportedImage,
 })
 
 onBeforeUnmount(() => {
   editorView?.scrollDOM.removeEventListener('scroll', scheduleMapViewportUpdate)
   window.cancelAnimationFrame(scrollFrame)
+  window.cancelAnimationFrame(viewRestoreFrame)
   mapResizeObserver?.disconnect()
   mapResizeObserver = null
   editorView?.destroy()
@@ -774,6 +871,8 @@ onBeforeUnmount(() => {
       '--document-map-width': `${documentMapWidth}px`,
     }"
     @keydown.capture="handleSourceKeydown"
+    @paste.capture="importTransferImage"
+    @drop.capture="importTransferImage"
   >
     <DocumentOutline
       v-if="showOutline"
@@ -800,8 +899,8 @@ onBeforeUnmount(() => {
     :message="inputDialog?.message ?? ''"
     :initial-value="inputDialog?.initialValue ?? ''"
     :placeholder="inputDialog?.placeholder ?? ''"
-    :confirm-label="inputDialog?.confirmLabel ?? 'Save'"
-    :input-label="inputDialog?.inputLabel ?? 'Value'"
+    :confirm-label="inputDialog?.confirmLabel ?? t('Save')"
+    :input-label="inputDialog?.inputLabel ?? t('Value')"
     :error="inputDialogError"
     @submit="submitInputDialog"
     @cancel="cancelInputDialog"

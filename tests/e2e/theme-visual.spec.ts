@@ -14,6 +14,7 @@ test('keeps Folden Dark editor, settings and dialog visuals stable', async ({ pa
 
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('button', { name: 'Appearance' }).click()
+  await expect(page.locator('.welcome-view')).toHaveCount(0)
   await expect(page).toHaveScreenshot('folden-dark-appearance.png', screenshotOptions)
 
   await page.setViewportSize({ width: 640, height: 720 })

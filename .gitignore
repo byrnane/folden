@@ -1,6 +1,11 @@
 node_modules/
 dist/
 build/
+.cache/
+.codex/
+AGENTS.md
+AGENTS.universal.md
+output/playwright/
 test-results/
 playwright-report/
 coverage/

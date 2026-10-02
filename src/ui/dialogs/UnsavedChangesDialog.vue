@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { onBeforeUnmount, watch } from 'vue'
 import AppDialog from './AppDialog.vue'
 
@@ -36,17 +37,6 @@ function handleKeydown(event: KeyboardEvent) {
     emit('cancel')
     return
   }
-
-  if (event.key === 'Enter') {
-    event.preventDefault()
-
-    if (props.showSave) {
-      emit('save')
-      return
-    }
-
-    emit('discard')
-  }
 }
 
 watch(
@@ -73,13 +63,13 @@ onBeforeUnmount(() => {
 
     <template #actions>
       <button type="button" @click="emit('cancel')">
-        {{ cancelLabel }}
+        {{ t(cancelLabel) }}
       </button>
       <button type="button" class="danger" @click="emit('discard')">
-        {{ discardLabel }}
+        {{ t(discardLabel) }}
       </button>
       <button v-if="showSave" type="button" @click="emit('save')">
-        {{ saveLabel }}
+        {{ t(saveLabel) }}
       </button>
     </template>
   </AppDialog>

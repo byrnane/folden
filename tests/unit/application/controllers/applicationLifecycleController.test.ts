@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { language } from '../../../../src/application/i18n'
 import { ref } from 'vue'
 import { createApplicationLifecycleController } from '../../../../src/application/controllers/applicationLifecycleController'
 import { createTextFileFormat } from '../../../../src/domain/document'
@@ -8,6 +9,10 @@ import type {
   RecoverySnapshot,
 } from '../../../../src/application/sessionRecovery'
 import type { EditorPane } from '../../../../src/application/types/shell'
+
+beforeEach(() => {
+  language.value = 'en'
+})
 
 function createDocument(overrides: Partial<OpenDocument> = {}): OpenDocument {
   return {
@@ -125,6 +130,8 @@ function createHarness() {
       openTextFileAtPath,
       openTextFileByPath,
       saveTextFile: vi.fn(),
+      importImageFromPicker: vi.fn(),
+      importImageData: vi.fn(),
     },
     workspaceFiles: {
       createDirectory: vi.fn(),
@@ -135,6 +142,10 @@ function createHarness() {
       openTextFileByPath,
       openWorkspaceDirectory: vi.fn(),
       renamePath: vi.fn(),
+      movePath: vi.fn(),
+      startWorkspaceSearch: vi.fn(),
+      listWorkspaceFiles: vi.fn(),
+      cancelWorkspaceSearch: vi.fn(),
       restoreWorkspaceByPath,
       saveWorkspaceSettings: vi.fn(),
       trashPath: vi.fn(),
@@ -285,6 +296,68 @@ function createHarness() {
 }
 
 describe('application lifecycle controller', () => {
+  it('restores an unavailable original as a copy and continues with remaining snapshots', async () => {
+    const { controller, deps, document } = createHarness()
+    const missing = createRecoverySnapshot({
+      key: 'file:c:\\docs\\missing.md',
+      path: 'C:\\Docs\\missing.md',
+      name: 'missing.md',
+      content: 'missing original recovered text',
+    })
+    const existing = createRecoverySnapshot()
+    deps.documents.value = [document]
+    deps.pendingRecoveryEntries.value = [missing, existing]
+    deps.openTextFileAtPath.mockRejectedValue(new Error('file missing'))
+    deps.createDocumentDraft.mockImplementation((content, name = 'Untitled.md') => {
+      const draft = createDocument({
+        id: 'recovered-copy',
+        nativeId: null,
+        path: null,
+        workspaceId: null,
+        relativePath: null,
+        name,
+        content,
+      })
+      deps.documents.value.push(draft)
+      return draft
+    })
+
+    await controller.inspectRecoverySnapshots(new Map([[existing.key, document.id]]))
+
+    expect(deps.openTextFileAtPath).toHaveBeenCalledOnce()
+    expect(deps.documents.value.find((entry) => entry.id === 'recovered-copy')).toMatchObject({
+      name: 'missing (Recovered).md',
+      content: missing.content,
+      path: null,
+    })
+    expect(deps.documents.value.find((entry) => entry.id === document.id)?.content).toBe(
+      existing.content,
+    )
+    expect(deps.pendingRecoveryEntries.value).toEqual([])
+    expect(deps.errorMessage.value).toBeNull()
+  })
+
+  it('retains an unapplied recovery snapshot and continues restoring other documents', async () => {
+    const { controller, deps, document } = createHarness()
+    const first = createRecoverySnapshot()
+    const second = createRecoverySnapshot({ key: 'second', name: 'second.md', content: 'second' })
+    deps.documents.value = [document, createDocument({ id: 'doc-2', name: 'second.md' })]
+    deps.pendingRecoveryEntries.value = [first, second]
+    deps.applyDocumentUpdate.mockReturnValueOnce(null)
+
+    await controller.inspectRecoverySnapshots(
+      new Map([
+        [first.key, document.id],
+        [second.key, 'doc-2'],
+      ]),
+    )
+
+    expect(deps.pendingRecoveryEntries.value).toEqual([first])
+    expect(deps.removePendingRecoveryEntry).toHaveBeenCalledExactlyOnceWith(second.key)
+    expect(deps.documents.value.find((entry) => entry.id === 'doc-2')?.content).toBe('second')
+    expect(deps.errorMessage.value).toContain('Could not apply recovered changes.')
+  })
+
   it('restores session documents and applies recovery decisions on startup', async () => {
     const { controller, deps } = createHarness()
 

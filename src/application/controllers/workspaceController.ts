@@ -131,7 +131,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
   }
 
   function normalizeWorkspaceSettingsPath(path: string) {
-    return normalizePath(path).replace(/^\\|\\$/g, '')
+    return normalizePath(path).replace(/^\/|\/$/g, '')
   }
 
   function addIgnoredWorkspacePath(path: string) {
@@ -170,7 +170,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
         const normalizedValue = normalizePath(value)
         return (
           normalizedValue !== normalizedTargetPath &&
-          !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+          !normalizedValue.startsWith(`${normalizedTargetPath}/`)
         )
       }),
     )
@@ -179,7 +179,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
         const normalizedValue = normalizePath(value)
         return (
           normalizedValue !== normalizedTargetPath &&
-          !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+          !normalizedValue.startsWith(`${normalizedTargetPath}/`)
         )
       }),
     )
@@ -188,7 +188,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
         const normalizedValue = normalizePath(value)
         return (
           normalizedValue !== normalizedTargetPath &&
-          !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+          !normalizedValue.startsWith(`${normalizedTargetPath}/`)
         )
       }),
     )
@@ -197,7 +197,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
         const normalizedValue = normalizePath(value)
         return (
           normalizedValue !== normalizedTargetPath &&
-          !normalizedValue.startsWith(`${normalizedTargetPath}\\`)
+          !normalizedValue.startsWith(`${normalizedTargetPath}/`)
         )
       }),
     )
@@ -213,7 +213,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
       [...loadedWorkspacePaths.value].map((value) => {
         const normalizedValue = normalizePath(value)
         return normalizedValue === normalizedPreviousPath ||
-          normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+          normalizedValue.startsWith(`${normalizedPreviousPath}/`)
           ? remapPath(value)
           : value
       }),
@@ -222,7 +222,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
       [...loadingWorkspacePaths.value].map((value) => {
         const normalizedValue = normalizePath(value)
         return normalizedValue === normalizedPreviousPath ||
-          normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+          normalizedValue.startsWith(`${normalizedPreviousPath}/`)
           ? remapPath(value)
           : value
       }),
@@ -231,7 +231,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
       [...expandedWorkspacePaths.value].map((value) => {
         const normalizedValue = normalizePath(value)
         return normalizedValue === normalizedPreviousPath ||
-          normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+          normalizedValue.startsWith(`${normalizedPreviousPath}/`)
           ? remapPath(value)
           : value
       }),
@@ -240,7 +240,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
       Object.entries(workspaceLoadErrors.value).map(([value, message]) => {
         const normalizedValue = normalizePath(value)
         return normalizedValue === normalizedPreviousPath ||
-          normalizedValue.startsWith(`${normalizedPreviousPath}\\`)
+          normalizedValue.startsWith(`${normalizedPreviousPath}/`)
           ? [remapPath(value), message]
           : [value, message]
       }),
@@ -360,7 +360,7 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
     return [...loadedWorkspacePaths.value]
       .filter((value) => value !== branchPath && value !== '')
       .filter((value) => (branchPath === '' ? true : isSameOrChildPath(value, branchPath)))
-      .sort((left, right) => left.split('\\').length - right.split('\\').length)
+      .sort((left, right) => left.split(/[\\/]/).length - right.split(/[\\/]/).length)
   }
 
   function shouldLoadBranch(branchPath: string) {
@@ -396,18 +396,21 @@ export function createWorkspaceController(appSettings: Ref<ApplicationSettings>)
       return null
     }
 
-    const normalizedRoot = normalizePath(workspace.value.rootPath)
+    const displayRoot = cleanDisplayPath(workspace.value.rootPath).replace(/[\\/]+$/, '')
+    const normalizedRoot = normalizePath(displayRoot)
     const normalizedPath = normalizePath(path)
 
-    if (normalizedPath === normalizedRoot) {
+    if (normalizedPath.replace(/\/+$/, '') === normalizedRoot) {
       return ''
     }
 
-    if (!normalizedPath.startsWith(`${normalizedRoot}\\`)) {
+    if (!normalizedPath.startsWith(`${normalizedRoot}/`)) {
       return null
     }
 
-    return cleanDisplayPath(path).slice(cleanDisplayPath(workspace.value.rootPath).length + 1)
+    return cleanDisplayPath(path)
+      .slice(displayRoot.length + 1)
+      .replaceAll('\\', '/')
   }
 
   return {

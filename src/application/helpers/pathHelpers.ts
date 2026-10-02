@@ -41,7 +41,18 @@ export function cleanDisplayPath(path: string) {
 }
 
 export function normalizePath(path: string) {
-  return cleanDisplayPath(path).replaceAll('/', '\\').toLowerCase()
+  const displayPath = cleanDisplayPath(path)
+  const normalized = displayPath.replaceAll('\\', '/')
+  const windowsPath =
+    isWindowsPath(displayPath) ||
+    (!displayPath.startsWith('/') &&
+      typeof navigator !== 'undefined' &&
+      /^Win/.test(navigator.platform))
+  return windowsPath ? normalized.toLowerCase() : normalized
+}
+
+export function isWindowsPath(path: string) {
+  return /^(?:[a-z]:|\\\\|\/\/)/iu.test(cleanDisplayPath(path))
 }
 
 export function joinWorkspacePath(rootPath: string, relativePath: string | null) {
@@ -49,7 +60,9 @@ export function joinWorkspacePath(rootPath: string, relativePath: string | null)
     return rootPath
   }
 
-  return `${rootPath.replace(/[\\/]+$/u, '')}\\${relativePath.replace(/^[\\/]+/u, '')}`
+  const separator = isWindowsPath(rootPath) ? '\\' : '/'
+  const relative = relativePath.replaceAll('\\', '/').replace(/^\/+/, '').replaceAll('/', separator)
+  return `${rootPath.replace(/[\\/]+$/u, '')}${separator}${relative}`
 }
 
 export function recoveredCopyName(name: string) {

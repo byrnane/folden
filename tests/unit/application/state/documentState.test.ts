@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createDocumentState } from '../../../../src/application/state/documentState'
 import { createTextFileFormat } from '../../../../src/domain/document'
 import { assertMarkdownBlockDocument } from '../../../../src/domain/markdown/blockDocument'
+import { normalizePath } from '../../../../src/application/helpers/pathHelpers'
 
 function createLoadedDocument(
   overrides: Partial<Parameters<ReturnType<typeof createState>['openLoadedDocument']>[0]>,
@@ -25,11 +26,33 @@ function createState() {
   return createDocumentState({
     fileNameFromPath: (path) => path.split(/[\\/]/).at(-1) ?? path,
     isMarkdownPath: (path) => !path || /\.(md|markdown)$/i.test(path),
-    normalizePath: (path) => path.replaceAll('/', '\\').toLowerCase(),
+    normalizePath,
   })
 }
 
 describe('document state', () => {
+  it('remaps legacy descendants to POSIX paths without merging case-distinct documents', () => {
+    const state = createState()
+    const upper = state.openLoadedDocument(
+      createLoadedDocument({
+        id: 'upper',
+        path: '/home/Max/notes/Draft.md',
+        relativePath: 'notes\\Draft.md',
+      }),
+    )
+    const lower = state.openLoadedDocument(
+      createLoadedDocument({
+        id: 'lower',
+        path: '/home/Max/notes/draft.md',
+        relativePath: 'notes/draft.md',
+      }),
+    )
+    expect(upper.id).not.toBe(lower.id)
+    state.updateDocumentPaths('notes', 'archive', '/home/Max')
+    expect(upper.path).toBe('/home/Max/archive/Draft.md')
+    expect(upper.relativePath).toBe('archive/Draft.md')
+    expect(lower.path).toBe('/home/Max/archive/draft.md')
+  })
   it('reuses one document model for the same file path', () => {
     const state = createState()
 
@@ -166,9 +189,9 @@ describe('document state', () => {
 
     state.updateDocumentPaths('folder', 'archive', 'C:\\Docs')
 
-    expect(root.relativePath).toBe('archive\\note.md')
+    expect(root.relativePath).toBe('archive/note.md')
     expect(root.path).toBe('C:\\Docs\\archive\\note.md')
-    expect(child.relativePath).toBe('archive\\nested\\deep.md')
+    expect(child.relativePath).toBe('archive/nested/deep.md')
     expect(child.path).toBe('C:\\Docs\\archive\\nested\\deep.md')
 
     const reopened = state.openLoadedDocument(

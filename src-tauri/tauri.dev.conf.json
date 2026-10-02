@@ -1,0 +1,5 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "identifier": "com.folden.editor.dev",
+  "productName": "Folden Dev"
+}

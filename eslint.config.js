@@ -24,6 +24,7 @@ const nodeGlobals = {
 export default defineConfig([
   globalIgnores([
     '**/node_modules/**',
+    '**/.cache/**',
     '**/build/**',
     '**/dist/**',
     '**/src-tauri/target/**',

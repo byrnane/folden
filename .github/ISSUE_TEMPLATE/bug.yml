@@ -1,0 +1,29 @@
+name: Bug report / Ошибка
+description: Report a reproducible Folden issue without private documents or paths.
+body:
+  - type: markdown
+    attributes:
+      value: 'Use a small synthetic example. Do not attach private documents, recovery/session files, credentials, or personal paths. Before reporting a security issue, read the [security policy](https://github.com/byrnane/folden/security/policy) for current reporting availability. / Используйте искусственный пример без личных данных. Перед сообщением об уязвимости прочитайте политику безопасности; не публикуйте чувствительные подробности.'
+  - type: input
+    id: version
+    attributes:
+      label: Folden version and operating system / Версия и ОС
+      placeholder: 0.12.0, Windows 11 x64
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / Шаги воспроизведения
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior / Ожидание и результат
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Minimal synthetic Markdown or screenshot / Искусственный пример

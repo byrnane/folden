@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { buildConflictDiffRows } from '../../domain/markdown/conflictDiff'
 import AppDialog from './AppDialog.vue'
@@ -70,23 +71,23 @@ onBeforeUnmount(() => {
 <template>
   <AppDialog v-if="open" :title="title" width="wide">
     <p class="app-dialog-message">
-      Folden kept your unsaved version and loaded the latest disk version for comparison.
+      {{ t('Folden kept your unsaved version and loaded the latest disk version for comparison.') }}
     </p>
     <p v-if="path" class="dialog-details">
       {{ path }}
     </p>
 
-    <section class="conflict-legend" aria-label="Conflict legend">
-      <span class="conflict-pill changed">Changed</span>
-      <span class="conflict-pill added">Disk only</span>
-      <span class="conflict-pill removed">Folden only</span>
+    <section class="conflict-legend" :aria-label="t('Conflict legend')">
+      <span class="conflict-pill changed">{{ t('Changed') }}</span>
+      <span class="conflict-pill added">{{ t('Disk only') }}</span>
+      <span class="conflict-pill removed">{{ t('Folden only') }}</span>
     </section>
 
     <section class="conflict-diff" data-testid="conflict-diff">
       <div class="conflict-panel">
         <header class="conflict-panel-header">
-          <strong>Folden version</strong>
-          <span>Unsaved edits in memory</span>
+          <strong>{{ t('Folden version') }}</strong>
+          <span>{{ t('Unsaved edits in memory') }}</span>
         </header>
         <div class="conflict-lines">
           <div
@@ -103,8 +104,8 @@ onBeforeUnmount(() => {
 
       <div class="conflict-panel">
         <header class="conflict-panel-header">
-          <strong>Disk version</strong>
-          <span>Latest file content on disk</span>
+          <strong>{{ t('Disk version') }}</strong>
+          <span>{{ t('Latest file content on disk') }}</span>
         </header>
         <div class="conflict-lines">
           <div
@@ -121,7 +122,9 @@ onBeforeUnmount(() => {
     </section>
 
     <section class="conflict-merge">
-      <label class="dialog-field-label" for="conflict-merge-textarea">Manual merge result</label>
+      <label class="dialog-field-label" for="conflict-merge-textarea">{{
+        t('Manual merge result')
+      }}</label>
       <textarea
         id="conflict-merge-textarea"
         v-model="mergedContent"
@@ -132,11 +135,13 @@ onBeforeUnmount(() => {
     </section>
 
     <template #actions>
-      <button type="button" @click="emit('later')">Later</button>
-      <button type="button" @click="emit('saveAs')">Save As</button>
-      <button type="button" @click="emit('reloadDisk')">Reload disk version</button>
-      <button type="button" @click="emit('keepFolden')">Keep Folden version</button>
-      <button type="button" @click="emit('applyMerged', mergedContent)">Apply merged result</button>
+      <button type="button" @click="emit('later')">{{ t('Later') }}</button>
+      <button type="button" @click="emit('saveAs')">{{ t('Save As') }}</button>
+      <button type="button" @click="emit('reloadDisk')">{{ t('Reload disk version') }}</button>
+      <button type="button" @click="emit('keepFolden')">{{ t('Keep Folden version') }}</button>
+      <button type="button" @click="emit('applyMerged', mergedContent)">
+        {{ t('Apply merged result') }}
+      </button>
     </template>
   </AppDialog>
 </template>

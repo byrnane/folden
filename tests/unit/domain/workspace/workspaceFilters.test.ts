@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceEntry } from '../../../../src/domain/native'
 import {
   filterWorkspaceEntries,
@@ -18,6 +18,18 @@ function entry(value: Omit<WorkspaceEntry, 'openableState'>): WorkspaceEntry {
 }
 
 describe('workspace entry filters', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('keeps case-distinct Unix paths and reads legacy separators', () => {
+    vi.stubGlobal('navigator', { platform: 'Linux' })
+    const entries = [
+      entry({ name: 'Draft.md', path: 'notes/Draft.md', kind: 'file', children: [] }),
+      entry({ name: 'draft.md', path: 'notes/draft.md', kind: 'file', children: [] }),
+    ]
+    expect(filterWorkspaceEntries(entries, [], ['notes\\draft.md'])).toEqual([entries[0]])
+    vi.stubGlobal('navigator', { platform: 'Win32' })
+    expect(filterWorkspaceEntries(entries, [], ['notes\\draft.md'])).toEqual([])
+  })
   it('removes ignored entries recursively without touching other files', () => {
     expect(
       filterWorkspaceEntriesByIgnoredNames(

@@ -9,6 +9,10 @@ import type {
   WorkspaceDescriptor,
   WorkspaceEntry,
   WorkspaceSettings,
+  WorkspaceSearchRequest,
+  WorkspaceSearchResult,
+  WorkspaceScanRequest,
+  WorkspaceFilesResult,
 } from '../../domain/native'
 import { createNativeError, isNativeError, type NativeError } from '../../domain/nativeError'
 
@@ -93,6 +97,30 @@ export async function listDirectory(workspaceId: string, path: string) {
 
 export async function syncWorkspaceWatchScope(workspaceId: string | null, loadedPaths: string[]) {
   return invokeNative<void>('sync_workspace_watch_scope', { workspaceId, loadedPaths })
+}
+
+export function startWorkspaceSearch(request: WorkspaceSearchRequest) {
+  return invokeNative<WorkspaceSearchResult>('start_workspace_search', { request })
+}
+
+export function listWorkspaceFiles(request: WorkspaceScanRequest) {
+  return invokeNative<WorkspaceFilesResult>('list_workspace_files', { request })
+}
+
+export function cancelWorkspaceSearch(workspaceId: string, requestId: string) {
+  return invokeNative<void>('cancel_workspace_search', { workspaceId, requestId })
+}
+
+export function movePath(workspaceId: string, path: string, targetParent: string) {
+  return invokeNative<string>('move_path', { workspaceId, path, targetParent })
+}
+
+export function importImageFromPicker(documentId: string) {
+  return invokeNative<string | null>('import_image_from_picker', { documentId })
+}
+
+export function importImageData(documentId: string, bytes: number[], mime: string, name?: string) {
+  return invokeNative<string>('import_image_data', { documentId, bytes, mime, name })
 }
 
 export async function loadWorkspaceSettings(workspaceId: string) {

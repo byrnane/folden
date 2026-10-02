@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { normalizePath } from '../../../src/application/helpers/pathHelpers'
 import {
   buildSessionDocumentKey,
   pruneRecoverySnapshots,
@@ -6,6 +7,14 @@ import {
 } from '../../../src/application/sessionRecovery'
 
 describe('session recovery helpers', () => {
+  it('keeps legacy Windows keys and preserves POSIX case', () => {
+    expect(
+      buildSessionDocumentKey({ id: 'saved', path: 'C:\\Docs\\Draft.md' }, normalizePath),
+    ).toBe('file:c:\\docs\\draft.md')
+    expect(
+      buildSessionDocumentKey({ id: 'saved', path: '/home/Max/Draft.md' }, normalizePath),
+    ).toBe('file:/home/Max/Draft.md')
+  })
   it('builds stable keys for saved and scratch documents', () => {
     expect(
       buildSessionDocumentKey(

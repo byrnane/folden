@@ -20,6 +20,7 @@ type SaveQueueEvents = {
   onQueued?: (job: SaveJob) => void
   onSaving?: (job: SaveJob) => void
   onSaved?: (job: SaveJob, result: SaveDocumentResult) => void
+  onCancelled?: (job: SaveJob) => void
   onError?: (job: SaveJob, error: NativeError) => void
 }
 
@@ -63,14 +64,18 @@ export function createDocumentSaveQueue(options: SaveQueueOptions) {
 
         if (result) {
           options.onSaved?.(job, result)
+          const pendingJob = getState(documentId).pendingJob
+          if (pendingJob?.documentNativeId === result.id) {
+            state.pendingJob = { ...pendingJob, expectedFingerprint: result.fingerprint }
+          }
+        } else {
+          options.onCancelled?.(job)
         }
       } catch (error) {
         options.onError?.(job, error as NativeError)
         throw error
       }
     }
-
-    state.active = null
   }
 
   async function enqueue(job: SaveJob) {
@@ -79,7 +84,9 @@ export function createDocumentSaveQueue(options: SaveQueueOptions) {
     options.onQueued?.(job)
 
     if (!state.active) {
-      state.active = runLoop(job.documentId)
+      state.active = runLoop(job.documentId).finally(() => {
+        state.active = null
+      })
     }
 
     await state.active

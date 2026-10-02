@@ -1,5 +1,4 @@
 import {
-  defaultApplicationSettings,
   defaultLayoutSettings,
   layoutSettingLimits,
   normalizeApplicationSettings,
@@ -40,13 +39,13 @@ export function loadApplicationSettings(storage: Pick<Storage, 'getItem'> = wind
   const rawValue = storage.getItem(applicationSettingsStorageKey)
 
   if (!rawValue) {
-    return structuredClone(defaultApplicationSettings)
+    return normalizeApplicationSettings(null)
   }
 
   try {
     return normalizeApplicationSettings(JSON.parse(rawValue))
   } catch {
-    return structuredClone(defaultApplicationSettings)
+    return normalizeApplicationSettings(null)
   }
 }
 

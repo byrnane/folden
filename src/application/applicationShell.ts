@@ -1,4 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { language, t } from './i18n'
+import { createDocumentFeaturesController } from './controllers/documentFeaturesController'
 import { createDialogController } from './controllers/dialogController'
 import { createPaneController } from './controllers/paneController'
 import type { NativeFsEvent } from '../domain/native'
@@ -38,10 +40,17 @@ function normalizeEditorLineEndings(value: string) {
 }
 
 export function useApplicationShell() {
-  const initialText = '# Untitled\n\nStart writing in Folden.\n'
+  const initialText = ''
   const hasNativeRuntimeOnStartup = isTauriRuntime()
   const nativePorts = createTauriNativePorts()
   const appSettings = ref(loadApplicationSettings())
+  watch(
+    () => appSettings.value.language,
+    (value) => {
+      language.value = value
+    },
+    { immediate: true },
+  )
   const layoutController = createLayoutController({
     appSettings,
     loadLayoutSettings,
@@ -99,6 +108,7 @@ export function useApplicationShell() {
     loadedWorkspacePaths,
     selectedPath,
     recentWorkspaces,
+    workspaceSettings,
     setWorkspacePathLoading,
     setWorkspacePathExpanded,
     clearWorkspaceLoadError,
@@ -154,6 +164,7 @@ export function useApplicationShell() {
     getPaneSnapshot,
   } = paneController
   if (appSettings.value.editor.defaultMarkdownMode === 'source') {
+    initialDocument.defaultMode = 'source'
     setOpenDocumentMode(initialDocument.id, 'source')
   }
   const errorMessage = ref<string | null>(null)
@@ -179,6 +190,7 @@ export function useApplicationShell() {
   })
   const documentAnalyses = documentAnalysisController.analyses
   const dialogController = createDialogController()
+  const aboutOpen = ref(false)
   const {
     promptDialog,
     promptDialogError,
@@ -254,7 +266,7 @@ export function useApplicationShell() {
   })
   const activeLocation = computed(() => {
     if (!activeDocument.value?.path) {
-      return 'Scratch'
+      return t('Scratch')
     }
 
     return cleanDisplayPath(activeDocument.value.path)
@@ -267,7 +279,7 @@ export function useApplicationShell() {
 
   function applyDefaultMarkdownMode(document: OpenDocument) {
     if (isMarkdownDocument(document)) {
-      setOpenDocumentMode(document.id, appSettings.value.editor.defaultMarkdownMode)
+      document.defaultMode = appSettings.value.editor.defaultMarkdownMode
     }
 
     return document
@@ -278,7 +290,9 @@ export function useApplicationShell() {
   }
 
   function openDocumentStateWithDefaultMode(document: Parameters<typeof openDocumentState>[0]) {
-    return applyDefaultMarkdownMode(openDocumentState(document))
+    const wasOpen = findDocumentByPath(document.path)
+    const opened = openDocumentState(document)
+    return wasOpen ? opened : applyDefaultMarkdownMode(opened)
   }
 
   function refreshWorkspaceBranchForDocuments(
@@ -495,7 +509,9 @@ export function useApplicationShell() {
       await nativePorts.sessionStorage.saveSessionState(buildPersistedSessionState())
       await nativePorts.sessionStorage.saveRecoverySnapshots(buildPersistedRecoverySnapshots())
     } catch (error) {
-      errorMessage.value = `Could not persist session data: ${formatError(error)}`
+      errorMessage.value = t('Could not persist session data: {error}', {
+        error: formatError(error),
+      })
     }
   }
 
@@ -580,7 +596,7 @@ export function useApplicationShell() {
           throw documentError
         }
       }
-    }, 'Could not open dropped item')
+    }, t('Could not open dropped item'))
   }
 
   function scheduleDocumentReload(documentId: string) {
@@ -591,7 +607,7 @@ export function useApplicationShell() {
         if (document) {
           markDocumentConflict(
             documentId,
-            `Could not reload external changes: ${formatError(error)}`,
+            t('Could not reload external changes: {error}', { error: formatError(error) }),
           )
         }
       })
@@ -599,6 +615,7 @@ export function useApplicationShell() {
   }
 
   function handleExternalFileEvent(event: NativeFsEvent) {
+    projectSearch.scheduleRefresh()
     routeExternalFileEvent(event, {
       findDocumentByPath,
       workspaceRelativePathFromAbsolute,
@@ -655,14 +672,114 @@ export function useApplicationShell() {
   async function exportDiagnosticReport() {
     await runFileTask(async () => {
       const exportedPath = await nativePorts.diagnostics.exportDiagnostics()
-      setWatcherWarning(`Diagnostics exported to ${cleanDisplayPath(exportedPath)}`)
-    }, 'Could not export diagnostics')
+      setWatcherWarning(
+        t('Diagnostics exported to {path}', { path: cleanDisplayPath(exportedPath) }),
+      )
+    }, t('Could not export diagnostics'))
   }
   const openLogsFolder = nativePorts.diagnostics.openLogsFolder
   const restoreWorkspaceByPath = nativePorts.workspace.restoreWorkspaceByPath
 
+  const documentFeaturesController = createDocumentFeaturesController({
+    nativePorts,
+    workspace,
+    documents,
+    appSettings,
+    ignoredPaths: () => workspaceSettings.value.ignoredPaths,
+    activePaneId,
+    activeDocument,
+    activeEditorAdapter,
+    visiblePanes,
+    paneEditors,
+    selectedDirectoryPath,
+    errorMessage,
+    getPane,
+    getDocument,
+    openWorkspaceFile,
+    setPaneDocumentMode,
+    flushPaneEditorContent,
+    shouldLoadRemoteImages,
+    openPromptDialog,
+    openConfirmDialog,
+    createDocumentDraft: createDocumentDraftWithDefaultMode,
+    openDocumentState: openDocumentStateWithDefaultMode,
+    applyDocumentUpdate,
+    addDocumentToPane,
+    saveDocument,
+    runFileTask,
+    refreshWorkspace,
+    remapWorkspacePathState,
+    updateDocumentPaths,
+    setSelectedPath,
+  })
+  const {
+    projectSearch,
+    findOpen,
+    findReplace,
+    findQuery,
+    findReplacement,
+    findCase,
+    findCount,
+    findIndex,
+    nextFind,
+    replaceFind,
+    printSnapshot,
+    printPending,
+    preparePrint,
+    createFromTemplate,
+    importImage,
+    navigateLink,
+    navigateHistory,
+    navigationHistory,
+    navigationIndex,
+    moveWorkspacePath,
+    dispose: disposeDocumentFeaturesController,
+  } = documentFeaturesController
+  function hasOpenDialog() {
+    return !!(
+      promptDialog.value ||
+      confirmDialog.value ||
+      markdownSafetyDialog.value ||
+      conflictDialog.value ||
+      recoveryDialog.value ||
+      unsavedDialog.value ||
+      aboutOpen.value ||
+      projectSearch.quickOpen.value ||
+      Object.values(paneEditors.value).some((editor) => editor?.hasOpenDialog?.())
+    )
+  }
+
+  function handleProductKeydown(event: KeyboardEvent) {
+    if (
+      event.defaultPrevented ||
+      event.isComposing ||
+      !(event.ctrlKey || event.metaKey) ||
+      hasOpenDialog()
+    )
+      return
+    const key = event.code
+    if (key === 'KeyP' && !event.shiftKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.altKey) preparePrint()
+      else void projectSearch.showQuickOpen()
+    } else if ((key === 'KeyF' || key === 'KeyH') && !event.altKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.shiftKey && key === 'KeyF') setActivitySection('search')
+      else {
+        findOpen.value = true
+        findReplace.value = key === 'KeyH'
+      }
+    } else if (event.altKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+      event.preventDefault()
+      void navigateHistory(key === 'ArrowLeft' ? -1 : 1)
+    }
+  }
+
   const commandController = createApplicationCommandController({
     hasNativeRuntime: hasNativeRuntimeOnStartup,
+    hasOpenDialog,
     isFileBusy,
     workspace,
     splitEnabled,
@@ -748,7 +865,9 @@ export function useApplicationShell() {
         try {
           await nativePorts.workspace.syncWorkspaceWatchScope(scope.workspaceId, scope.loadedPaths)
         } catch (error) {
-          setWatcherWarning(`Could not update watcher scope: ${formatError(error)}`)
+          setWatcherWarning(
+            t('Could not update watcher scope: {error}', { error: formatError(error) }),
+          )
         }
       }
     } finally {
@@ -775,7 +894,9 @@ export function useApplicationShell() {
       if (workspace.value) {
         void refreshWorkspace().catch((error) => {
           setWatcherWarning(
-            `Could not refresh workspace after settings change: ${formatError(error)}`,
+            t('Could not refresh workspace after settings change: {error}', {
+              error: formatError(error),
+            }),
           )
         })
       }
@@ -850,10 +971,13 @@ export function useApplicationShell() {
 
   onMounted(() => {
     mountApplicationLifecycle(initialText)
+    window.addEventListener('keydown', handleProductKeydown, true)
     window.addEventListener('blur', triggerAutosaveOnWindowBlur)
   })
 
   onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleProductKeydown, true)
+    disposeDocumentFeaturesController()
     window.removeEventListener('blur', triggerAutosaveOnWindowBlur)
     disposeLayoutController()
     disposeApplicationLifecycle()
@@ -861,6 +985,27 @@ export function useApplicationShell() {
   })
 
   return {
+    aboutOpen,
+    projectSearch,
+    findOpen,
+    findReplace,
+    findQuery,
+    findReplacement,
+    findCase,
+    findCount,
+    findIndex,
+    nextFind,
+    replaceFind,
+    printSnapshot,
+    printPending,
+    preparePrint,
+    createFromTemplate,
+    importImage,
+    navigateLink,
+    navigateHistory,
+    navigationHistory,
+    navigationIndex,
+    moveWorkspacePath,
     activeDocument,
     activeDocumentMode,
     activeDocumentWordCount,

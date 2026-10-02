@@ -1,3 +1,9 @@
+import { Marked, type Token, type Tokens } from 'marked'
+
+// Editor schema tokenizers must not change source block boundaries or make
+// this lexer scan the remaining document for every block.
+const blockLexer = new Marked()
+
 export type MarkdownBlockKind =
   | 'paragraph'
   | 'heading'
@@ -12,7 +18,7 @@ export type MarkdownBlockKind =
   | 'raw'
 
 export type RawMarkdownKind =
-  'frontmatter' | 'html' | 'comment' | 'footnote' | 'directive' | 'unknown'
+  'frontmatter' | 'html' | 'comment' | 'footnote' | 'directive' | 'reference' | 'unknown'
 
 export type MarkdownBlock = {
   id: string
@@ -47,6 +53,7 @@ type SourceLine = {
   to: number
   raw: string
   text: string
+  normalizedFrom: number
 }
 
 type BlockDocumentChange = {
@@ -60,6 +67,7 @@ function sourceLines(source: string): SourceLine[] {
   const lines: SourceLine[] = []
   const expression = /[^\r\n]*(?:\r\n|\r|\n|$)/gu
   let match = expression.exec(source)
+  let normalizedFrom = 0
 
   while (match && match[0]) {
     const raw = match[0]
@@ -69,7 +77,9 @@ function sourceLines(source: string): SourceLine[] {
       to: from + raw.length,
       raw,
       text: raw.replace(/(?:\r\n|\r|\n)$/u, ''),
+      normalizedFrom,
     })
+    normalizedFrom += raw.replace(/\r\n?/gu, '\n').length
     match = expression.exec(source)
   }
 
@@ -118,17 +128,97 @@ function rawInlineKind(text: string): RawMarkdownKind | null {
   return null
 }
 
-function classifyBlock(lines: SourceLine[], index: number, firstContentBlock: boolean) {
+function tokensContainImage(tokens: Token[]): boolean {
+  return tokens.some(
+    (token) =>
+      token.type === 'image' ||
+      ('tokens' in token && Array.isArray(token.tokens) && tokensContainImage(token.tokens)),
+  )
+}
+
+function unsupportedTokenKind(token: Token): RawMarkdownKind | null {
+  if (token.type === 'html') return /<!--/u.test(token.raw) ? 'comment' : 'html'
+  if (token.type === 'text') {
+    const rawKind = rawInlineKind(token.raw)
+    if (rawKind) return rawKind
+    if ('tokens' in token && Array.isArray(token.tokens) && tokensContainImage(token.tokens))
+      return 'unknown'
+    return null
+  }
+  if (token.type === 'code' || token.type === 'codespan' || token.type === 'link') return null
+  if (token.type === 'table') {
+    const table = token as Tokens.Table
+    if ([...table.header, ...table.rows.flat()].some((cell) => tokensContainImage(cell.tokens)))
+      return 'unknown'
+  }
+  const children =
+    'tokens' in token && Array.isArray(token.tokens)
+      ? token.tokens
+      : token.type === 'list'
+        ? (token as Tokens.List).items.flatMap((item) => item.tokens)
+        : []
+  // The Visual schema has block images, so an image mixed with paragraph
+  // text must stay raw rather than becoming an invalid inline child.
+  if (
+    tokensContainImage(children) &&
+    (token.type === 'heading' ||
+      (token.type === 'paragraph' &&
+        (children.filter((child) => child.type === 'image').length > 1 ||
+          children.some((child) => child.type !== 'image' && child.raw.trim() !== ''))))
+  )
+    return 'unknown'
+  for (const child of children) {
+    const kind = unsupportedTokenKind(child)
+    if (kind) return kind
+  }
+  return null
+}
+
+function classifyBlock(
+  lines: SourceLine[],
+  index: number,
+  firstContentBlock: boolean,
+  token?: Token,
+) {
   const text = lines[index].text
   const next = lines[index + 1]?.text ?? ''
 
-  if (firstContentBlock && /^(---|\+\+\+)\s*$/u.test(text)) {
+  if (
+    firstContentBlock &&
+    /^(---|\+\+\+)\s*$/u.test(text) &&
+    lines.slice(index + 1).some((line) => /^(---|\+\+\+)\s*$/u.test(line.text))
+  ) {
     return { kind: 'raw' as const, rawKind: 'frontmatter' as const }
   }
   if (/^\s*<!--/u.test(text)) return { kind: 'raw' as const, rawKind: 'comment' as const }
-  if (/^\s*<[/!?A-Za-z]/u.test(text)) return { kind: 'raw' as const, rawKind: 'html' as const }
+  if (token?.type === 'html') return { kind: 'raw' as const, rawKind: 'html' as const }
   if (/^\s*:::+/u.test(text)) return { kind: 'raw' as const, rawKind: 'directive' as const }
   if (/^\s*\[\^[^\]]+\]:/u.test(text)) return { kind: 'raw' as const, rawKind: 'footnote' as const }
+  if (token?.type === 'def') return { kind: 'raw' as const, rawKind: 'reference' as const }
+  if (token) {
+    const rawKind = unsupportedTokenKind(token)
+    if (rawKind) return { kind: 'raw' as const, rawKind }
+    if (token.type === 'heading') return { kind: 'heading' as const, rawKind: null }
+    if (token.type === 'code') return { kind: 'code-block' as const, rawKind: null }
+    if (token.type === 'blockquote') return { kind: 'quote' as const, rawKind: null }
+    if (token.type === 'hr') return { kind: 'divider' as const, rawKind: null }
+    if (token.type === 'table') return { kind: 'table' as const, rawKind: null }
+    if (token.type === 'list') {
+      const list = token as Tokens.List
+      return {
+        kind: list.items.some((item) => item.task)
+          ? ('task-list' as const)
+          : list.ordered
+            ? ('ordered-list' as const)
+            : ('bullet-list' as const),
+        rawKind: null,
+      }
+    }
+    return {
+      kind: /^\s*!\[/u.test(text) ? ('image' as const) : ('paragraph' as const),
+      rawKind: null,
+    }
+  }
   if (isFenceStart(text)) return { kind: 'code-block' as const, rawKind: null }
   if (/^\s{0,3}#{1,6}\s+/u.test(text)) return { kind: 'heading' as const, rawKind: null }
   if (/^\s{0,3}>/u.test(text)) return { kind: 'quote' as const, rawKind: null }
@@ -337,6 +427,12 @@ export function parseMarkdownBlockDocument(
   options: { allowFrontmatter?: boolean; change?: BlockDocumentChange } = {},
 ): MarkdownBlockDocument {
   const lines = sourceLines(source)
+  const tokensByOffset = new Map<number, Token>()
+  let tokenOffset = 0
+  for (const token of blockLexer.lexer(source)) {
+    if (token.type !== 'space') tokensByOffset.set(tokenOffset, token)
+    tokenOffset += token.raw.length
+  }
   const blocks: MarkdownBlock[] = []
   let index = 0
 
@@ -353,13 +449,25 @@ export function parseMarkdownBlockDocument(
     }
 
     const contentLine = index
+    const token = tokensByOffset.get(lines[contentLine].normalizedFrom)
     let classification = classifyBlock(
       lines,
       contentLine,
       options.allowFrontmatter !== false && blocks.length === 0,
+      token,
     )
     let endLine = blockEnd(lines, contentLine, classification.kind, classification.rawKind)
-    if (classification.kind === 'paragraph') {
+    if (
+      token &&
+      classification.rawKind !== 'frontmatter' &&
+      classification.rawKind !== 'directive' &&
+      classification.rawKind !== 'footnote'
+    ) {
+      const tokenEnd = lines[contentLine].normalizedFrom + token.raw.length
+      endLine = contentLine + 1
+      while (endLine < lines.length && lines[endLine].normalizedFrom < tokenEnd) endLine += 1
+    }
+    if (!token && classification.kind === 'paragraph') {
       for (let lineIndex = contentLine; lineIndex < endLine; lineIndex += 1) {
         const inlineRawKind = rawInlineKind(lines[lineIndex].text)
         if (inlineRawKind) {

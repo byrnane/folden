@@ -15,6 +15,7 @@ export type MarkdownSafetyReport = {
 
 const allowedLinkSchemes = new Set(['http', 'https', 'mailto'])
 const supportedImageSchemes = new Set(['data', 'asset'])
+const remoteImagePattern = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)(?:\s+"[^"]*")?\)/i
 
 function lineNumberAt(source: string, index: number) {
   if (index < 0) {
@@ -93,6 +94,23 @@ export function isRemoteImageUrl(value: string) {
   return /^https?:\/\//i.test(value.trim())
 }
 
+export function hasRemoteMarkdownImages(source: string) {
+  if (remoteImagePattern.test(source)) return true
+  if (!source.includes('![') || !source.includes(']:')) return false
+  const normalizeLabel = (label: string) => label.trim().replace(/\s+/gu, ' ').toLowerCase()
+  const remoteLabels = new Set(
+    Array.from(
+      source.matchAll(/^ {0,3}\[([^\]\n]+)\]:[\t ]*(?:\r?\n[\t ]*)?<?https?:\/\/[^\s>]+>?/gim),
+      (match) => normalizeLabel(match[1]),
+    ),
+  )
+  for (const match of source.matchAll(/!\[([^\]\n]*)\](?:\[([^\]\n]*)\])?/gu)) {
+    if (source[match.index + match[0].length] === '(') continue
+    if (remoteLabels.has(normalizeLabel(match[2] || match[1]))) return true
+  }
+  return false
+}
+
 export function validateImageTarget(value: string) {
   const normalizedValue = value.trim()
 
@@ -165,7 +183,7 @@ export function analyzeMarkdownSafety(source: string): MarkdownSafetyReport {
     unsupportedFeatures,
   )
 
-  const remoteImageExpression = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)(?:\s+"[^"]*")?\)/gi
+  const remoteImageExpression = new RegExp(remoteImagePattern, 'gi')
   let remoteImageMatch = remoteImageExpression.exec(source)
 
   while (remoteImageMatch) {

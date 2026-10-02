@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import type { OpenDocument } from '../../domain/documents/documentState'
 import {
-  analyzeMarkdownSafety,
+  hasRemoteMarkdownImages,
   type MarkdownSafetyReport,
 } from '../../domain/markdown/markdownSafety'
 import { isMarkdownDocument } from '../helpers/pathHelpers'
@@ -16,36 +16,7 @@ type VisualSafetyDeps = {
 
 export function createVisualSafetyController(deps: VisualSafetyDeps) {
   void deps
-  const markdownSafetyCache = ref<Record<string, MarkdownSafetyReport>>({})
   const remoteImagePermissions = ref<Record<string, boolean>>({})
-
-  function markdownSafetyCacheKey(document: Pick<OpenDocument, 'id' | 'revision'>) {
-    return `${document.id}:${document.revision}`
-  }
-
-  function getMarkdownSafetyReport(document: OpenDocument) {
-    if (!isMarkdownDocument(document)) {
-      return {
-        safeForVisualEditing: true,
-        unsupportedFeatures: [],
-        remoteImages: [],
-      } satisfies MarkdownSafetyReport
-    }
-
-    const cacheKey = markdownSafetyCacheKey(document)
-    const cachedReport = markdownSafetyCache.value[cacheKey]
-
-    if (cachedReport) {
-      return cachedReport
-    }
-
-    const nextReport = analyzeMarkdownSafety(document.content)
-    markdownSafetyCache.value = {
-      ...markdownSafetyCache.value,
-      [cacheKey]: nextReport,
-    }
-    return nextReport
-  }
 
   function hasUnsafeUnacknowledgedVisualState(document: OpenDocument) {
     void document
@@ -53,7 +24,7 @@ export function createVisualSafetyController(deps: VisualSafetyDeps) {
   }
 
   function documentHasRemoteImages(document: OpenDocument) {
-    return getMarkdownSafetyReport(document).remoteImages.length > 0
+    return isMarkdownDocument(document) && hasRemoteMarkdownImages(document.content)
   }
 
   function shouldLoadRemoteImages(document: OpenDocument) {

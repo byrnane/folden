@@ -17,41 +17,38 @@ export type ResolveVisualImageSourceOptions = {
   allowRemoteImages: boolean
 }
 
-function splitWindowsPath(path: string) {
-  const normalizedPath = path.replace(/\//g, '\\')
+function splitLocalPath(path: string) {
+  const normalizedPath = path.replaceAll('\\', '/')
   const driveMatch = normalizedPath.match(/^[A-Za-z]:/)
   const drive = driveMatch?.[0] ?? ''
-  const remainder = drive ? normalizedPath.slice(drive.length) : normalizedPath
+  const unc = !drive ? normalizedPath.match(/^\/\/[^/]+\/[^/]+/)?.[0] : null
+  const root = drive ? `${drive}/` : unc ? `${unc}/` : normalizedPath.startsWith('/') ? '/' : ''
 
   return {
-    drive,
-    segments: remainder.split('\\').filter((segment) => segment.length > 0),
+    root,
+    windows: Boolean(drive || unc),
+    segments: normalizedPath
+      .slice(root.length)
+      .split('/')
+      .filter((segment) => segment.length > 0),
   }
 }
 
-function joinWindowsPath(drive: string, segments: string[]) {
-  if (!drive) {
-    return segments.join('\\')
-  }
-
-  return segments.length > 0 ? `${drive}\\${segments.join('\\')}` : `${drive}\\`
+function joinLocalPath(root: string, segments: string[], windows: boolean) {
+  const path = `${root}${segments.join('/')}`
+  return windows ? path.replaceAll('/', '\\') : path
 }
 
-function parentWindowsPath(path: string) {
-  const { drive, segments } = splitWindowsPath(path)
-
-  if (segments.length === 0) {
-    return joinWindowsPath(drive, segments)
-  }
-
-  return joinWindowsPath(drive, segments.slice(0, -1))
+function parentLocalPath(path: string) {
+  const { root, segments, windows } = splitLocalPath(path)
+  return joinLocalPath(root, segments.slice(0, -1), windows)
 }
 
-function resolveWindowsPath(basePath: string, relativePath: string) {
-  const { drive, segments } = splitWindowsPath(basePath)
+function resolveLocalPath(basePath: string, relativePath: string) {
+  const { root, segments, windows } = splitLocalPath(basePath)
   const nextSegments = [...segments]
 
-  for (const segment of relativePath.replace(/\//g, '\\').split('\\')) {
+  for (const segment of relativePath.replaceAll('\\', '/').split('/')) {
     if (!segment || segment === '.') {
       continue
     }
@@ -66,7 +63,7 @@ function resolveWindowsPath(basePath: string, relativePath: string) {
     nextSegments.push(segment)
   }
 
-  return joinWindowsPath(drive, nextSegments)
+  return joinLocalPath(root, nextSegments, windows)
 }
 
 function splitPathSuffix(value: string) {
@@ -92,15 +89,21 @@ export function resolveRelativeImagePath(
   const basePath = /^[\\/]/.test(path)
     ? workspaceRootPath
     : documentPath
-      ? parentWindowsPath(documentPath)
+      ? parentLocalPath(documentPath)
       : null
 
   if (!basePath) {
     return null
   }
 
-  const relativePath = path.replace(/^[\\/]+/, '')
-  return `${resolveWindowsPath(basePath, relativePath)}${suffix}`
+  let decodedPath: string
+  try {
+    decodedPath = decodeURIComponent(path)
+  } catch {
+    return null
+  }
+  const relativePath = decodedPath.replace(/^[\\/]+/, '')
+  return `${resolveLocalPath(basePath, relativePath)}${suffix}`
 }
 
 export function resolveVisualImageSource(

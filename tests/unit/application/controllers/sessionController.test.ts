@@ -141,4 +141,25 @@ describe('session controller', () => {
     expect(controller.pendingRecoveryEntries.value.map((entry) => entry.key)).toEqual(['b'])
     expect(persist).not.toHaveBeenCalled()
   })
+
+  it('keeps every active dirty document beyond the deferred recovery retention limit', () => {
+    const controller = createSessionController(true)
+    const documents = Array.from({ length: 70 }, (_, index) =>
+      createDocument({ id: `dirty-${index}`, path: null, content: `unsaved-${index}` }),
+    )
+    controller.setPendingRecoveryEntries(
+      Array.from({ length: 80 }, (_, index) => createRecoverySnapshot(`old-${index}`)),
+    )
+
+    const snapshots = controller.buildPersistedRecoverySnapshots({
+      documents,
+      workspace: null,
+      isDirty: () => true,
+      normalizePath: (path) => path,
+    })
+
+    expect(snapshots.filter((entry) => entry.key.startsWith('scratch:dirty-'))).toHaveLength(70)
+    expect(snapshots.filter((entry) => entry.key.startsWith('old-'))).toHaveLength(64)
+    expect(snapshots.find((entry) => entry.key === 'scratch:dirty-69')?.content).toBe('unsaved-69')
+  })
 })

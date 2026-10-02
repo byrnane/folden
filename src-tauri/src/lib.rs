@@ -18,8 +18,11 @@ mod native {
     pub(super) mod diagnostics;
     pub(super) mod documents;
     pub(super) mod errors;
+    pub(super) mod images;
     pub(super) mod paths;
     pub(super) mod persistence;
+    pub(super) mod project;
+    pub(super) mod search;
     pub(super) mod state;
     pub(super) mod types;
     pub(super) mod watcher;
@@ -42,9 +45,12 @@ use native::diagnostics::*;
 use native::documents::*;
 #[cfg(test)]
 use native::errors::*;
+use native::images::*;
 #[cfg(test)]
 use native::paths::*;
 use native::persistence::*;
+use native::project::*;
+use native::search::*;
 use native::state::*;
 #[cfg(test)]
 use native::types::*;
@@ -102,6 +108,7 @@ pub fn run() {
             log_frontend_event,
             open_logs_folder,
             export_diagnostics,
+            open_project_link,
             list_directory,
             sync_workspace_watch_scope,
             load_workspace_settings,
@@ -110,6 +117,12 @@ pub fn run() {
             create_file,
             create_directory,
             rename_path,
+            move_path,
+            start_workspace_search,
+            list_workspace_files,
+            cancel_workspace_search,
+            import_image_from_picker,
+            import_image_data,
             trash_path
         ])
         .run(tauri::generate_context!())
@@ -170,6 +183,18 @@ mod tests {
 
     #[test]
     fn relative_paths_reject_absolute_and_traversal_input() {
+        for path in [
+            "/etc/passwd",
+            "../secret.txt",
+            "notes/../../secret.txt",
+            "\\\\server\\share\\secret.txt",
+            "C:secret.txt",
+        ] {
+            assert_eq!(
+                ensure_relative_path(path, "test").unwrap_err().code,
+                FileErrorCode::OutsideWorkspace
+            );
+        }
         assert_eq!(
             ensure_relative_path("..\\secret.txt", "test")
                 .unwrap_err()
@@ -191,6 +216,69 @@ mod tests {
     }
 
     #[test]
+    fn relative_paths_accept_portable_and_legacy_separators() {
+        let expected = PathBuf::from("notes").join("Draft.md");
+        assert_eq!(
+            ensure_relative_path("notes/Draft.md", "test").unwrap(),
+            expected
+        );
+        assert_eq!(
+            ensure_relative_path("notes\\Draft.md", "test").unwrap(),
+            expected
+        );
+        assert_eq!(relative_path_to_string(&expected), "notes/Draft.md");
+        if cfg!(windows) {
+            assert_eq!(normalize_key("notes\\Draft.md"), "notes/draft.md");
+        } else {
+            assert_eq!(normalize_key("notes\\Draft.md"), "notes/Draft.md");
+            assert_ne!(
+                normalize_key("notes/Draft.md"),
+                normalize_key("notes/draft.md")
+            );
+        }
+    }
+
+    #[test]
+    fn moves_never_replace_existing_files_or_directories() {
+        let temp = TempWorkspace::new();
+        let source = temp.path.join("source.md");
+        let target = temp.path.join("target.md");
+        fs::write(&source, "source").unwrap();
+        fs::write(&target, "target").unwrap();
+        assert_eq!(
+            move_without_overwrite(&source, &target).unwrap_err().kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+        assert_eq!(fs::read_to_string(&source).unwrap(), "source");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "target");
+        let source_directory = temp.path.join("source");
+        let target_directory = temp.path.join("target");
+        fs::create_dir(&source_directory).unwrap();
+        fs::create_dir(&target_directory).unwrap();
+        assert!(move_without_overwrite(&source_directory, &target_directory).is_err());
+        assert!(source_directory.is_dir());
+        assert!(target_directory.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn moves_never_replace_a_dangling_symlink() {
+        let temp = TempWorkspace::new();
+        let source = temp.path.join("source.md");
+        let target = temp.path.join("target.md");
+        let missing = temp.path.join("missing.md");
+        fs::write(&source, "source").unwrap();
+        std::os::unix::fs::symlink(&missing, &target).unwrap();
+        assert!(!target.exists());
+        assert_eq!(
+            move_without_overwrite(&source, &target).unwrap_err().kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+        assert_eq!(fs::read_link(&target).unwrap(), missing);
+        assert_eq!(fs::read_to_string(&source).unwrap(), "source");
+    }
+
+    #[test]
     fn workspace_child_targets_stay_inside_root() {
         let workspace = test_workspace();
         let notes = workspace.root_path.join("notes");
@@ -204,7 +292,7 @@ mod tests {
             path_to_string(&child),
             path_to_string(&notes.join("draft.md"))
         );
-        assert_eq!(relative_path, "notes\\draft.md");
+        assert_eq!(relative_path, "notes/draft.md");
     }
 
     #[test]
@@ -450,7 +538,7 @@ mod tests {
 
         let settings = load_workspace_settings_from_path(&path).expect("settings should load");
 
-        assert_eq!(settings.ignored_paths, vec!["notes\\drafts".to_string()]);
+        assert_eq!(settings.ignored_paths, vec!["notes/drafts".to_string()]);
 
         fs::write(&path, r#"{"ignoredPaths":["..\\secret"]}"#)
             .expect("failed to write invalid settings");
@@ -582,6 +670,27 @@ mod tests {
             serde_json::to_value(fs_event).expect("fs event should serialize"),
             fixture["nativeFsEvent"]
         );
+        let search: WorkspaceSearchResult =
+            serde_json::from_value(fixture["workspaceSearchResult"].clone()).unwrap();
+        let batch = WorkspaceSearchBatch {
+            workspace_id: "workspace-1".into(),
+            request_id: "search-1".into(),
+            matches: search.matches.clone(),
+        };
+        assert_eq!(
+            serde_json::to_value(search).unwrap(),
+            fixture["workspaceSearchResult"]
+        );
+        assert_eq!(
+            serde_json::to_value(batch).unwrap(),
+            fixture["workspaceSearchBatch"]
+        );
+        let files: WorkspaceFilesResult =
+            serde_json::from_value(fixture["workspaceFilesResult"].clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(files).unwrap(),
+            fixture["workspaceFilesResult"]
+        );
     }
 
     #[test]
@@ -607,6 +716,320 @@ mod tests {
             encode_text_content(&content, &format),
             vec![0xEF, 0xBB, 0xBF, b'a', b'\r', b'\n', b'b']
         );
+    }
+
+    #[test]
+    fn search_matches_use_original_utf16_offsets_and_line_coordinates() {
+        let content = "😀 ПрИвЕт\r\nsecond Привет";
+        let fingerprint = FileFingerprint {
+            size: content.len() as u64,
+            modified_at_ms: 1,
+        };
+        let matches = find_text_matches(
+            content,
+            "привет",
+            false,
+            "note.md",
+            &fingerprint,
+            100,
+            &AtomicBool::new(false),
+        );
+        assert_eq!(matches.len(), 2);
+        assert_eq!(
+            (
+                matches[0].from,
+                matches[0].to,
+                matches[0].line,
+                matches[0].column
+            ),
+            (3, 9, 1, 4)
+        );
+        assert_eq!(
+            (
+                matches[1].from,
+                matches[1].to,
+                matches[1].line,
+                matches[1].column
+            ),
+            (18, 24, 2, 8)
+        );
+        assert_eq!(
+            find_text_matches(
+                content,
+                "Привет",
+                true,
+                "note.md",
+                &fingerprint,
+                100,
+                &AtomicBool::new(false)
+            )
+            .len(),
+            1
+        );
+        let expanded = find_text_matches(
+            "İ",
+            "i",
+            false,
+            "note.md",
+            &fingerprint,
+            100,
+            &AtomicBool::new(false),
+        );
+        assert_eq!((expanded[0].from, expanded[0].to), (0, 1));
+        let long_line = format!("{}match{}", "😀".repeat(10_000), "x".repeat(1_000));
+        let long_match = find_text_matches(
+            &long_line,
+            "match",
+            true,
+            "note.md",
+            &fingerprint,
+            1,
+            &AtomicBool::new(false),
+        );
+        assert_eq!(long_match[0].column, 20_001);
+        assert_eq!(long_match[0].preview.chars().count(), 240);
+        assert!(long_match[0].preview.contains("match"));
+        assert!(find_text_matches(
+            content,
+            "привет",
+            false,
+            "note.md",
+            &fingerprint,
+            100,
+            &AtomicBool::new(true)
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn workspace_search_streams_bounded_results_and_honors_ignores() {
+        let temp = TempWorkspace::new();
+        let root = fs::canonicalize(&temp.path).unwrap();
+        fs::create_dir_all(temp.path.join("hidden")).unwrap();
+        fs::create_dir_all(temp.path.join("ignored")).unwrap();
+        fs::create_dir_all(temp.path.join("node_modules")).unwrap();
+        for path in [
+            "visible.md",
+            "hidden/note.md",
+            "ignored/note.md",
+            "node_modules/note.md",
+            "overlay.md",
+        ] {
+            fs::write(temp.path.join(path), "match").unwrap();
+        }
+        fs::write(temp.path.join("binary.md"), [0, 1, 2]).unwrap();
+        fs::write(temp.path.join("large.md"), vec![b'a'; 2 * 1024 * 1024 + 1]).unwrap();
+        let scan = WorkspaceScanRequest {
+            workspace_id: "workspace".into(),
+            request_id: "request".into(),
+            ignored_names: vec!["HIDDEN".into()],
+            ignored_paths: vec!["ignored".into()],
+            excluded_paths: vec!["overlay.md".into()],
+        };
+        let request = WorkspaceSearchRequest {
+            scan: scan.clone(),
+            query: "match".into(),
+            case_sensitive: true,
+        };
+        let mut batches = Vec::new();
+        let result =
+            search_workspace_with_batches(&root, &request, &AtomicBool::new(false), |batch| {
+                batches.push(batch)
+            })
+            .unwrap();
+        assert_eq!(result.matches.len(), 1);
+        assert_eq!(result.matches[0].path, "visible.md");
+        assert_eq!(result.skipped, 2);
+        assert!(!result.partial);
+        assert_eq!(batches.len(), 1);
+        let files = list_workspace_files_from_root(&root, &scan, &AtomicBool::new(false)).unwrap();
+        assert!(files.files.contains(&"visible.md".to_string()));
+        assert!(!files.files.iter().any(|path| path.starts_with("hidden")
+            || path.starts_with("ignored")
+            || path == "overlay.md"));
+        fs::write(temp.path.join("visible.md"), "match ".repeat(6_000)).unwrap();
+        batches.clear();
+        let capped =
+            search_workspace_with_batches(&root, &request, &AtomicBool::new(false), |batch| {
+                batches.push(batch)
+            })
+            .unwrap();
+        assert_eq!(capped.matches.len(), 5_000);
+        assert!(capped.partial);
+        assert_eq!(batches.len(), 50);
+        assert!(batches.iter().all(|batch| batch.len() <= 100));
+        let cancelled =
+            search_workspace_with_batches(&root, &request, &AtomicBool::new(true), |_| {}).unwrap();
+        assert!(cancelled.cancelled);
+        assert!(cancelled.matches.is_empty());
+    }
+
+    #[test]
+    fn cancelling_old_request_does_not_cancel_current_scan() {
+        let mut state = NativeAppState::default();
+        let token = Arc::new(AtomicBool::new(false));
+        state.workspace_scans.insert(
+            "workspace:search".into(),
+            ("new".into(), Arc::clone(&token)),
+        );
+        cancel_scan_request(&state, "workspace", "old");
+        assert!(!token.load(Ordering::Relaxed));
+        cancel_scan_request(&state, "workspace", "new");
+        assert!(token.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn moving_workspace_directory_preserves_native_handles_and_rejects_overwrite() {
+        let temp = TempWorkspace::new();
+        let root = fs::canonicalize(&temp.path).unwrap();
+        fs::create_dir_all(root.join("notes")).unwrap();
+        fs::create_dir_all(root.join("archive")).unwrap();
+        fs::write(root.join("notes").join("draft.md"), "draft").unwrap();
+        let mut state = NativeAppState::default();
+        state.workspaces.insert(
+            "workspace".into(),
+            AuthorizedWorkspace {
+                root_path: root.clone(),
+            },
+        );
+        state.documents.insert(
+            "document".into(),
+            AuthorizedDocument {
+                path: root.join("notes").join("draft.md"),
+                workspace_id: Some("workspace".into()),
+                relative_path: Some("notes\\draft.md".into()),
+            },
+        );
+        state
+            .workspace_watch_paths
+            .insert(path_to_string(&root.join("notes")));
+        let moved = move_workspace_path(&mut state, "workspace", "notes", "archive").unwrap();
+        assert_eq!(moved, "archive/notes");
+        assert_eq!(
+            state.documents["document"].relative_path.as_deref(),
+            Some("archive/notes/draft.md")
+        );
+        assert!(state.documents["document"].path.is_file());
+        assert!(state
+            .workspace_watch_paths
+            .contains(&path_to_string(&root.join("archive").join("notes"))));
+        assert_eq!(
+            move_workspace_path(&mut state, "workspace", "archive", "archive\\notes")
+                .unwrap_err()
+                .code,
+            FileErrorCode::InvalidName
+        );
+        assert!(move_workspace_path(&mut state, "workspace", "", "archive").is_err());
+        fs::write(root.join("draft.md"), "original").unwrap();
+        assert!(
+            move_workspace_path(&mut state, "workspace", "archive\\notes\\draft.md", "").is_err()
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("draft.md")).unwrap(),
+            "original"
+        );
+        assert!(state.documents["document"].path.is_file());
+    }
+
+    #[test]
+    fn moving_markdown_preserves_its_images_and_preflights_asset_conflicts() {
+        let temp = TempWorkspace::new();
+        let root = fs::canonicalize(&temp.path).unwrap();
+        fs::create_dir(root.join("archive")).unwrap();
+        fs::write(
+            root.join("Сцена игры.md"),
+            "![кадр](Сцена%20игры.assets/picture.png)",
+        )
+        .unwrap();
+        let png = b"\x89PNG\r\n\x1a\nfixture";
+        import_image_at_document(
+            &root.join("Сцена игры.md"),
+            png,
+            Some("image/png"),
+            Some("picture.png"),
+        )
+        .unwrap();
+        let mut state = NativeAppState::default();
+        state.workspaces.insert(
+            "workspace".into(),
+            AuthorizedWorkspace {
+                root_path: root.clone(),
+            },
+        );
+        state.documents.insert(
+            "document".into(),
+            AuthorizedDocument {
+                path: root.join("Сцена игры.md"),
+                workspace_id: Some("workspace".into()),
+                relative_path: Some("Сцена игры.md".into()),
+            },
+        );
+        state
+            .workspace_watch_paths
+            .insert(path_to_string(&root.join("Сцена игры.assets")));
+        fs::create_dir(root.join("archive").join("Сцена игры.assets")).unwrap();
+        assert_eq!(
+            move_workspace_path(&mut state, "workspace", "Сцена игры.md", "archive")
+                .unwrap_err()
+                .code,
+            FileErrorCode::AlreadyExists
+        );
+        assert!(root.join("Сцена игры.md").is_file());
+        assert!(root.join("Сцена игры.assets").join("picture.png").is_file());
+        fs::remove_dir(root.join("archive").join("Сцена игры.assets")).unwrap();
+        let moved =
+            move_workspace_path(&mut state, "workspace", "Сцена игры.md", "archive").unwrap();
+        assert_eq!(moved, "archive/Сцена игры.md");
+        assert_eq!(
+            fs::read(
+                root.join("archive")
+                    .join("Сцена игры.assets")
+                    .join("picture.png")
+            )
+            .unwrap(),
+            png
+        );
+        assert!(!root.join("Сцена игры.assets").exists());
+        assert!(state.workspace_watch_paths.contains(&path_to_string(
+            &root.join("archive").join("Сцена игры.assets")
+        )));
+        assert_eq!(
+            state.documents["document"].path,
+            root.join("archive").join("Сцена игры.md")
+        );
+        assert!(fs::read_to_string(&state.documents["document"].path)
+            .unwrap()
+            .contains("Сцена%20игры.assets/picture.png"));
+    }
+
+    #[test]
+    fn imported_images_stay_relative_and_never_overwrite_assets() {
+        let temp = TempWorkspace::new();
+        let document = temp.path.join("My draft.md");
+        fs::write(&document, "draft").unwrap();
+        let png = b"\x89PNG\r\n\x1a\nfixture";
+        let first =
+            import_image_at_document(&document, png, Some("image/png"), Some("picture.png"))
+                .unwrap();
+        let second =
+            import_image_at_document(&document, png, Some("image/png"), Some("picture.png"))
+                .unwrap();
+        assert_eq!(first, "My%20draft.assets/picture.png");
+        assert_eq!(second, "My%20draft.assets/picture-2.png");
+        assert_eq!(
+            fs::read(temp.path.join("My draft.assets").join("picture.png")).unwrap(),
+            png
+        );
+        assert!(import_image_at_document(&document, png, Some("image/jpeg"), None).is_err());
+        assert!(
+            import_image_at_document(&document, b"<svg></svg>", Some("image/svg+xml"), None)
+                .is_err()
+        );
+        assert!(
+            import_image_at_document(&document, png, Some("image/png"), Some("../escape.png"))
+                .is_err()
+        );
+        assert!(decode_text_file_with_limit(&document, Some(2), "test_read_limit").is_err());
     }
 
     #[test]
@@ -662,20 +1085,21 @@ mod tests {
         assert!(is_folden_temp_save_path(Path::new(
             ".folden-save-write-1.tmp"
         )));
-        assert!(is_folden_temp_save_path(Path::new(
-            "C:\\Docs\\.folden-save-write-1.tmp"
-        )));
+        assert!(is_folden_temp_save_path(
+            &PathBuf::from("Docs").join(".folden-save-write-1.tmp")
+        ));
         assert!(is_folden_temp_save_path(Path::new(
             ".folden-backup-replace-1.tmp"
         )));
-        assert!(is_folden_temp_save_path(Path::new(
-            "C:\\Docs\\.folden-backup-replace-1.tmp"
-        )));
+        assert!(is_folden_temp_save_path(
+            &PathBuf::from("Docs").join(".folden-backup-replace-1.tmp")
+        ));
         assert!(!is_folden_temp_save_path(Path::new("draft.md")));
     }
 
     #[test]
     fn diagnostic_report_redacts_paths_and_excludes_app_state_content() {
+        assert_eq!(redact_absolute_paths("opened /Users/Max/Secret note.md\nfailed /home/max/private.md\nURL https://example.com/image.png"), "opened [path]\nfailed [path]\nURL https://example.com/image.png");
         let temp = TempWorkspace::new();
         let app_data_dir = temp.path.join("app-data");
         let log_dir = temp.path.join("logs");

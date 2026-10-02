@@ -33,6 +33,7 @@ const documentRun = run('document', process.execPath, [
 ])
 const workspaceRun = run('workspace', 'cargo', [
   'test',
+  '--locked',
   '--release',
   '--manifest-path',
   'src-tauri/Cargo.toml',

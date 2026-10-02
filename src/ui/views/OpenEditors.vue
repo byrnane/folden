@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import type { OpenDocument } from '../../domain/documents/documentState'
 import type { EditorPane } from '../../application/types/shell'
 import { startDocumentDrag } from '../documentDrag'
@@ -32,15 +33,15 @@ function getDocumentPaneLabel(documentId: string) {
   const hasRight = paneIds.includes('right')
 
   if (hasLeft && hasRight) {
-    return 'L/R'
+    return t('L/R')
   }
 
   if (hasRight) {
-    return 'R'
+    return t('R')
   }
 
   if (hasLeft) {
-    return 'L'
+    return t('L')
   }
 
   return '-'
@@ -74,9 +75,13 @@ function selectDocument(documentId: string) {
 </script>
 
 <template>
-  <section v-if="documents.length && !collapsed" class="open-editors" aria-label="Open editors">
+  <section
+    v-if="documents.length && !collapsed"
+    class="open-editors"
+    :aria-label="t('Open editors')"
+  >
     <button type="button" class="section-header" @click="emit('update:collapsed', true)">
-      Open Editors
+      {{ t('Open Editors') }}
     </button>
     <button
       v-for="document in documents"
@@ -87,7 +92,7 @@ function selectDocument(documentId: string) {
         active: isVisiblePaneDocument(document.id),
         'active-pane-document': isActivePaneDocument(document.id),
       }"
-      :title="document.path ? cleanDisplayPath(document.path) : 'Scratch document'"
+      :title="document.path ? cleanDisplayPath(document.path) : t('Scratch document')"
       draggable="true"
       @dragstart="
         startDocumentDrag($event, {
@@ -116,6 +121,6 @@ function selectDocument(documentId: string) {
     class="section-header"
     @click="emit('update:collapsed', false)"
   >
-    Open Editors
+    {{ t('Open Editors') }}
   </button>
 </template>

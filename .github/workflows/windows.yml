@@ -1,50 +1,85 @@
-name: Windows CI
+name: CI
 
 on:
   push:
-    branches:
-      - master
-      - main
+    branches: [master, main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  windows:
-    runs-on: windows-latest
-
+  quality:
+    name: Quality and Windows browser tests
+    runs-on: windows-2022
+    timeout-minutes: 45
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          node-version: 22
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
           cache: npm
+      - name: Set up Rust
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy
+      - run: npm ci
+      - run: npm run quality
+      - run: npm run test:release
+      - run: npm run privacy:check
+      - name: Fetch the four supported dependency graphs
+        working-directory: src-tauri
+        run: cargo fetch --locked --target x86_64-pc-windows-msvc --target x86_64-unknown-linux-gnu --target x86_64-apple-darwin --target aarch64-apple-darwin
+      - run: npm run licenses:check
+      - run: npm run test:coverage
+      - run: npx playwright install chromium
+      - run: npm run test:e2e
+      - run: npm run vue:build
+      - run: npm run test:performance
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+  native:
+    name: Native ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          components: rustfmt, clippy
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          workspaces: src-tauri -> ../build/desktop
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Quality gate
-        run: npm run quality
-
-      - name: Cargo fmt
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev
+      - name: Set up Rust
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy --target ${{ matrix.target }}
+      - run: npm ci
+      - run: npm run vue:build
+      - name: Rust format
+        if: runner.os == 'Windows'
         working-directory: src-tauri
         run: cargo fmt --check
-
-      - name: Cargo clippy
+      - name: Rust clippy
         working-directory: src-tauri
-        run: cargo clippy -- -D warnings
-
-      - name: Cargo test
+        run: cargo clippy --locked --all-targets --target ${{ matrix.target }} -- -D warnings
+      - name: Native tests
         working-directory: src-tauri
-        run: cargo test
+        run: cargo test --locked --target ${{ matrix.target }}

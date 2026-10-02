@@ -24,6 +24,12 @@ import {
   saveWorkspaceSettings,
   syncWorkspaceWatchScope,
   trashPath,
+  startWorkspaceSearch,
+  listWorkspaceFiles,
+  cancelWorkspaceSearch,
+  movePath,
+  importImageFromPicker,
+  importImageData,
 } from './files'
 
 export function createTauriNativePorts(): NativePorts {
@@ -34,6 +40,8 @@ export function createTauriNativePorts(): NativePorts {
       openTextFileAtPath,
       openTextFileByPath,
       saveTextFile,
+      importImageFromPicker,
+      importImageData,
     },
     workspace: {
       createDirectory,
@@ -47,6 +55,10 @@ export function createTauriNativePorts(): NativePorts {
       saveWorkspaceSettings,
       syncWorkspaceWatchScope,
       trashPath,
+      movePath,
+      startWorkspaceSearch,
+      listWorkspaceFiles,
+      cancelWorkspaceSearch,
     },
     sessionStorage: {
       loadRecoverySnapshots,

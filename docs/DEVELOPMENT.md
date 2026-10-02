@@ -1,235 +1,39 @@
-# Folden Development
+# Development
 
-This document covers setup, commands, checks, CI, build artifacts, and release workflow. See [ARCHITECTURE.md](ARCHITECTURE.md) for code ownership and dependency rules, and [RELEASE.md](RELEASE.md) for the release checklist.
+[Русский](DEVELOPMENT.ru.md) · [Architecture](ARCHITECTURE.md) · [Release procedure](RELEASE.md)
 
-## Requirements
+These are maintainer instructions. Public availability does not grant permission to modify or redistribute author source; see [LICENSE.md](../LICENSE.md).
 
-Folden uses:
+Use **Node 24.16.0** (.nvmrc) and **Rust 1.96.0** (rust-toolchain.toml). Follow [Tauri's prerequisites](https://v2.tauri.app/start/prerequisites/): Windows C++ Build Tools and WebView2, Xcode Command Line Tools on macOS, or WebKitGTK 4.1 and development libraries on Ubuntu 22.04. macOS release packages target version 14 or newer.
 
-- Node.js and npm;
-- Rust toolchain with Cargo;
-- Windows C++ Build Tools with the `Desktop development with C++` workload;
-- Microsoft Edge WebView2 runtime.
-
-On Windows, install Rust with Rustup:
-
-```powershell
-winget install --id Rustlang.Rustup
-```
-
-Open a new terminal and verify:
-
-```powershell
-node --version
-npm --version
-rustc --version
-cargo --version
-```
-
-If `cargo` is installed but not visible in the current shell, Folden's Tauri wrapper adds the standard Rustup Cargo path before running desktop commands.
-
-## Setup
-
-Install npm dependencies:
-
-```powershell
-npm install
-```
-
-For CI-like installs, use:
-
-```powershell
+```text
 npm ci
-```
-
-## Frontend Commands
-
-Run the browser-only Vite app:
-
-```powershell
-npm run vue:dev
-```
-
-Build the frontend:
-
-```powershell
-npm run vue:build
-```
-
-Preview a built frontend:
-
-```powershell
-npm run vue:preview
-```
-
-The browser-only frontend does not provide real native dialogs, filesystem access, window close events, or workspace watcher behavior.
-
-## Desktop Commands
-
-Run the Tauri app in development:
-
-```powershell
 npm run app:dev
 ```
 
-Build the Tauri app without installers:
+Development uses com.folden.editor.dev with separate settings, sessions and recovery. app:run uses the release profile; do not replace a live installation or clear profiles during a smoke test without permission and a verified backup.
 
-```powershell
-npm run app:build
-```
+| Command                  | Purpose                                                                  |
+| ------------------------ | ------------------------------------------------------------------------ |
+| npm run vue:dev          | Browser UI without native filesystem/dialogs                             |
+| npm run vue:build        | Frontend build                                                           |
+| npm run app:dev          | Native development application                                           |
+| npm run app:build        | Executable without installer                                             |
+| npm run app:run          | Last local release executable                                            |
+| npm run quality          | Version, format, types, unused code, dependency cycles, lint, unit tests |
+| npm run test:coverage    | Unit coverage                                                            |
+| npm run test:e2e         | Chromium functional/UI tests; visual baselines are Windows               |
+| npm run test:performance | Separate measured performance gate                                       |
+| npm run test:release     | Release-script regressions                                               |
+| npm run privacy:check    | Current source privacy patterns and historical identities                |
+| npm run licenses:check   | Deterministic legal inventory against installed locked dependencies      |
 
-Build installer bundles for release verification:
+Native checks from src-tauri are cargo fmt --check, cargo clippy --locked --all-targets -- -D warnings, and cargo test --locked. CI tests native code on all four release targets; browser E2E runs on Windows. Native OS acceptance remains separate.
 
-```powershell
-npm run tauri -- build
-```
+Frontend output is dist/. Cargo output is build/desktop/ with incremental compilation disabled. Explicit release targets write build/desktop/<target>/release/. Staged distribution files go to build/release/<target>/ after final package verification. Keep historical checkout builds in separate target directories to prevent stale bundler inputs.
 
-Run the last built desktop executable:
+After a dependency change, fetch the four supported Cargo targets listed in RELEASE.md, install the npm lock, run npm run licenses:generate, inspect changed notices/provenance, and run npm run licenses:check. The inventory separates native runtime/build scopes; it includes conservative npm production entries and canonical license texts where archives omit them. AppImage OS libraries require the additional final-payload audit.
 
-```powershell
-npm run app:run
-```
+Local caches, diagnostics, personal documents and .codex configuration belong outside the public export. Privacy checks print filenames/reasons, never matched private values. Synthetic paths have exact file/literal allowlists; do not broadly exclude tests. Original Git remains untouched while a separate sanitized history is prepared.
 
-Forward a command to the Tauri CLI:
-
-```powershell
-npm run tauri -- <command>
-```
-
-## Quality Commands
-
-Run the main quality gate:
-
-```powershell
-npm run quality
-```
-
-`quality` runs:
-
-- `npm run version:check`;
-- `npm run format:check`;
-- `npm run vue:typecheck`;
-- `npm run vue:unused`;
-- `npm run deps:cycles`;
-- `npm run lint`;
-- `npm run test:unit`.
-
-Run individual frontend checks:
-
-```powershell
-npm run vue:typecheck
-npm run vue:unused
-npm run deps:cycles
-npm run lint
-npm run test:unit
-npm run test:coverage
-npm run test:e2e
-```
-
-Run headed or UI E2E modes when debugging browser smoke tests:
-
-```powershell
-npm run test:e2e:headed
-npm run test:e2e:ui
-```
-
-Run Rust checks from `src-tauri/`:
-
-```powershell
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test
-```
-
-## Working Process
-
-1. Read the relevant project instructions and nearby files.
-2. Make the smallest change that solves the task.
-3. Keep user-facing behavior, file ownership, and native contracts explicit.
-4. Run the narrowest meaningful checks for the changed area.
-5. For release or risky UI/runtime work, run the broader quality gate and a desktop smoke test.
-
-Before committing a normal code change, prefer:
-
-```powershell
-npm run quality
-npm run lint
-npm run test:coverage
-npm run vue:build
-```
-
-For native or release-sensitive changes, also run:
-
-```powershell
-npm run test:e2e
-cd src-tauri
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test
-```
-
-Performance checks stay outside routine CI and run through:
-
-```powershell
-npm run test:performance
-```
-
-`tests/performance/budgets.json` is the source of truth for absolute budgets. The runner also rejects regressions above 15% when the current machine matches the accepted baseline.
-
-## Build Artifacts
-
-Frontend build output goes to:
-
-```text
-dist/
-```
-
-Desktop build output goes to:
-
-```text
-build/desktop/
-```
-
-The current Windows executable path is:
-
-```text
-build/desktop/release/app.exe
-```
-
-`.cargo/config.toml` sends all local Rust builds to `build/desktop` and disables incremental compilation to limit cache growth. `vite.config.ts` ignores both `src-tauri/target` and `build/desktop` to avoid Windows watcher conflicts with locked Cargo files.
-
-The Source and Visual editors are loaded as separate chunks. The 0.8.5 closeout baseline is about 240 KB for the startup chunk, 530 KB for Visual, and 609 KB for Source before gzip. Vite's 500 KB warning remains expected for the editor chunks because CodeMirror and Tiptap load only when their editor is opened; do not hide it by raising the global warning limit.
-
-## Windows CI
-
-`.github/workflows/windows.yml` runs on pushes to `master` and `main`, and on pull requests. It currently performs:
-
-- checkout;
-- Node setup with npm cache;
-- Rust setup with `rustfmt` and `clippy`;
-- Rust cache;
-- `npm ci`;
-- `npm run quality`;
-- `cargo fmt --check`;
-- `cargo clippy -- -D warnings`;
-- `cargo test`.
-
-Browser E2E and desktop builds stay in the release gate and are not run on every push.
-
-## Version and Release Workflow
-
-Check that tracked version files agree:
-
-```powershell
-npm run version:check
-```
-
-Prepare the next patch release:
-
-```powershell
-npm run version:bump -- patch
-```
-
-`version:bump` updates the tracked application version files and prepares the top changelog entry. Use it only for an intentional release commit. Documentation-only commits should not bump the version or add a user-facing changelog release entry.
-
-Before a release commit, run the full quality gate expected for the release scope and manually smoke-test the desktop app from the built executable when user-facing behavior changed. Before publishing a release, use [RELEASE.md](RELEASE.md) and verify the installer bundle, not only `npm run app:build`.
+The editor source/visual chunks are loaded on demand; Vite's editor-size warning is expected. Preserve document bytes, unsupported Markdown, localization and content ownership when changing the editor. [Dogfooding](DOGFOODING.md) records real work sessions; automated tests are separate evidence.

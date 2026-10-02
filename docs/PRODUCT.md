@@ -66,6 +66,22 @@ Folden currently supports:
 - local diagnostics export, log access, and toast feedback;
 - remote image blocking in Visual mode until the user allows images for the document.
 
+The 0.11 Windows beta also includes:
+
+- quick document open by file name or path, project search, and in-document find/replace;
+- empty document, note, game design document, and video script templates;
+- relative Markdown document links and back/forward navigation;
+- local image import and clipboard paste into a document assets folder;
+- explicit file/folder moves, with no automatic rewriting of relative links;
+- Russian and English interface languages detected on first use and saved in Settings;
+- printing and PDF output through the system print dialog using an immutable document snapshot.
+
+New settings enable autosave for existing files. An explicitly disabled autosave setting stays disabled. Unsaved scratch documents still require a first manual save. Recovery keeps every active dirty document; deferred recovery entries are deduplicated and bounded separately.
+
+Project search scans supported UTF-8 text files, respects project ignores, and reports partial results or skipped files. It is bounded to 2 MiB per searched file, 5,000 matches, 100,000 directory entries, and 32 levels of depth. Symbolic links are not followed.
+
+Print output uses a light paper layout. Unsupported Markdown is displayed as source blocks, and unavailable images get a placeholder. Pagination, printer selection, PDF destination, margins, and successful completion are controlled by the system dialog. Moving a `.md` or `.markdown` file carries its sibling `<stem>.assets` folder when present; a conflicting destination assets folder blocks the move. Document contents and other image/link paths are not rewritten; review relative references afterward.
+
 ## Boundaries
 
 Folden is not currently:
@@ -85,7 +101,7 @@ Future features should keep the same product contract: user documents stay file-
 
 ## Role of Markdown and Plain Text
 
-Markdown files open in Visual mode by default. Source remains a complete but secondary view for inspecting and precisely editing Markdown. Visual editing is the primary product experience and should expose documents as clear, movable blocks without taking ownership away from the source file. Raw HTML, HTML comments, frontmatter, footnotes, and custom directives must survive as editable source blocks instead of forcing the whole document out of Visual mode.
+Markdown files open in Visual mode by default. Source remains a complete but secondary view for inspecting and precisely editing Markdown. Visual editing is the primary product experience and should expose documents as clear, movable blocks without taking ownership away from the source file. Raw HTML, HTML comments, frontmatter, footnotes, and custom directives must survive as editable source blocks instead of forcing the whole document out of Visual mode. Images mixed into text that cannot fit the Visual block schema also remain editable source blocks with their Markdown preserved.
 
 Plain text files remain plain text files. Folden should not force arbitrary text into a Markdown or block-document model just because the application has a visual editor.
 

@@ -1,4 +1,5 @@
 import type { OpenDocument } from '../domain/documents/documentState'
+import { isWindowsPath } from './helpers/pathHelpers'
 export type {
   PersistedPaneMode,
   PersistedSessionDocument,
@@ -18,7 +19,9 @@ export function buildSessionDocumentKey(
   normalizePath: (path: string) => string,
 ) {
   if (document.path) {
-    return `file:${normalizePath(document.path)}`
+    const path = normalizePath(document.path)
+    // Keep existing Windows session/recovery identities when relative paths change format.
+    return `file:${isWindowsPath(document.path) ? path.replaceAll('/', '\\') : path}`
   }
 
   return `scratch:${document.id}`

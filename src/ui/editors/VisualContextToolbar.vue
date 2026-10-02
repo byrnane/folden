@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ArrowDownToLine,
@@ -78,153 +79,178 @@ const emit = defineEmits<{
     <template v-if="context === 'table'">
       <button
         type="button"
-        title="Add row before"
-        aria-label="Add row before"
+        :title="t('Add row before')"
+        :aria-label="t('Add row before')"
         @click="emit('runCommand', 'add-row-before')"
       >
         <ArrowUpToLine :size="uiIconSizes.toolbar" />
-        <span>Add row before</span>
+        <span>{{ t('Add row before') }}</span>
       </button>
       <button
         type="button"
-        title="Add row after"
-        aria-label="Add row after"
+        :title="t('Add row after')"
+        :aria-label="t('Add row after')"
         @click="emit('runCommand', 'add-row-after')"
       >
         <ArrowDownToLine :size="uiIconSizes.toolbar" />
-        <span>Add row after</span>
+        <span>{{ t('Add row after') }}</span>
       </button>
       <button
         type="button"
-        title="Delete row"
-        aria-label="Delete row"
+        :title="t('Delete row')"
+        :aria-label="t('Delete row')"
         @click="emit('runCommand', 'delete-row')"
       >
         <Rows3 :size="uiIconSizes.toolbar" />
-        <span>Delete row</span>
+        <span>{{ t('Delete row') }}</span>
       </button>
       <button
         type="button"
-        title="Add column before"
-        aria-label="Add column before"
+        :title="t('Add column before')"
+        :aria-label="t('Add column before')"
         @click="emit('runCommand', 'add-column-before')"
       >
         <ArrowLeftToLine :size="uiIconSizes.toolbar" />
-        <span>Add column before</span>
+        <span>{{ t('Add column before') }}</span>
       </button>
       <button
         type="button"
-        title="Add column after"
-        aria-label="Add column after"
+        :title="t('Add column after')"
+        :aria-label="t('Add column after')"
         @click="emit('runCommand', 'add-column-after')"
       >
         <ArrowRightToLine :size="uiIconSizes.toolbar" />
-        <span>Add column after</span>
+        <span>{{ t('Add column after') }}</span>
       </button>
       <button
         type="button"
-        title="Delete column"
-        aria-label="Delete column"
+        :title="t('Delete column')"
+        :aria-label="t('Delete column')"
         @click="emit('runCommand', 'delete-column')"
       >
         <Columns3 :size="uiIconSizes.toolbar" />
-        <span>Delete column</span>
+        <span>{{ t('Delete column') }}</span>
       </button>
       <button
         type="button"
-        title="Delete table"
-        aria-label="Delete table"
+        :title="t('Delete table')"
+        :aria-label="t('Delete table')"
         @click="emit('runCommand', 'delete-table')"
       >
         <Trash2 :size="uiIconSizes.toolbar" />
-        <span>Delete table</span>
+        <span>{{ t('Delete table') }}</span>
       </button>
     </template>
 
     <template v-else-if="context === 'image'">
-      <button type="button" title="Source" aria-label="Source" @click="emit('editImageSource')">
+      <button
+        type="button"
+        :title="t('Source')"
+        :aria-label="t('Source')"
+        @click="emit('editImageSource')"
+      >
         <FileCode2 :size="uiIconSizes.toolbar" />
-        <span>Source</span>
+        <span>{{ t('Source') }}</span>
       </button>
-      <button type="button" title="Alt" aria-label="Alt" @click="emit('editImageAlt')">
+      <button type="button" :title="t('Alt')" :aria-label="t('Alt')" @click="emit('editImageAlt')">
         <TextCursorInput :size="uiIconSizes.toolbar" />
-        <span>Alt</span>
+        <span>{{ t('Alt') }}</span>
       </button>
       <button
         type="button"
-        title="Delete image"
-        aria-label="Delete image"
+        :title="t('Delete image')"
+        :aria-label="t('Delete image')"
         @click="emit('deleteNode')"
       >
         <Trash2 :size="uiIconSizes.toolbar" />
-        <span>Delete</span>
+        <span>{{ t('Delete') }}</span>
       </button>
     </template>
 
     <template v-else-if="context === 'link'">
-      <button type="button" title="Open link" aria-label="Open link" @click="emit('openLink')">
+      <button
+        type="button"
+        :title="t('Open link')"
+        :aria-label="t('Open link')"
+        @click="emit('openLink')"
+      >
         <ExternalLink :size="uiIconSizes.toolbar" />
-        <span>Open</span>
-      </button>
-      <button type="button" title="Edit link" aria-label="Edit link" @click="emit('editLink')">
-        <Pencil :size="uiIconSizes.toolbar" />
-        <span>Edit</span>
+        <span>{{ t('Open') }}</span>
       </button>
       <button
         type="button"
-        title="Remove link"
-        aria-label="Remove link"
+        :title="t('Edit link')"
+        :aria-label="t('Edit link')"
+        @click="emit('editLink')"
+      >
+        <Pencil :size="uiIconSizes.toolbar" />
+        <span>{{ t('Edit') }}</span>
+      </button>
+      <button
+        type="button"
+        :title="t('Remove link')"
+        :aria-label="t('Remove link')"
         @click="emit('removeLink')"
       >
         <Unlink :size="uiIconSizes.toolbar" />
-        <span>Remove</span>
+        <span>{{ t('Remove') }}</span>
       </button>
     </template>
 
     <template v-else>
-      <button type="button" title="Bold" aria-label="Bold" @click="emit('runCommand', 'bold')">
+      <button
+        type="button"
+        :title="t('Bold')"
+        :aria-label="t('Bold')"
+        @click="emit('runCommand', 'bold')"
+      >
         <Bold :size="uiIconSizes.toolbar" />
-        <span>Bold</span>
+        <span>{{ t('Bold') }}</span>
       </button>
       <button
         type="button"
-        title="Italic"
-        aria-label="Italic"
+        :title="t('Italic')"
+        :aria-label="t('Italic')"
         @click="emit('runCommand', 'italic')"
       >
         <Italic :size="uiIconSizes.toolbar" />
-        <span>Italic</span>
+        <span>{{ t('Italic') }}</span>
       </button>
       <button
         type="button"
-        title="Strike"
-        aria-label="Strike"
+        :title="t('Strike')"
+        :aria-label="t('Strike')"
         @click="emit('runCommand', 'strike')"
       >
         <Strikethrough :size="uiIconSizes.toolbar" />
-        <span>Strike</span>
+        <span>{{ t('Strike') }}</span>
       </button>
       <button
         type="button"
-        title="Code"
-        aria-label="Code"
+        :title="t('Code')"
+        :aria-label="t('Code')"
         @click="emit('runCommand', 'inline-code')"
       >
         <Code2 :size="uiIconSizes.toolbar" />
-        <span>Code</span>
-      </button>
-      <button type="button" title="Link" aria-label="Link" @click="emit('runCommand', 'link')">
-        <Link :size="uiIconSizes.toolbar" />
-        <span>Link</span>
+        <span>{{ t('Code') }}</span>
       </button>
       <button
         type="button"
-        title="Clear"
-        aria-label="Clear"
+        :title="t('Link')"
+        :aria-label="t('Link')"
+        @click="emit('runCommand', 'link')"
+      >
+        <Link :size="uiIconSizes.toolbar" />
+        <span>{{ t('Link') }}</span>
+      </button>
+      <button
+        type="button"
+        :title="t('Clear')"
+        :aria-label="t('Clear')"
         @click="emit('runCommand', 'clear-formatting')"
       >
         <RemoveFormatting :size="uiIconSizes.toolbar" />
-        <span>Clear</span>
+        <span>{{ t('Clear') }}</span>
       </button>
     </template>
   </div>

@@ -109,6 +109,43 @@
     },
     "updatedAtMs": 1720000000500
   },
+  "workspaceSearchResult": {
+    "matches": [
+      {
+        "path": "notes\\hello.md",
+        "from": 2,
+        "to": 7,
+        "line": 1,
+        "column": 3,
+        "preview": "# Hello",
+        "fingerprint": { "size": 42, "modifiedAtMs": 1720000000000 }
+      }
+    ],
+    "partial": false,
+    "skipped": 0,
+    "cancelled": false
+  },
+  "workspaceSearchBatch": {
+    "workspaceId": "workspace-1",
+    "requestId": "search-1",
+    "matches": [
+      {
+        "path": "notes\\hello.md",
+        "from": 2,
+        "to": 7,
+        "line": 1,
+        "column": 3,
+        "preview": "# Hello",
+        "fingerprint": { "size": 42, "modifiedAtMs": 1720000000000 }
+      }
+    ]
+  },
+  "workspaceFilesResult": {
+    "files": ["notes\\hello.md"],
+    "partial": false,
+    "skipped": 0,
+    "cancelled": false
+  },
   "nativeFsEvent": {
     "kind": "modify",
     "path": "C:\\Fixture\\notes\\hello.md"

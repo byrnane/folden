@@ -1,3 +1,4 @@
+import { t, language } from '../../application/i18n'
 import { Extension, type Editor } from '@tiptap/core'
 import { type Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state'
@@ -133,7 +134,7 @@ export function useVisualBlockControls(options: VisualBlockControlsOptions) {
     const menuButton = document.createElement('button')
     menuButton.type = 'button'
     menuButton.className = 'visual-block-control visual-block-menu-trigger'
-    menuButton.setAttribute('aria-label', 'Block menu')
+    menuButton.setAttribute('aria-label', t('Block menu'))
     menuButton.dataset.testid = 'visual-block-menu-trigger'
     menuButton.innerHTML = '<span class="visual-block-menu-icon" aria-hidden="true">•••</span>'
     menuButton.addEventListener('pointerdown', (event) => {
@@ -149,7 +150,7 @@ export function useVisualBlockControls(options: VisualBlockControlsOptions) {
     const dragButton = document.createElement('button')
     dragButton.type = 'button'
     dragButton.className = 'visual-block-control visual-block-handle'
-    dragButton.setAttribute('aria-label', 'Block actions')
+    dragButton.setAttribute('aria-label', t('Block actions'))
     dragButton.dataset.testid = 'visual-block-handle'
     dragButton.innerHTML = '<span class="visual-block-grip-icon" aria-hidden="true"></span>'
     dragButton.addEventListener('pointerdown', (event) => prepareBlockDrag(event, index))
@@ -181,7 +182,7 @@ export function useVisualBlockControls(options: VisualBlockControlsOptions) {
                     ...(blockId ? { 'data-block-id': blockId } : {}),
                   }),
                   Decoration.widget(offset, () => createBlockControls(index), {
-                    key: `block-controls-${index}`,
+                    key: `block-controls-${index}-${language.value}`,
                     side: -1,
                     ignoreSelection: true,
                   }),
@@ -360,7 +361,7 @@ export function useVisualBlockControls(options: VisualBlockControlsOptions) {
   function createBlockDragGhost() {
     const ghost = document.createElement('div')
     ghost.className = 'visual-block-drag-ghost'
-    ghost.textContent = `${selectedIndices().length} block${selectedIndices().length === 1 ? '' : 's'}`
+    ghost.textContent = String(selectedIndices().length)
     document.body.append(ghost)
     blockDragGhost = ghost
   }

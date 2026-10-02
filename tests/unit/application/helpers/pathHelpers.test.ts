@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   cleanDisplayPath,
   fileNameFromPath,
@@ -15,6 +15,7 @@ import {
 } from '../../../../src/application/helpers/pathHelpers'
 
 describe('path helpers', () => {
+  afterEach(() => vi.unstubAllGlobals())
   it('normalizes Windows display paths and file names', () => {
     expect(cleanDisplayPath('\\\\?\\C:\\Notes\\draft.md')).toBe('C:\\Notes\\draft.md')
     expect(cleanDisplayPath('\\\\?\\UNC\\server\\share\\draft.md')).toBe(
@@ -29,7 +30,20 @@ describe('path helpers', () => {
     expect(parentPath('draft.md')).toBeNull()
     expect(joinWorkspacePath('C:\\Notes\\', '\\daily\\draft.md')).toBe('C:\\Notes\\daily\\draft.md')
     expect(joinWorkspacePath('C:\\Notes', null)).toBe('C:\\Notes')
-    expect(normalizePath('C:/Notes/Daily.md')).toBe('c:\\notes\\daily.md')
+    expect(normalizePath('C:/Notes/Daily.md')).toBe('c:/notes/daily.md')
+  })
+
+  it('preserves POSIX roots and case while accepting legacy relative separators', () => {
+    vi.stubGlobal('navigator', { platform: 'Linux' })
+    expect(joinWorkspacePath('/home/Max/Notes/', 'daily\\Draft.md')).toBe(
+      '/home/Max/Notes/daily/Draft.md',
+    )
+    expect(joinWorkspacePath('/', 'Draft.md')).toBe('/Draft.md')
+    expect(normalizePath('/Users/Max/Notes/Draft.md')).toBe('/Users/Max/Notes/Draft.md')
+    expect(normalizePath('notes\\Draft.md')).toBe('notes/Draft.md')
+    vi.stubGlobal('navigator', { platform: 'Win32' })
+    expect(normalizePath('notes/Draft.md')).toBe('notes/draft.md')
+    expect(normalizePath('/home/Max/Draft.md')).toBe('/home/Max/Draft.md')
   })
 
   it('classifies markdown documents from path or fallback name', () => {

@@ -1,63 +1,69 @@
-# Folden
+![Folden — a local writing editor](docs/assets/banner.svg)
 
-English | [Русский](README.ru.md)
+English · [Русский](README.ru.md)
 
-[![Windows CI](https://github.com/byrnane/folden/actions/workflows/windows.yml/badge.svg?branch=master&event=push)](https://github.com/byrnane/folden/actions/workflows/windows.yml?query=branch%3Amaster)
+**Write in Markdown. Keep your files.** Folden is a desktop editor for notes, articles, scripts, documentation, and game design documents. Work visually or edit the source, in one pane or two. Documents stay ordinary files on your computer.
 
-Folden is a local-first, visual-first desktop writing editor built on Markdown.
+## Beta 0.12.0
 
-It is built around a simple contract:
+**Release preparation is in progress.** Downloads will become available on the [official beta release page](https://github.com/byrnane/folden/releases/tag/v0.12.0) after CI and native acceptance on every target platform.
 
-- user content stays on the user's machine;
-- ordinary files remain the source of truth;
-- Markdown stays readable outside Folden;
-- core workflows should stay direct and predictable.
+[Release notes](docs/releases/v0.12.0.md) · [Verification status](docs/BETA-0.12.0.md)
 
-## What It Does
+Keep backups of important documents. The release will contain five official installation packages and `SHA256SUMS.txt`; choose the package for your system. It will also include license texts and the NSIS source archive required by the installer's license.
 
-Folden is designed for articles, scripts, documentation, notes, and specifications. Markdown opens in the Visual editor by default; Source remains available for inspecting or precisely editing the underlying text. Folden can open files and folders, navigate long documents through an outline and document map, work with tabs and a two-pane split view, save safely, recover unsaved work, detect external changes, and keep local layout/settings between launches.
+| System              | Package            | Supported baseline           |
+| ------------------- | ------------------ | ---------------------------- |
+| Windows x64         | `.exe` installer   | Windows 10 / 11              |
+| Linux x64           | `.deb` or AppImage | Ubuntu 22.04 / 24.04 Desktop |
+| macOS Apple Silicon | ARM64 `.dmg`       | macOS 14 or newer            |
+| macOS Intel         | x64 `.dmg`         | macOS 14 or newer            |
 
-Folden is a writing tool, not an IDE. Code-oriented features stay secondary to a calm, capable block-editing experience.
+Other distributions, architectures, and older systems are not part of this beta's supported baseline.
 
-It is not a cloud notes service, collaboration platform, mobile app, database-backed knowledge base, plugin platform, or AI writing product.
+![Visual and source editors with a fictional observatory project](docs/assets/editor-en.png)
 
-## Requirements
+_A real view of the editor with fictional documents._
 
-- Node.js and npm.
-- Rust toolchain with Cargo.
-- Windows C++ Build Tools with the `Desktop development with C++` workload.
-- Microsoft Edge WebView2 runtime.
+## A place for your writing
 
-## Quick Start
+- Visual Markdown editing and a source editor, tabs, and two panes.
+- A project folder tree, project search, quick open, and document find/replace.
+- Headings, lists, tasks, tables, code blocks, and a document outline.
+- Local image import and clipboard paste, relative document links, and navigation history.
+- Templates for notes, articles, scripts, and design documents.
+- Autosave for saved files, recovery for unsaved work, and comparison of conflicting external changes.
+- File creation, renaming, moving, and deletion through the system trash.
+- Printing and PDF export through your system print dialog.
+- Russian and English interfaces, adjustable text sizes, and a dark theme.
 
-```powershell
-npm install
-npm run app:dev
-```
+Open a folder or a Markdown file to start. New drafts need an initial **Save** before autosave can write them to disk. Switch between visual and source modes to inspect the Markdown.
 
-Useful commands:
+| Action         | Windows / Linux     | macOS       |
+| -------------- | ------------------- | ----------- |
+| Save           | `Ctrl+S`            | `⌘S`        |
+| Quick open     | `Ctrl+P`            | `⌘P`        |
+| Find / replace | `Ctrl+F` / `Ctrl+H` | `⌘F` / `⌘H` |
+| Print / PDF    | `Ctrl+Alt+P`        | `⌘⌥P`       |
 
-```powershell
-npm run vue:dev       # browser-only frontend
-npm run app:build     # desktop build without installers
-npm run app:run       # run the last built desktop executable
-npm run quality       # version, type, unused, cycles, lint, and unit checks
-npm run test:e2e      # Playwright smoke tests
-```
+## Install
 
-Rust checks run from `src-tauri/`:
+**Windows:** run the `.exe` installer. Updating an existing official installation keeps its application identifier and user settings. WebView2 is required; the installer can download Microsoft's runtime when it is missing. The beta is unsigned, so Windows may show an unknown-publisher or SmartScreen warning. Check the download source and checksum before choosing to run it.
 
-```powershell
-cargo fmt --check
-cargo clippy -- -D warnings
-cargo test
-```
+**Ubuntu:** install the `.deb` with `sudo apt install ./<package>.deb`. For AppImage, enable **Allow executing file as program** in the file properties and run it. AppImage may require FUSE support; use the `.deb` if it cannot start.
 
-## Documentation
+**macOS:** choose the DMG for your processor, open it, and drag Folden into **Applications**. The beta has an ad-hoc signature and is not notarized. macOS may block the first launch; after verifying the source and checksum, use the app's entry in **System Settings → Privacy & Security → Open Anyway**. See [Apple's instructions](https://support.apple.com/en-us/102445).
 
-- [docs/PRODUCT.md](docs/PRODUCT.md) — product principles, supported surface, and boundaries.
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — setup, scripts, checks, CI, builds, and releases.
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — code ownership, dependency flow, and testing map.
-- [docs/RELEASE.md](docs/RELEASE.md) — release checklist.
-- [docs/DOGFOODING.md](docs/DOGFOODING.md) — dogfooding template.
-- [CHANGELOG.md](CHANGELOG.md) — release history.
+## Privacy and limitations
+
+Folden has no account, telemetry, or cloud sync. Documents and recovery data stay local. Remote images load only after your permission. Help and feedback buttons open GitHub in your browser. Diagnostic logs stay local; exporting them is a separate action. Review diagnostics and screenshots before sharing them.
+
+The visual editor handles common Markdown; source mode remains available for syntax that needs exact control. The beta does not promise every Markdown dialect or cross-platform font and print-layout parity. Print/PDF depends on your system's webview and printer configuration. Unsigned packages trigger normal OS security warnings.
+
+## Help and rights
+
+[Report a problem](https://github.com/byrnane/folden/issues) with your OS, Folden version, and steps to reproduce. **Settings → Appearance → About Folden** contains help, version information, and licenses. See the [security policy](SECURITY.md) before reporting vulnerabilities; do not post sensitive documents or vulnerability details in public issues.
+
+Official binaries are **free for personal and commercial use**. Your documents belong to you. The author's code is available for inspection; reuse and redistribution of third-party Folden builds are prohibited. This is a **source-available** project. See the [usage terms](LICENSE.md) and [third-party notices](THIRD_PARTY_NOTICES.md); third-party components retain their own licenses.
+
+Created by **byrnane**. Technical instructions are in [Development](docs/DEVELOPMENT.md) and [Release](docs/RELEASE.md).

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Folden",
-  "version": "0.10.0",
+  "version": "0.12.0",
   "identifier": "com.folden.editor",
   "build": {
     "frontendDist": "../dist",
@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Folden",
+        "theme": "Dark",
         "width": 1280,
         "height": 800,
         "minWidth": 900,
@@ -26,7 +27,7 @@
         "default-src": "'self' customprotocol: asset: http://asset.localhost",
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' asset: http://asset.localhost data:",
+        "img-src": "'self' asset: http://asset.localhost data: https: http:",
         "connect-src": "'self' ipc: http://ipc.localhost",
         "object-src": "'none'",
         "frame-src": "'none'",
@@ -41,6 +42,12 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "folden",
+    "licenseFile": "../LICENSE.md",
+    "resources": {
+      "../LICENSE.md": "LICENSE.md",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
+    },
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -49,8 +56,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "android": {
-      "debugApplicationIdSuffix": ".debug"
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "signingIdentity": "-"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "both",
+        "languages": ["English", "Russian"],
+        "displayLanguageSelector": true,
+        "installerHooks": "windows/installer-hooks.nsh"
+      }
     }
   }
 }

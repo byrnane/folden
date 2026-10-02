@@ -13,7 +13,7 @@ export default defineConfig({
   },
   server: {
     watch: {
-      ignored: ['**/src-tauri/target/**', '**/build/**'],
+      ignored: ['**/src-tauri/target/**', '**/build/**', '**/.cache/**'],
     },
   },
 })

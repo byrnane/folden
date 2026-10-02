@@ -5,6 +5,10 @@ import type {
   WorkspaceDescriptor,
   WorkspaceEntry,
   WorkspaceSettings,
+  WorkspaceSearchRequest,
+  WorkspaceSearchResult,
+  WorkspaceScanRequest,
+  WorkspaceFilesResult,
 } from '../../domain/native'
 import type { PersistedSessionState, RecoverySnapshot } from '../sessionRecovery'
 
@@ -27,6 +31,13 @@ export type DocumentFilePort = {
     suggestedFileName?: string,
   ) => Promise<SaveDocumentResult | null>
   closeNativeDocuments: (documentIds: string[]) => Promise<void>
+  importImageFromPicker: (documentId: string) => Promise<string | null>
+  importImageData: (
+    documentId: string,
+    bytes: number[],
+    mime: string,
+    name?: string,
+  ) => Promise<string>
 }
 
 export type WorkspaceFilePort = {
@@ -41,6 +52,10 @@ export type WorkspaceFilePort = {
   createDirectory: (workspaceId: string, parentPath: string, name: string) => Promise<string>
   renamePath: (workspaceId: string, path: string, newName: string) => Promise<string>
   trashPath: (workspaceId: string, path: string) => Promise<void>
+  movePath: (workspaceId: string, path: string, targetParent: string) => Promise<string>
+  startWorkspaceSearch: (request: WorkspaceSearchRequest) => Promise<WorkspaceSearchResult>
+  listWorkspaceFiles: (request: WorkspaceScanRequest) => Promise<WorkspaceFilesResult>
+  cancelWorkspaceSearch: (workspaceId: string, requestId: string) => Promise<void>
 }
 
 export type SessionStoragePort = {

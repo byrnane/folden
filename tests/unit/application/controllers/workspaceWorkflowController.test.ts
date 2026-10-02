@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, ref } from 'vue'
+import { language } from '../../../../src/application/i18n'
 import { createWorkspaceWorkflowController } from '../../../../src/application/controllers/workspaceWorkflowController'
 import { createTextFileFormat } from '../../../../src/domain/document'
 import type { OpenDocument } from '../../../../src/domain/documents/documentState'
 import type { WorkspaceDescriptor, WorkspaceEntry } from '../../../../src/domain/native'
 import type { EditorPane } from '../../../../src/application/types/shell'
+
+beforeEach(() => {
+  language.value = 'en'
+})
 
 function file(path: string): WorkspaceEntry {
   return {
@@ -91,6 +96,10 @@ function createHarness(
       name: 'Notes',
     }),
     renamePath: vi.fn(),
+    movePath: vi.fn(),
+    startWorkspaceSearch: vi.fn(),
+    listWorkspaceFiles: vi.fn(),
+    cancelWorkspaceSearch: vi.fn(),
     restoreWorkspaceByPath: vi.fn(),
     trashPath: vi.fn(),
   }

@@ -42,6 +42,7 @@ export type EditorPaneView = EditorPane & {
 
 export type EditorAdapter = {
   flushContent: () => string
+  hasOpenDialog?: () => boolean
   captureViewState?: () => Pick<
     EditorViewSession,
     'scrollTop' | 'selectionState' | 'logicalSelection' | 'isFocused'
@@ -53,6 +54,12 @@ export type EditorAdapter = {
     >,
   ) => void
   runCommand?: (command: EditorCommand) => void
+  search?: (query: string, caseSensitive: boolean) => number
+  revealSearch?: (index: number) => void
+  replaceSearch?: (replacement: string, all: boolean) => void
+  revealSourceRange?: (from: number, to: number) => void
+  revealAnchor?: (id: string) => void
+  insertImportedImage?: (url: string) => void
 }
 
 export type EditorCommand =
@@ -74,6 +81,7 @@ export type EditorCommand =
   | 'code-block'
   | 'link'
   | 'image'
+  | 'image-url'
   | 'horizontal-rule'
   | 'insert-table'
   | 'add-row-before'

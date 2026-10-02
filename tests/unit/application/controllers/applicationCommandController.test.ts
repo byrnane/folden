@@ -18,6 +18,7 @@ function controllerDeps(
 ) {
   return {
     hasNativeRuntime: true,
+    hasOpenDialog: vi.fn(() => false),
     isFileBusy: ref(false),
     workspace: shallowRef(null),
     splitEnabled: ref(false),
@@ -42,6 +43,26 @@ function controllerDeps(
 }
 
 describe('application command controller', () => {
+  it('keeps editor commands inactive while a modal is open and restores shortcuts afterward', () => {
+    const hasOpenDialog = vi.fn(() => true)
+    const deps = controllerDeps({ hasOpenDialog })
+    const controller = createApplicationCommandController(deps)
+
+    for (const code of ['KeyS', 'KeyN', 'KeyO', 'KeyZ']) {
+      controller.handleGlobalKeydown(keyboardEvent({ code, ctrlKey: true }))
+      controller.handleGlobalKeydown(keyboardEvent({ code, metaKey: true }))
+    }
+
+    expect(deps.saveDocument).not.toHaveBeenCalled()
+    expect(deps.createScratchDocument).not.toHaveBeenCalled()
+    expect(deps.openNativeDocument).not.toHaveBeenCalled()
+    expect(deps.runDocumentUndo).not.toHaveBeenCalled()
+
+    hasOpenDialog.mockReturnValue(false)
+    controller.handleGlobalKeydown(keyboardEvent({ code: 'KeyS', ctrlKey: true }))
+    expect(deps.saveDocument).toHaveBeenCalledOnce()
+  })
+
   it('wires global shortcuts to document commands and respects command availability', () => {
     const deps = controllerDeps()
     const controller = createApplicationCommandController(deps)

@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { ComputedRef } from 'vue'
 import type { OpenDocument } from '../../domain/documents/documentState'
 import type { OpenedDocument, WorkspaceDescriptor, WorkspaceEntry } from '../../domain/native'
@@ -100,7 +101,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
       }
 
       await loadWorkspace(descriptor)
-    }, 'Could not open workspace')
+    }, t('Could not open workspace'))
   }
 
   async function loadWorkspace(descriptor: WorkspaceDescriptor) {
@@ -142,11 +143,16 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
 
     if (dirtyWorkspaceDocuments.length) {
       const decision = await deps.openUnsavedDialog({
-        title: 'Switch workspace?',
-        message: `Save changes to ${dirtyWorkspaceDocuments.length} unsaved ${dirtyWorkspaceDocuments.length === 1 ? 'document' : 'documents'} before switching workspace?`,
-        saveLabel: 'Save and switch',
-        discardLabel: 'Switch without saving',
-        cancelLabel: 'Cancel',
+        title: t('Switch workspace?'),
+        message: t(
+          dirtyWorkspaceDocuments.length === 1
+            ? 'Save changes to {count} unsaved document before switching workspace?'
+            : 'Save changes to {count} unsaved documents before switching workspace?',
+          { count: dirtyWorkspaceDocuments.length },
+        ),
+        saveLabel: t('Save and switch'),
+        discardLabel: t('Switch without saving'),
+        cancelLabel: t('Cancel'),
         showSave: true,
       })
 
@@ -225,7 +231,9 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     try {
       await ensureWorkspaceBranchLoaded(entry.path)
     } catch (error) {
-      deps.setWatcherWarning(`Could not load folder ${entry.name}: ${formatError(error)}`)
+      deps.setWatcherWarning(
+        t('Could not load folder {name}: {error}', { name: entry.name, error: formatError(error) }),
+      )
     }
   }
 
@@ -234,7 +242,9 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     deps.scheduleWorkspaceRefreshDebounced(key, () => {
       void refreshWorkspaceBranch(key).catch((error) => {
         deps.setWatcherWarning(
-          `Could not refresh workspace after external changes: ${formatError(error)}`,
+          t('Could not refresh workspace after external changes: {error}', {
+            error: formatError(error),
+          }),
         )
       })
     })
@@ -263,12 +273,12 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }
 
     const name = await deps.openPromptDialog({
-      title: 'Create file',
-      message: 'Enter a name for the new file.',
+      title: t('Create file'),
+      message: t('Enter a name for the new file.'),
       initialValue: 'Untitled.md',
       placeholder: 'Untitled.md',
-      confirmLabel: 'Create',
-      inputLabel: 'File name',
+      confirmLabel: t('Create'),
+      inputLabel: t('File name'),
       validate: validateEntryName,
       normalize: normalizePromptValue,
     })
@@ -282,7 +292,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
       await refreshWorkspaceBranch(parentPath)
       const document = await deps.workspaceFiles.openTextFileByPath(deps.workspace.value!.id, path)
       await deps.openLoadedDocument(document)
-    }, 'Could not create file')
+    }, t('Could not create file'))
   }
 
   async function createWorkspaceDirectory(parentPath = deps.selectedDirectoryPath.value) {
@@ -291,12 +301,12 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }
 
     const name = await deps.openPromptDialog({
-      title: 'Create folder',
-      message: 'Enter a name for the new folder.',
+      title: t('Create folder'),
+      message: t('Enter a name for the new folder.'),
       initialValue: 'New Folder',
       placeholder: 'New Folder',
-      confirmLabel: 'Create',
-      inputLabel: 'Folder name',
+      confirmLabel: t('Create'),
+      inputLabel: t('Folder name'),
       validate: validateEntryName,
       normalize: normalizePromptValue,
     })
@@ -308,7 +318,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     await deps.runFileTask(async () => {
       await deps.workspaceFiles.createDirectory(deps.workspace.value!.id, parentPath, name)
       await refreshWorkspaceBranch(parentPath)
-    }, 'Could not create folder')
+    }, t('Could not create folder'))
   }
 
   async function renameWorkspacePath(entry: WorkspaceEntryRef) {
@@ -317,12 +327,12 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     }
 
     const newName = await deps.openPromptDialog({
-      title: 'Rename',
-      message: `Enter a new name for ${entry.name}.`,
+      title: t('Rename'),
+      message: t('Enter a new name for {name}.', { name: entry.name }),
       initialValue: entry.name,
       placeholder: entry.name,
-      confirmLabel: 'Rename',
-      inputLabel: 'Name',
+      confirmLabel: t('Rename'),
+      inputLabel: t('Name'),
       validate: validateEntryName,
       normalize: normalizePromptValue,
     })
@@ -341,7 +351,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
       deps.updateDocumentPaths(entry.path, nextPath, deps.workspace.value!.rootPath)
       deps.setSelectedPath(nextPath)
       await refreshWorkspaceBranch(parentPath(nextPath) ?? '')
-    }, 'Could not rename path')
+    }, t('Could not rename path'))
   }
 
   async function trashWorkspacePath(entry: WorkspaceEntryRef) {
@@ -358,11 +368,11 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
     const hasDirtyDocument = affectedDocuments.some(deps.isDirty)
     if (hasDirtyDocument) {
       const decision = await deps.openUnsavedDialog({
-        title: `Move ${entry.name} to trash?`,
-        message: `Save changes before moving ${entry.name} to trash?`,
-        saveLabel: 'Save and move',
-        discardLabel: 'Move without saving',
-        cancelLabel: 'Cancel',
+        title: t('Move {name} to trash?', { name: entry.name }),
+        message: t('Save changes before moving {name} to trash?', { name: entry.name }),
+        saveLabel: t('Save and move'),
+        discardLabel: t('Move without saving'),
+        cancelLabel: t('Cancel'),
         showSave: true,
       })
 
@@ -381,10 +391,10 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
       }
     } else {
       const confirmed = await deps.openConfirmDialog({
-        title: `Move ${entry.name} to trash?`,
-        message: `Move ${entry.name} to trash?`,
-        confirmLabel: 'Move to trash',
-        cancelLabel: 'Cancel',
+        title: t('Move {name} to trash?', { name: entry.name }),
+        message: t('Move {name} to trash?', { name: entry.name }),
+        confirmLabel: t('Move to trash'),
+        cancelLabel: t('Cancel'),
         confirmTone: 'danger',
       })
 
@@ -399,7 +409,7 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
       deps.removeDocumentsFromPanes(affectedDocuments.map((document) => document.id))
       deps.setSelectedPath(null)
       await refreshWorkspaceBranch(parentPath(entry.path) ?? '')
-    }, 'Could not move path to trash')
+    }, t('Could not move path to trash'))
   }
 
   async function hideWorkspacePath(entry: WorkspaceEntryRef) {
@@ -413,29 +423,29 @@ export function createWorkspaceWorkflowController(deps: WorkspaceWorkflowDeps) {
       deps.removeWorkspacePathState(entry.path)
       deps.setSelectedPath(null)
       await refreshWorkspaceBranch(parentPath(entry.path) ?? '')
-    }, 'Could not hide path from workspace')
+    }, t('Could not hide path from workspace'))
   }
 
   function isSameOrChildPath(path: string, parent: string) {
     const normalizedPath = normalizePath(path)
     const normalizedParent = normalizePath(parent)
 
-    return normalizedPath === normalizedParent || normalizedPath.startsWith(`${normalizedParent}\\`)
+    return normalizedPath === normalizedParent || normalizedPath.startsWith(`${normalizedParent}/`)
   }
 
   function validateEntryName(value: string) {
     const trimmedValue = value.trim()
 
     if (!trimmedValue) {
-      return 'Name is required.'
+      return t('Name is required.')
     }
 
     if (trimmedValue === '.' || trimmedValue === '..') {
-      return 'Name is not allowed.'
+      return t('Name is not allowed.')
     }
 
     if (/[\\/]/.test(trimmedValue)) {
-      return 'Name cannot contain path separators.'
+      return t('Name cannot contain path separators.')
     }
 
     return null

@@ -1,0 +1,48 @@
+{
+  "repository": {
+    "description": "Local-first Markdown editor with Source and Visual modes. Windows, Linux, macOS. RU/EN. Source available for inspection.",
+    "homepage": "https://github.com/byrnane/folden#readme",
+    "has_issues": true,
+    "has_wiki": false,
+    "has_projects": false,
+    "allow_squash_merge": true,
+    "allow_merge_commit": false,
+    "allow_rebase_merge": false,
+    "delete_branch_on_merge": true
+  },
+  "topics": [
+    "markdown",
+    "markdown-editor",
+    "local-first",
+    "tauri",
+    "vue",
+    "windows",
+    "linux",
+    "macos",
+    "source-available"
+  ],
+  "branch_protection": {
+    "required_status_checks": {
+      "strict": true,
+      "contexts": [
+        "Quality and Windows browser tests",
+        "Native x86_64-pc-windows-msvc",
+        "Native x86_64-unknown-linux-gnu",
+        "Native x86_64-apple-darwin",
+        "Native aarch64-apple-darwin"
+      ]
+    },
+    "enforce_admins": false,
+    "required_pull_request_reviews": null,
+    "restrictions": null,
+    "required_conversation_resolution": true,
+    "allow_force_pushes": false,
+    "allow_deletions": false
+  },
+  "release_environment": {
+    "wait_timer": 0,
+    "prevent_self_review": false,
+    "reviewers": [{ "type": "User", "login": "byrnane" }],
+    "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true }
+  }
+}

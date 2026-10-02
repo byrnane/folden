@@ -1,4 +1,5 @@
 import { computed, markRaw, ref } from 'vue'
+import { joinWorkspacePath } from '../helpers/pathHelpers'
 import {
   createTextFileFormat,
   INITIAL_DOCUMENT_REVISION,
@@ -427,10 +428,6 @@ export function createDocumentState(options: DocumentStateOptions) {
     return document
   }
 
-  function joinWorkspacePath(rootPath: string, relativePath: string) {
-    return `${rootPath.replace(/[\\/]+$/u, '')}\\${relativePath.replace(/^[\\/]+/u, '')}`
-  }
-
   function updateDocumentPaths(previousPath: string, nextPath: string, workspaceRootPath?: string) {
     const normalizedPreviousPath = options.normalizePath(previousPath)
 
@@ -443,16 +440,14 @@ export function createDocumentState(options: DocumentStateOptions) {
 
       if (
         normalizedDocumentPath !== normalizedPreviousPath &&
-        !normalizedDocumentPath.startsWith(`${normalizedPreviousPath}\\`)
+        !normalizedDocumentPath.startsWith(`${normalizedPreviousPath}/`)
       ) {
         continue
       }
 
       setPathIndex(document.path, null)
-      document.relativePath =
-        document.relativePath === previousPath
-          ? nextPath
-          : `${nextPath}${document.relativePath.slice(previousPath.length)}`
+      const relativePath = document.relativePath.replaceAll('\\', '/')
+      document.relativePath = `${nextPath.replaceAll('\\', '/')}${relativePath.slice(previousPath.length)}`
       document.name = options.fileNameFromPath(document.relativePath)
 
       if (workspaceRootPath) {

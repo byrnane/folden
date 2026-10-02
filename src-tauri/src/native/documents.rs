@@ -53,7 +53,7 @@ pub(crate) fn remove_registered_documents(
             let normalized_relative = normalize_key(relative);
             if matches_workspace
                 && (normalized_relative == prefix
-                    || normalized_relative.starts_with(&format!("{prefix}\\")))
+                    || normalized_relative.starts_with(&format!("{prefix}/")))
             {
                 Some(document_id.clone())
             } else {
@@ -72,17 +72,18 @@ pub(crate) fn open_text_file(
 ) -> NativeResult<Option<OpenedDocument>> {
     let Some(path) = rfd::FileDialog::new()
         .add_filter(
-            "Text",
+            "Markdown / TXT",
             &[
                 "txt", "md", "markdown", "json", "toml", "rs", "ts", "js", "vue", "css", "html",
             ],
         )
-        .add_filter("All files", &["*"])
+        .add_filter("*", &["*"])
         .pick_file()
     else {
         return Ok(None);
     };
     let canonical_path = canonical_root(&path, "open_text_file")?;
+    super::images::authorize_document_image_assets(&app_handle, &canonical_path)?;
     let (content, file_format, fingerprint) = decode_text_file(&canonical_path, "open_text_file")?;
     let mut state = state.lock().unwrap();
     let (workspace_id, relative_path) = detect_workspace_membership(&state, &canonical_path);
@@ -105,6 +106,7 @@ pub(crate) fn open_text_file_at_path(
     path: String,
 ) -> NativeResult<OpenedDocument> {
     let canonical_path = canonical_root(Path::new(&path), "open_text_file_at_path")?;
+    super::images::authorize_document_image_assets(&app_handle, &canonical_path)?;
     let (content, file_format, fingerprint) =
         decode_text_file(&canonical_path, "open_text_file_at_path")?;
     let mut state = state.lock().unwrap();
@@ -160,8 +162,8 @@ pub(crate) fn save_text_file(
     } else {
         let mut dialog = rfd::FileDialog::new()
             .add_filter("Markdown", &["md", "markdown"])
-            .add_filter("Text", &["txt"])
-            .add_filter("All files", &["*"]);
+            .add_filter("TXT", &["txt"])
+            .add_filter("*", &["*"]);
         if let Some(file_name) = suggested_file_name.filter(|value| !value.trim().is_empty()) {
             dialog = dialog.set_file_name(file_name);
         }
@@ -218,6 +220,7 @@ pub(crate) fn save_text_file(
             Some(fingerprint),
         )
     };
+    super::images::authorize_document_image_assets(&app_handle, &path)?;
     let saved_document = register_document(
         &mut state,
         path,

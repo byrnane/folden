@@ -1,94 +1,71 @@
-# Folden Release Checklist
+# Release procedure
 
-Use this checklist before tagging or publishing a Folden release. Keep evidence in the release notes, PR, or local release log.
+[Русский](RELEASE.ru.md)
 
-## Version Sync
+Folden 0.12 is a beta. The workflow prepares a **draft prerelease** for owner review. Publishing, replacing public history, creating the version tag, and installing over a live profile are separate owner decisions.
 
-- Run `npm run version:check`.
-- Confirm the same version in `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and the top `CHANGELOG.md` entry.
-- Confirm docs do not describe removed or renamed modules.
+## Packages
 
-## Automated Checks
+| Target              | Runner         | Artifact          |
+| ------------------- | -------------- | ----------------- |
+| Windows x64         | Windows 2022   | NSIS .exe         |
+| Linux x64           | Ubuntu 22.04   | AppImage and .deb |
+| macOS Intel         | macOS 15 Intel | .dmg              |
+| macOS Apple Silicon | macOS 15 ARM   | .dmg              |
 
-Run from the repository root unless a command says otherwise:
+macOS deployment minimum is 14. Windows requires WebView2; its installer can download Microsoft's runtime. Windows packages are unsigned. macOS packages are ad-hoc signed and are not notarized. This matrix defines the supported baseline, not evidence that a native smoke test passed.
 
-```powershell
+## Local gates
+
+Use Node 24.16.0 and Rust 1.96.0 from the checked-in version files. Run:
+
+```text
+npm ci
 npm run quality
+npm run test:release
+npm run privacy:check
 npm run test:coverage
 npm run test:e2e
-npm run vue:build
+npm run test:performance
 ```
 
-Run from `src-tauri/`:
+From src-tauri, fetch only the supported targets, then check generated notices:
 
-```powershell
+```text
+cargo fetch --locked --target x86_64-pc-windows-msvc --target x86_64-unknown-linux-gnu --target x86_64-apple-darwin --target aarch64-apple-darwin
+npm --prefix .. run licenses:check
 cargo fmt --check
-cargo clippy -- -D warnings
-cargo test
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
 ```
 
-## Markdown Closeout Checks
+Build each package on its matching OS:
 
-For editor releases, confirm the automated E2E coverage includes:
-
-- Visual/Source switching without dirty state when content is unchanged.
-- Visual edits immediately followed by Source mode.
-- Large kitchen-sink Markdown through Visual, Source, save, close, and reopen.
-- Source preservation for raw HTML, HTML comments, and frontmatter.
-- Visual safety gates for Markdown constructs that Tiptap cannot preserve as raw source.
-- Table cell edits, row/column commands, table deletion, and task-list checkbox persistence.
-- Source link/image dialogs for insert, edit, cancel, and validation.
-- Scratch `Untitled.md` toolbar behavior before save.
-- Tab, workspace-file, and external-path drag/drop into editor panes and right split.
-- Workspace-level ignores survive reopening the workspace and do not close already opened files.
-- Outline follows the active Markdown section in Source and Visual; keyboard navigation and document-map click/drag remain usable.
-
-Do not describe Visual mode as supporting every Markdown construct. The 0.7 contract is supported CommonMark/GFM editing plus safety-gated raw blocks; Source remains the preservation path for raw Markdown.
-
-## Desktop Build
-
-Build the installer bundle, not only the `--no-bundle` executable:
-
-```powershell
-npm run tauri -- build
+```text
+npm run release:build -- --target x86_64-pc-windows-msvc
+npm run release:verify -- --target x86_64-pc-windows-msvc
 ```
 
-For a non-installer smoke build, `npm run app:build` remains available and maps to `tauri build --no-bundle`.
+Use the matching target from the table for Linux/macOS. Verification extracts the **final package**, checks version, architecture, legal resources and privacy, and stages only reviewed formats with SHA256SUMS.txt. Linux payloads must match the current version-checked build. Source maps, dumps, logs, private build paths and old smoke installers fail the gate.
 
-For Windows, verify which bundle targets were produced from `src-tauri/tauri.conf.json`. The current config has `bundle.active: true` and `bundle.targets: "all"`.
+THIRD_PARTY_NOTICES.md is a conservative npm/Cargo inventory with runtime/build scopes; it is not a complete inventory of OS libraries copied into an AppImage. The Linux package audit must identify every shipped ELF component and the AppImage runtime, record license/source provenance, and resolve unknown components before release.
 
-## Manual Windows Installer Smoke
+Windows distribution additionally contains the unmodified NSIS 3.11 corresponding source archive, nsis-3.11-src.tar.bz2, with its pinned SHA-256 in the same checksum file. It accompanies the installer under NSIS/LZMA terms and is not an installation package. The Linux report must classify the **whole** payload, including non-ELF AppRun scripts, fonts, XML/configuration, themes and assets. It must reconcile finalized attribution inside both Linux packages and the About licenses view; a separate ELF report/companion does not complete that requirement. Unknown native components and unfinished payload attribution keep Linux publication blocked.
 
-Use the built Windows installer artifact:
+## Isolated candidate and draft
 
-- Install on a clean Windows environment.
-- Launch Folden for the first time after install.
-- Confirm launch works without Node.js, Rust, or dev dependencies installed.
-- Confirm WebView2 is present and the UI renders.
-- Confirm shortcuts and Start Menu entries are created as expected.
-- Open a real Markdown project.
-- Open, edit, save, close, and reopen a Markdown file.
-- Open one document in split view with Source and Visual modes.
-- Switch between Visual and Source.
-- Use Outline keyboard navigation and document-map click/drag on a long Markdown document.
-- Hide a workspace file or folder, restart Folden, and verify the item remains hidden while an already open document stays open.
-- Enable autosave and confirm a saved file is updated.
-- Force-close the app and confirm recovery behavior.
-- Modify an open file outside Folden and confirm reload/conflict behavior.
-- Create, rename, move, and trash workspace files/folders.
-- Confirm local images render and remote images stay blocked until allowed.
-- Confirm layout and settings persist across restart.
-- Uninstall Folden.
-- Confirm no unexpected application files remain after uninstall.
-- Reinstall Folden.
-- Install over the previous version.
-- Confirm user settings and recovery data survive update when expected.
+CI runs on master/main and pull requests. The package workflow checks and builds pushed release/beta-* candidate branches. Candidate pushes create workflow artifacts only; they do not create a release.
 
-## Artifacts
+After reviewing the sanitized tree/history and approving a candidate push, run CI and native checks on that exact commit. Preserve original Git and source backups before any public-history replacement. Verify author/committer metadata and all reachable public branches/tags, not just HEAD. Removing material from a replacement history cannot remove copies already downloaded or cached elsewhere.
 
-- Record installer file name, version, and size.
-- Record installed application size.
-- Confirm release artifacts have clear names with the version.
-- Confirm `CHANGELOG.md` has a top entry for the release.
-- Confirm binary signing status. If unsigned, record that the test build is unsigned.
-- Confirm diagnostics and release artifacts do not include document content, recovery/session state, full private paths, credentials, or other user data.
+After explicit approval, create the existing v0.12.0 tag at the tested commit. Manually dispatch **Draft beta release** with that tag as both the workflow ref and tag input. The web UI dispatch button depends on default-branch workflow availability. A candidate push registers/runs this workflow; after that, use CLI/API dispatch with the exact approved tag as workflow ref if the UI button is unavailable. For example: `gh workflow run release.yml --ref v0.12.0 -f tag=v0.12.0 -F create_draft=true`. If GitHub rejects dispatch, retain the candidate artifacts for review rather than changing public history just to expose a button. The optional create_draft input is false by default. Only the final draft job has repository write permission; it creates a draft prerelease, refuses to replace an existing release, and never publishes it. Configure the release-draft environment with owner approval before enabling this step.
+
+Review all five packages, the aggregate checksum file, license/notices, and [release notes](releases/v0.12.0.md). Publish only after native acceptance on all supported OS targets: clean launch, save/reopen, RU/EN, recovery/conflicts, local images/links, printing, installation/update/uninstall. Record results in [BETA-0.12.0.md](BETA-0.12.0.md); browser mocks do not prove native dialogs or installer behavior.
+
+A dispatched build creates fresh packages: native-test the **final draft files** before publication, even if an earlier candidate was accepted. To preserve already accepted candidate packages instead, download that exact run's four artifacts into `build/release/folden-<target>/` in a clean checkout of the tested commit. After tag approval, set `RELEASE_TAG=v0.12.0` and `RELEASE_COMMIT=<tested SHA>`, then run `node scripts/release-draft.mjs`. It verifies canonical filenames, each downloaded checksum, matching legal resources, a clean checkout and the remote tag's immutable commit. It copies those accepted bytes without rebuilding, and creates only a draft prerelease. Publish only the exact native-accepted files.
+
+## Repository settings
+
+Review [the settings payload](../.github/repository-settings.json) and [setup instructions](../.github/REPOSITORY_SETUP.md). Repository metadata, topics, private vulnerability reporting, secret scanning, push protection and the release-draft environment were applied and verified on 2026-10-02. Branch protection remains deferred until the separately approved public-history replacement. History replacement, commits, pushes, tags and publication remain separately approved steps.
+
+The official binary may be used free of charge for personal and commercial work. Author source is provided for inspection under [LICENSE.md](../LICENSE.md). Third-party terms and user content ownership are separate.

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import {
   ChevronDown,
   ChevronRight,
@@ -8,11 +9,13 @@ import {
   FolderPlus,
   EyeOff,
   Pencil,
+  FolderInput,
   Trash2,
 } from 'lucide-vue-next'
 import type { WorkspaceEntry } from '../../domain/native'
 import { startDocumentDrag } from '../documentDrag'
 import { uiIconSizes } from '../uiConstants'
+import { normalizePath } from '../../application/helpers/pathHelpers'
 
 defineOptions({
   name: 'WorkspaceTree',
@@ -38,7 +41,28 @@ const emit = defineEmits<{
   trashPath: [entry: WorkspaceTreeEntry]
   hidePath: [entry: WorkspaceTreeEntry]
   toggleDirectory: [entry: WorkspaceTreeEntry]
+  movePath: [entry: WorkspaceTreeEntry, targetParent?: string]
 }>()
+
+const workspaceMoveMime = 'application/x-folden-workspace-path'
+function dropOnFolder(event: DragEvent, entry: WorkspaceTreeEntry) {
+  if (entry.kind !== 'directory') return
+  const path = event.dataTransfer?.getData(workspaceMoveMime)
+  if (!path || path === entry.path) return
+  event.preventDefault()
+  event.stopPropagation()
+  emit(
+    'movePath',
+    {
+      path,
+      name: path.split(/[\\/]/).at(-1) ?? path,
+      kind: 'file',
+      children: [],
+      openableState: 'unknown',
+    },
+    entry.path,
+  )
+}
 
 type WorkspaceTreeEntry = Omit<Readonly<WorkspaceEntry>, 'children'> & {
   readonly children: readonly WorkspaceTreeEntry[]
@@ -52,10 +76,6 @@ function isExpanded(entry: WorkspaceTreeEntry) {
   return props.expandedPaths.has(entry.path)
 }
 
-function normalizePath(path: string) {
-  return path.replaceAll('/', '\\').toLowerCase()
-}
-
 function pathMatches(left: string | null, right: string) {
   return left ? normalizePath(left) === normalizePath(right) : false
 }
@@ -66,7 +86,7 @@ function isLoading(entry: WorkspaceTreeEntry) {
 
 function rowTitle(entry: WorkspaceTreeEntry) {
   if (isDirectory(entry) && entry.openableState === 'empty') {
-    return `${entry.path} - No supported files`
+    return t('{path} - No supported files', { path: entry.path })
   }
 
   return entry.path
@@ -88,8 +108,8 @@ function selectEntry(entry: WorkspaceTreeEntry) {
 }
 
 function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
+  event.dataTransfer?.setData(workspaceMoveMime, entry.path)
   if (isDirectory(entry)) {
-    event.preventDefault()
     return
   }
 
@@ -118,15 +138,17 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
           muted: isDirectory(entry) && entry.openableState === 'empty',
         }"
         :title="rowTitle(entry)"
-        :draggable="!isDirectory(entry)"
+        draggable="true"
         @dragstart="startWorkspaceFileDrag($event, entry)"
+        @dragover="isDirectory(entry) && $event.preventDefault()"
+        @drop="dropOnFolder($event, entry)"
         @click="selectEntry(entry)"
       >
         <button
           v-if="isDirectory(entry)"
           type="button"
           class="tree-toggle icon-button"
-          :title="isExpanded(entry) ? 'Collapse folder' : 'Expand folder'"
+          :title="t(isExpanded(entry) ? 'Collapse folder' : 'Expand folder')"
           :disabled="isLoading(entry)"
           @click.stop="toggleDirectory(entry)"
         >
@@ -138,23 +160,35 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
         <Folder v-if="isDirectory(entry)" class="tree-icon" :size="uiIconSizes.workspaceTreeIcon" />
         <FileText v-else class="tree-icon" :size="uiIconSizes.workspaceTreeIcon" />
         <span class="tree-name">{{ entry.name }}</span>
-        <span v-if="isDirectory(entry) && isLoading(entry)" class="tree-meta">Loading...</span>
+        <span v-if="isDirectory(entry) && isLoading(entry)" class="tree-meta">{{
+          t('Loading...')
+        }}</span>
         <span
           v-else-if="loadErrors[entry.path]"
           class="tree-meta danger-text"
           :title="loadErrors[entry.path]"
         >
-          Error
+          {{ t('Error') }}
         </span>
 
         <span class="tree-actions" @pointerdown.stop @dragstart.stop.prevent>
+          <button
+            type="button"
+            class="tree-action icon-button"
+            :title="t('Move')"
+            :aria-label="t('Move')"
+            draggable="false"
+            @click.stop="emit('movePath', entry)"
+          >
+            <FolderInput :size="uiIconSizes.workspaceTreeAction" />
+          </button>
           <button
             v-if="isDirectory(entry)"
             type="button"
             class="tree-action icon-button"
             draggable="false"
-            title="New file"
-            aria-label="New file"
+            :title="t('New file')"
+            :aria-label="t('New file')"
             @click.stop="emit('createFile', entry)"
           >
             <FilePlus :size="uiIconSizes.workspaceTreeAction" />
@@ -164,8 +198,8 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
             type="button"
             class="tree-action icon-button"
             draggable="false"
-            title="New folder"
-            aria-label="New folder"
+            :title="t('New folder')"
+            :aria-label="t('New folder')"
             @click.stop="emit('createDirectory', entry)"
           >
             <FolderPlus :size="uiIconSizes.workspaceTreeAction" />
@@ -174,8 +208,8 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
             type="button"
             class="tree-action icon-button"
             draggable="false"
-            title="Rename"
-            aria-label="Rename"
+            :title="t('Rename')"
+            :aria-label="t('Rename')"
             @click.stop="emit('renamePath', entry)"
           >
             <Pencil :size="uiIconSizes.workspaceTreeAction" />
@@ -184,8 +218,8 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
             type="button"
             class="tree-action icon-button"
             draggable="false"
-            title="Hide from workspace"
-            aria-label="Hide from workspace"
+            :title="t('Hide from workspace')"
+            :aria-label="t('Hide from workspace')"
             @click.stop="emit('hidePath', entry)"
           >
             <EyeOff :size="uiIconSizes.workspaceTreeAction" />
@@ -194,8 +228,8 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
             type="button"
             class="tree-action icon-button danger"
             draggable="false"
-            title="Move to trash"
-            aria-label="Move to trash"
+            :title="t('Move to trash')"
+            :aria-label="t('Move to trash')"
             @click.stop="emit('trashPath', entry)"
           >
             <Trash2 :size="uiIconSizes.workspaceTreeAction" />
@@ -213,6 +247,7 @@ function startWorkspaceFileDrag(event: DragEvent, entry: WorkspaceTreeEntry) {
         :load-errors="loadErrors"
         :level="(level ?? 0) + 1"
         @open-file="emit('openFile', $event)"
+        @move-path="(entry, target) => emit('movePath', entry, target)"
         @clear-selection="emit('clearSelection')"
         @select-path="emit('selectPath', $event)"
         @create-file="emit('createFile', $event)"

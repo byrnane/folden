@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import {
   FilePenLine,
   LayoutPanelLeft,
@@ -42,7 +43,7 @@ type ResizeStart = {
 
 const resizeStart = ref<ResizeStart | null>(null)
 
-const modeLabel = computed(() => (props.mode === 'expanded' ? 'Collapse rail' : 'Expand rail'))
+const modeLabel = computed(() => t(props.mode === 'expanded' ? 'Collapse rail' : 'Expand rail'))
 const modeIcon = computed(() => (props.mode === 'expanded' ? PanelRightOpen : PanelLeftOpen))
 const currentWidth = computed(() =>
   props.mode === 'expanded' ? props.expandedWidth : props.compactWidth,
@@ -141,7 +142,7 @@ onBeforeUnmount(() => {
   <nav
     class="activity-bar"
     :class="`activity-${mode}`"
-    aria-label="Activity"
+    :aria-label="t('Activity')"
     :data-activity-mode="mode"
   >
     <div class="activity-main-items">
@@ -149,45 +150,45 @@ onBeforeUnmount(() => {
         type="button"
         class="activity-button"
         :class="{ active: activeSection === 'workspace' }"
-        title="Workspace"
-        aria-label="Workspace"
+        :title="t('Workspace')"
+        :aria-label="t('Workspace')"
         @click="emit('setSection', 'workspace')"
       >
         <LayoutPanelLeft :size="uiIconSizes.activityRail" />
-        <span>Workspace</span>
+        <span>{{ t('Workspace') }}</span>
       </button>
       <button
         type="button"
         class="activity-button"
-        title="Search"
-        aria-label="Search"
+        :title="t('Search')"
+        :aria-label="t('Search')"
         :class="{ active: activeSection === 'search' }"
         @click="emit('setSection', 'search')"
       >
         <Search :size="uiIconSizes.activityRail" />
-        <span>Search</span>
+        <span>{{ t('Search') }}</span>
       </button>
       <button
         type="button"
         class="activity-button"
         :class="{ active: activeSection === 'create' }"
-        title="Create"
-        aria-label="Create"
+        :title="t('Create')"
+        :aria-label="t('Create')"
         @click="emit('setSection', 'create')"
       >
         <FilePenLine :size="uiIconSizes.activityRail" />
-        <span>Create</span>
+        <span>{{ t('Create') }}</span>
       </button>
       <button
         type="button"
         class="activity-button"
         :class="{ active: activeSection === 'settings' }"
-        title="Settings"
-        aria-label="Settings"
+        :title="t('Settings')"
+        :aria-label="t('Settings')"
         @click="emit('setSection', 'settings')"
       >
         <Settings :size="uiIconSizes.activityRail" />
-        <span>Settings</span>
+        <span>{{ t('Settings') }}</span>
       </button>
     </div>
     <button
@@ -206,7 +207,7 @@ onBeforeUnmount(() => {
     class="activity-splitter"
     data-testid="activity-splitter"
     role="separator"
-    aria-label="Resize activity bar"
+    :aria-label="t('Resize activity bar')"
     tabindex="0"
     aria-orientation="vertical"
     :aria-valuemin="currentWidthLimits.min"

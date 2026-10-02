@@ -1,4 +1,5 @@
 import { defaultApplicationSettings, defaultLayoutSettings } from './defaults'
+import { systemLanguage } from '../systemLanguage'
 import { applicationSettingLimits, layoutSettingLimits } from './limits'
 import type {
   AppearanceSettings,
@@ -26,7 +27,7 @@ export function normalizeWorkspaceIgnoredNames(value: unknown) {
 
 export function normalizeApplicationSettings(value: unknown): ApplicationSettings {
   if (typeof value !== 'object' || value === null) {
-    return structuredClone(defaultApplicationSettings)
+    return { ...structuredClone(defaultApplicationSettings), language: systemLanguage() }
   }
 
   const candidate = value as Partial<ApplicationSettings>
@@ -52,6 +53,10 @@ export function normalizeApplicationSettings(value: unknown): ApplicationSetting
       : {}
 
   return {
+    language:
+      candidate.language === 'ru' || candidate.language === 'en'
+        ? candidate.language
+        : systemLanguage(),
     autosave: {
       enabled:
         typeof autosave.enabled === 'boolean'

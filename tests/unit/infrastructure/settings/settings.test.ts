@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   applicationSettingLimits,
   defaultApplicationSettings,
@@ -17,6 +17,44 @@ import {
 } from '../../../../src/infrastructure/settings/settings'
 
 describe('application settings', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('detects the system language for new and older configurations', () => {
+    vi.stubGlobal('navigator', { language: 'ru-RU' })
+    expect(loadApplicationSettings({ getItem: () => null }).language).toBe('ru')
+    expect(loadApplicationSettings({ getItem: () => '{}' }).language).toBe('ru')
+    expect(loadApplicationSettings({ getItem: () => '{' }).language).toBe('ru')
+    expect(normalizeApplicationSettings({ language: 'de' }).language).toBe('ru')
+
+    vi.stubGlobal('navigator', { language: 'en-GB' })
+    expect(normalizeApplicationSettings({}).language).toBe('en')
+    vi.stubGlobal('navigator', undefined)
+    expect(normalizeApplicationSettings(null).language).toBe('en')
+  })
+
+  it.each(['ru', 'en'] as const)('persists the explicitly selected language %s', (language) => {
+    vi.stubGlobal('navigator', { language: language === 'ru' ? 'en-US' : 'ru-RU' })
+    let persisted = ''
+    const storage = {
+      getItem: () => persisted,
+      setItem: (_key: string, value: string) => {
+        persisted = value
+      },
+    }
+    saveApplicationSettings({ ...defaultApplicationSettings, language }, storage)
+    expect(loadApplicationSettings(storage).language).toBe(language)
+  })
+  it('enables autosave for new settings while preserving an explicit opt-out', () => {
+    expect(loadApplicationSettings({ getItem: () => null }).autosave.enabled).toBe(true)
+    expect(
+      loadApplicationSettings({
+        getItem: () => JSON.stringify({ autosave: { enabled: false } }),
+      }).autosave.enabled,
+    ).toBe(false)
+  })
+
   it('falls back to conservative defaults for malformed settings', () => {
     expect(normalizeApplicationSettings(null)).toEqual(defaultApplicationSettings)
     expect(

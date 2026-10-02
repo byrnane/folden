@@ -40,11 +40,19 @@ pub(crate) fn redact_absolute_paths(value: &str) -> String {
     while index < chars.len() {
         let is_drive_path = index + 2 < chars.len()
             && chars[index].is_ascii_alphabetic()
+            && (index == 0 || !chars[index - 1].is_ascii_alphanumeric())
             && chars[index + 1] == ':'
             && (chars[index + 2] == '\\' || chars[index + 2] == '/');
         let is_unc_path =
             index + 1 < chars.len() && chars[index] == '\\' && chars[index + 1] == '\\';
-        if !is_drive_path && !is_unc_path {
+        let is_posix_path = chars[index] == '/'
+            && (index == 0
+                || chars[index - 1].is_whitespace()
+                || matches!(chars[index - 1], '"' | '\'' | '`' | '(' | '='))
+            && chars
+                .get(index + 1)
+                .is_some_and(|next| !next.is_whitespace());
+        if !is_drive_path && !is_unc_path && !is_posix_path {
             redacted.push(chars[index]);
             index += 1;
             continue;

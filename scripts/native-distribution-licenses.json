@@ -1,0 +1,86 @@
+{
+  "tauriCliVersion": "2.11.3",
+  "components": [
+    {
+      "name": "native:nsis",
+      "version": "3.11",
+      "license": "NSIS zlib/libpng terms; LZMA CPL-1.0 with the original linking exception",
+      "source": "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.11/nsis-3.11-src.tar.bz2",
+      "sourceSha256": "19e72062676ebdc67c11dc032ba80b979cdbffd3886c60b04bb442cdd401ff4b",
+      "sourceArchiveFilename": "nsis-3.11-src.tar.bz2",
+      "payloadHashes": {
+        "System.dll": "8b4c47c4cf5e76ec57dd5a050d5acd832a0d532ee875d7b44f6cdaf68f90d37c",
+        "UserInfo.dll": "e0dc3112796dbaa37f25ab54b7fac2fbf791cbc6e36a84fc61c6423b84a3677b",
+        "nsDialogs.dll": "b1350f487692057c8ffde75dcc55287a52a3272240d4d4912f24464b27551fc0",
+        "StartMenu.dll": "fe330320459637d8dd2b5d84d07925c38ec264152ffd3b1760a4d44d76536caa",
+        "LangDLL.dll": "4cf25411f28f639f72156c24b0f66ea42f5aee5973f6c137d901da6ae42d5b7e",
+        "NSISdl.dll": "ddf40229dd9d6b268902d8dea88c8a04aacf1af218dd29f6dcd35babc54ac08d",
+        "modern-wizard.bmp": "3ad2dc318056d0a2024af1804ea741146cfc18cc404649a44610cbf8b2056cf2"
+      },
+      "licenseFiles": ["scripts/licenses/NSIS-3.11-COPYING.txt"],
+      "platform": "x86_64-pc-windows-msvc",
+      "scope": "installer runtime",
+      "includes": [
+        "installer stub",
+        "LZMA compressor",
+        "System.dll",
+        "UserInfo.dll",
+        "nsDialogs.dll",
+        "StartMenu.dll",
+        "LangDLL.dll",
+        "NSISdl.dll",
+        "modern-wizard.bmp"
+      ]
+    },
+    {
+      "name": "native:nsis-tauri-utils",
+      "version": "0.5.3",
+      "license": "MIT OR Apache-2.0",
+      "source": "https://github.com/tauri-apps/nsis-tauri-utils/tree/13d9edd27b69310e108d6fbd49f90992f8a05390",
+      "payloadSha256": "5ba143b5db4a87d32d6e7802e033330aae56cbceabe0d1e3ba41948385ad4709",
+      "payloadFilename": "nsis_tauri_utils.dll",
+      "licenseFiles": [
+        "scripts/licenses/nsis-tauri-utils-0.5.3-LICENSE-MIT.txt",
+        "scripts/licenses/nsis-tauri-utils-0.5.3-LICENSE-APACHE-2.0.txt"
+      ],
+      "platform": "x86_64-pc-windows-msvc",
+      "scope": "installer runtime",
+      "includes": [
+        "nsis_tauri_utils.dll",
+        "nsis-plugin-api from the same source tag",
+        "windows-sys 0.61.2 and windows-link 0.2.1 (also listed in Cargo inventory)",
+        "semver 1.x (upstream release does not publish a dependency lock; exact compiled patch version is unrecorded)"
+      ]
+    },
+    {
+      "name": "native:rust-standard-library",
+      "version": "1.96.0",
+      "license": "MIT OR Apache-2.0; additional upstream library notices reproduced in full",
+      "source": "https://github.com/rust-lang/rust/tree/1.96.0/library",
+      "licenseFiles": [
+        "scripts/licenses/Rust-1.96.0-COPYRIGHT-library.txt",
+        "scripts/licenses/Rust-1.96.0-LICENSE-MIT.txt",
+        "scripts/licenses/Rust-1.96.0-LICENSE-APACHE.txt",
+        "scripts/licenses/Rust-1.96.0-Unicode-3.0.txt"
+      ],
+      "platform": "all",
+      "scope": "runtime provider notice (conservative upstream library graph)",
+      "includes": [
+        "Rust standard library linked into Folden; full provider notice includes upstream target-specific/build dependencies without claiming every listed component is shipped",
+        "The prebuilt NSIS utils compiler version is unrecorded; this entry identifies the pinned Folden toolchain, not the plugin compiler"
+      ]
+    },
+    {
+      "name": "native:compiler-builtins",
+      "version": "0.1.160 (Rust 1.96.0 sysroot)",
+      "license": "MIT AND Apache-2.0 WITH LLVM-exception AND (MIT OR Apache-2.0)",
+      "source": "https://github.com/rust-lang/rust/tree/1.96.0/library/compiler-builtins",
+      "licenseFiles": ["scripts/licenses/Rust-1.96.0-compiler-builtins-LICENSE.txt"],
+      "platform": "all",
+      "scope": "runtime builtins",
+      "includes": [
+        "Compiler builtins runtime from the pinned Rust sysroot; this does not mean the LLVM compiler is distributed"
+      ]
+    }
+  ]
+}

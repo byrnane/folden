@@ -79,7 +79,7 @@ test('hides workspace paths through settings without closing open documents', as
         ).__FOLDEN_TAURI_MOCK__?.getWorkspaceSettings(),
       ),
     )
-    .toEqual({ ignoredPaths: ['notes\\daily.md'] })
+    .toEqual({ ignoredPaths: ['notes/daily.md'] })
   await expect(page.getByTestId('workspace-entry-notes\\daily.md')).toHaveCount(0)
   await expect(page.getByTestId('document-title')).toHaveText('daily.md')
 

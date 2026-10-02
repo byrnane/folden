@@ -1,48 +1,71 @@
 import { expect, test } from '@playwright/test'
 import { openApp, sourceEditor } from './helpers'
 
-test('keeps remote images blocked until the document explicitly allows them', async ({ page }) => {
-  const remoteRequests: string[] = []
+for (const fixture of [
+  { kind: 'inline', markdown: '![remote](https://example.com/preview.png)' },
+  {
+    kind: 'reference',
+    markdown: '![remote][preview]\n\n[preview]: https://example.com/preview.png',
+  },
+]) {
+  test(`keeps ${fixture.kind} remote images blocked until the document explicitly allows them`, async ({
+    page,
+  }) => {
+    const remoteRequests: string[] = []
 
-  await openApp(page)
-  await page.route('https://example.com/**', async (route) => {
-    remoteRequests.push(route.request().url())
-    await route.fulfill({
-      status: 200,
-      contentType: 'image/png',
-      body: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9pX6lz0AAAAASUVORK5CYII=',
-        'base64',
-      ),
+    await openApp(page)
+    await page.route('https://example.com/**', async (route) => {
+      remoteRequests.push(route.request().url())
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9pX6lz0AAAAASUVORK5CYII=',
+          'base64',
+        ),
+      })
     })
+
+    await page.getByTestId('open-folder-empty').click()
+    await page.getByTestId('workspace-entry-README.md').click()
+    await page.getByRole('button', { name: 'Source' }).click()
+
+    const editor = sourceEditor(page)
+    await editor.click()
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
+    await page.keyboard.insertText(`\n\n${fixture.markdown}\n`)
+
+    await page.getByRole('button', { name: 'Visual' }).click()
+    await expect(page.getByTestId('visual-editor')).toContainText('Remote image is blocked.')
+    await expect(page.getByTestId('load-remote-images')).toBeVisible()
+    await expect(page.locator('.topbar-title').getByTestId('load-remote-images')).toBeVisible()
+    await expect(page.locator('.shared-toolbar').getByTestId('load-remote-images')).toHaveCount(0)
+
+    await page.waitForTimeout(300)
+    expect(remoteRequests).toEqual([])
+
+    await page.getByTestId('load-remote-images').click()
+    await expect(page.getByTestId('visual-editor')).toHaveAttribute(
+      'data-remote-images-allowed',
+      'true',
+    )
+    await expect.poll(() => remoteRequests.length).toBeGreaterThan(0)
+    await expect(page.locator('img[src="https://example.com/preview.png"]')).toBeVisible()
+    await page.locator('.visual-editor-content .ProseMirror p').first().click()
+    await page.keyboard.press('End')
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('/image')
+    await page
+      .getByTestId('visual-slash-menu')
+      .getByRole('button', { name: 'Image URL', exact: true })
+      .click()
+    await page.getByRole('textbox', { name: 'Image URL' }).fill('https://example.com/preview-2.png')
+    await page.getByRole('button', { name: 'Insert', exact: true }).click()
+    await expect(page.locator('img[src="https://example.com/preview-2.png"]')).toBeVisible()
+    await expect(page.getByTestId('visual-editor')).not.toContainText('Remote image is blocked.')
+    await expect(page.getByTestId('load-remote-images')).toHaveCount(0)
   })
-
-  await page.getByTestId('open-folder-empty').click()
-  await page.getByTestId('workspace-entry-README.md').click()
-  await page.getByRole('button', { name: 'Source' }).click()
-
-  const editor = sourceEditor(page)
-  await editor.click()
-  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
-  await page.keyboard.insertText('\n![remote](https://example.com/preview.png)\n')
-
-  await page.getByRole('button', { name: 'Visual' }).click()
-  await expect(page.getByTestId('visual-editor')).toContainText('Remote image is blocked.')
-  await expect(page.getByTestId('load-remote-images')).toBeVisible()
-  await expect(page.locator('.topbar-title').getByTestId('load-remote-images')).toBeVisible()
-  await expect(page.locator('.shared-toolbar').getByTestId('load-remote-images')).toHaveCount(0)
-
-  await page.waitForTimeout(300)
-  expect(remoteRequests).toEqual([])
-
-  await page.getByTestId('load-remote-images').click()
-  await expect(page.getByTestId('visual-editor')).toHaveAttribute(
-    'data-remote-images-allowed',
-    'true',
-  )
-  await expect.poll(() => remoteRequests.length).toBeGreaterThan(0)
-  await expect(page.locator('img[src="https://example.com/preview.png"]')).toBeVisible()
-})
+}
 
 test('opens visual links with Ctrl click without hijacking normal editing clicks', async ({
   page,

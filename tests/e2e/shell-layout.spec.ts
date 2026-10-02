@@ -117,18 +117,32 @@ test('uses explicit activity rail modes and keeps sidebar labels fitted', async 
     .getByRole('navigation', { name: 'Activity' })
     .getByRole('button', { name: 'Search' })
     .click()
-  await expect(page.getByRole('complementary', { name: 'Search' })).toContainText(
-    'Search will appear here',
-  )
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Search' })
+      .getByRole('textbox', { name: 'Search', exact: true }),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Search' })
+      .getByRole('button', { name: 'Refresh', exact: true }),
+  ).toBeVisible()
   await expect(page.getByTestId('document-title')).toHaveText('README.md')
 
   await page
     .getByRole('navigation', { name: 'Activity' })
     .getByRole('button', { name: 'Create' })
     .click()
-  await expect(page.getByRole('complementary', { name: 'Create' })).toContainText(
-    'Document templates will appear here',
-  )
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Create' })
+      .getByRole('button', { name: 'Empty document', exact: true }),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Create' })
+      .getByRole('button', { name: 'Video script', exact: true }),
+  ).toBeVisible()
   await expect(page.getByTestId('document-title')).toHaveText('README.md')
 
   await page

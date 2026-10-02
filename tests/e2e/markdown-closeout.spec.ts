@@ -197,8 +197,8 @@ test('uses validated dialogs for source links and images', async ({ page }) => {
 
   await editor.click()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End')
-  await page.getByRole('button', { name: 'Image' }).click()
-  await page.getByLabel('Image URL').fill('./diagram.png')
+  await page.getByRole('button', { name: 'Image URL' }).click()
+  await page.getByRole('textbox', { name: 'Image URL' }).fill('./diagram.png')
   await page.getByRole('button', { name: 'Insert', exact: true }).click()
   await expect(page.getByTestId('source-editor')).toContainText('![image](./diagram.png)')
 })
@@ -285,6 +285,7 @@ test('edits visual tables and task checkboxes without rewriting neighbors', asyn
   await page.locator('.visual-editor-content td').first().click()
   await expect(page.getByRole('button', { name: 'Delete table' })).toBeEnabled()
   await page.getByRole('button', { name: 'Delete table' }).click()
+  await expect(page.locator('.visual-editor-content table')).toHaveCount(0)
   await page.getByRole('button', { name: 'Source', exact: true }).click()
   await expect(page.getByTestId('source-editor')).not.toContainText('| A')
   await expect(page.getByTestId('source-editor')).toContainText('- [x] Todo')

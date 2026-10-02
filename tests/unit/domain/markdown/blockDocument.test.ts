@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { marked } from 'marked'
 import {
   assertMarkdownBlockDocument,
   logicalAnchorAtOffset,
@@ -11,6 +12,30 @@ import {
 } from '../../../../src/domain/markdown/blockDocument'
 
 describe('Markdown block document', () => {
+  it('ignores editor tokenizers registered on the global Marked instance', () => {
+    const previousOptions = { ...marked.defaults }
+    let calls = 0
+    try {
+      marked.use({
+        extensions: [
+          {
+            name: 'editor-only-probe',
+            level: 'block',
+            tokenizer() {
+              calls += 1
+              return undefined
+            },
+          },
+        ],
+      })
+      const document = parseMarkdownBlockDocument('# Heading\n\nParagraph.\n')
+      expect(document.blocks.map((block) => block.kind)).toEqual(['heading', 'paragraph'])
+      expect(calls).toBe(0)
+    } finally {
+      marked.setOptions(previousOptions)
+    }
+  })
+
   const kitchenSink = [
     '---',
     'title: Draft',
@@ -89,6 +114,25 @@ describe('Markdown block document', () => {
     expect(document.blocks[0]).toMatchObject({ kind: 'raw', rawKind: 'html', state: 'raw' })
   })
 
+  it('preserves paragraphs mixing text and block images as raw source', () => {
+    for (const source of [
+      'Original content.\n![image](./image.png)\n',
+      'Original content. ![image](./image.png)\n',
+      'Original content.\n![image][ref]\n\n[ref]: ./image.png\n',
+    ]) {
+      const document = parseMarkdownBlockDocument(source)
+      expect(document.blocks[0]).toMatchObject({ kind: 'raw', rawKind: 'unknown' })
+      expect(serializeMarkdownBlockDocument(document)).toBe(source)
+    }
+    for (const source of [
+      '![image](./image.png)\n',
+      '![image][ref]\n\n[ref]: ./image.png\n',
+      '![image](./image.png)\n\nOriginal content.\n',
+    ]) {
+      expect(parseMarkdownBlockDocument(source).blocks[0].kind).toBe('image')
+    }
+  })
+
   it('keeps a whole multiline paragraph raw when a later line has unsupported inline syntax', () => {
     const document = parseMarkdownBlockDocument('First line\nSecond <mark>raw</mark> line\n')
 
@@ -153,6 +197,30 @@ describe('Markdown block document', () => {
 
     expect(serializeMarkdownBlockDocument(document)).toBe(source)
     expect(() => assertMarkdownBlockDocument(document)).not.toThrow()
+  })
+
+  it('groups nested and continued lists using Markdown token boundaries', () => {
+    for (const source of [
+      '- first\n  - nested\n- final\n\nTail\n',
+      '- first\n\n  continuation\n- final\n\nTail\n',
+    ]) {
+      const document = parseMarkdownBlockDocument(source)
+      expect(document.blocks.map((block) => block.kind)).toEqual(['bullet-list', 'paragraph'])
+      expect(serializeMarkdownBlockDocument(document)).toBe(source)
+    }
+  })
+
+  it('keeps reference definitions as source blocks without confusing autolinks or setext headings', () => {
+    const document = parseMarkdownBlockDocument(
+      '[link][ref]\n\n[ref]: https://example.com\n\n<https://example.com>\n\nHeading\n===\n',
+    )
+    expect(document.blocks.map((block) => [block.kind, block.rawKind])).toEqual([
+      ['paragraph', null],
+      ['raw', 'reference'],
+      ['paragraph', null],
+      ['heading', null],
+    ])
+    expect(parseMarkdownBlockDocument('---\n\nBody\n').blocks[0].kind).toBe('divider')
   })
 
   it('keeps repeated block ids stable when inserting an identical block before them', () => {

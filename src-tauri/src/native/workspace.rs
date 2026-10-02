@@ -66,60 +66,86 @@ fn traverse_workspace_inner<F>(
 where
     F: FnMut(usize),
 {
-    let mut stack = vec![(root.to_path_buf(), 0usize)];
     let mut batches = Vec::new();
     let mut batch = Vec::with_capacity(options.batch_size.max(1));
-    let mut visited = 0usize;
-
-    while let Some((directory, depth)) = stack.pop() {
-        for entry in fs::read_dir(&directory).map_err(|error| io_error(operation, error))? {
-            before_entry(visited);
-            if cancelled.load(Ordering::Relaxed) {
-                if !batch.is_empty() {
-                    batches.push(batch);
-                }
-                return Ok(WorkspaceTraversalResult {
-                    batches,
-                    status: WorkspaceTraversalStatus::Cancelled,
-                });
-            }
-            if visited >= options.max_entries {
-                if !batch.is_empty() {
-                    batches.push(batch);
-                }
-                return Ok(WorkspaceTraversalResult {
-                    batches,
-                    status: WorkspaceTraversalStatus::LimitReached,
-                });
-            }
-
-            let entry = entry.map_err(|error| io_error(operation, error))?;
-            let path = entry.path();
-            let file_type = entry
-                .file_type()
-                .map_err(|error| io_error(operation, error))?;
-            if file_type.is_dir() && should_skip_directory(&path) {
-                continue;
-            }
-
-            batch.push(path.clone());
-            visited += 1;
+    let status = visit_workspace_entries(
+        root,
+        options,
+        cancelled,
+        operation,
+        &mut before_entry,
+        |_| true,
+        |path, _| {
+            batch.push(path.to_path_buf());
             if batch.len() >= options.batch_size.max(1) {
                 batches.push(std::mem::take(&mut batch));
                 batch = Vec::with_capacity(options.batch_size.max(1));
             }
-            if file_type.is_dir() && !file_type.is_symlink() && depth < options.max_depth {
-                stack.push((path, depth + 1));
-            }
-        }
-    }
-
+            true
+        },
+    )?;
     if !batch.is_empty() {
         batches.push(batch);
     }
-    Ok(WorkspaceTraversalResult {
-        batches,
-        status: WorkspaceTraversalStatus::Complete,
+    Ok(WorkspaceTraversalResult { batches, status })
+}
+
+pub(crate) fn visit_workspace_entries<F, G, H>(
+    root: &Path,
+    options: WorkspaceTraversalOptions,
+    cancelled: &AtomicBool,
+    operation: &str,
+    mut before_entry: F,
+    mut include_path: G,
+    mut visit: H,
+) -> NativeResult<WorkspaceTraversalStatus>
+where
+    F: FnMut(usize),
+    G: FnMut(&Path) -> bool,
+    H: FnMut(&Path, &fs::FileType) -> bool,
+{
+    let mut stack = vec![(root.to_path_buf(), 0usize)];
+    let mut visited = 0usize;
+    let mut limited_depth = false;
+    while let Some((directory, depth)) = stack.pop() {
+        for entry in fs::read_dir(&directory).map_err(|error| io_error(operation, error))? {
+            before_entry(visited);
+            if cancelled.load(Ordering::Relaxed) {
+                return Ok(WorkspaceTraversalStatus::Cancelled);
+            }
+            if visited >= options.max_entries {
+                return Ok(WorkspaceTraversalStatus::LimitReached);
+            }
+            visited += 1;
+            let entry = entry.map_err(|error| io_error(operation, error))?;
+            let path = entry.path();
+            let metadata = entry
+                .metadata()
+                .map_err(|error| io_error(operation, error))?;
+            let file_type = metadata.file_type();
+            if file_type.is_symlink()
+                || is_reparse_metadata(&metadata)
+                || (file_type.is_dir() && should_skip_directory(&path))
+                || !include_path(&path)
+            {
+                continue;
+            }
+            if !visit(&path, &file_type) {
+                return Ok(WorkspaceTraversalStatus::LimitReached);
+            }
+            if file_type.is_dir() {
+                if depth < options.max_depth {
+                    stack.push((path, depth + 1));
+                } else {
+                    limited_depth = true;
+                }
+            }
+        }
+    }
+    Ok(if limited_depth {
+        WorkspaceTraversalStatus::LimitReached
+    } else {
+        WorkspaceTraversalStatus::Complete
     })
 }
 pub(crate) fn is_text_file(path: &Path) -> bool {
@@ -147,7 +173,7 @@ pub(crate) fn should_skip_directory(path: &Path) -> bool {
         return false;
     };
     matches!(
-        name,
+        name.to_ascii_lowercase().as_str(),
         ".git" | ".folden" | "node_modules" | "dist" | "build" | "target" | ".cache"
     )
 }
@@ -315,7 +341,9 @@ pub(crate) fn update_registered_document_paths(
     next_relative_path: &str,
     workspace_root: &Path,
 ) {
-    let previous_key = normalize_key(previous_relative_path);
+    let previous_relative_path = previous_relative_path.replace('\\', "/");
+    let next_relative_path = next_relative_path.replace('\\', "/");
+    let previous_key = normalize_key(&previous_relative_path);
     for document in state.documents.values_mut() {
         if document.workspace_id.as_deref() != Some(workspace_id) {
             continue;
@@ -323,9 +351,10 @@ pub(crate) fn update_registered_document_paths(
         let Some(relative_path) = document.relative_path.clone() else {
             continue;
         };
+        let relative_path = relative_path.replace('\\', "/");
         let normalized_relative_path = normalize_key(&relative_path);
         if normalized_relative_path != previous_key
-            && !normalized_relative_path.starts_with(&format!("{previous_key}\\"))
+            && !normalized_relative_path.starts_with(&format!("{previous_key}/"))
         {
             continue;
         }
@@ -341,6 +370,22 @@ pub(crate) fn update_registered_document_paths(
         document.path = next_path.clone();
         document.relative_path = Some(next_relative);
     }
+    let previous_absolute = path_to_string(&workspace_root.join(&previous_relative_path));
+    let next_absolute = path_to_string(&workspace_root.join(&next_relative_path));
+    let previous_absolute_key = normalize_key(&previous_absolute);
+    state.workspace_watch_paths = state
+        .workspace_watch_paths
+        .iter()
+        .map(|path| {
+            let key = normalize_key(path);
+            if key == previous_absolute_key || key.starts_with(&format!("{previous_absolute_key}/"))
+            {
+                format!("{next_absolute}{}", &path[previous_absolute.len()..])
+            } else {
+                path.clone()
+            }
+        })
+        .collect();
 }
 #[tauri::command]
 pub(crate) fn open_workspace_directory(
@@ -402,10 +447,11 @@ pub(crate) fn workspace_watch_scope_paths(
             continue;
         }
         let normalized_path = ensure_relative_path(relative_path, "sync_workspace_watch_scope")?;
-        if ignored_paths
-            .iter()
-            .any(|ignored_path| normalized_path.starts_with(ignored_path))
-        {
+        if ignored_paths.iter().any(|ignored_path| {
+            let path = normalize_key(&relative_path_to_string(&normalized_path));
+            let ignored = normalize_key(&relative_path_to_string(ignored_path));
+            path == ignored || path.starts_with(&format!("{ignored}/"))
+        }) {
             continue;
         }
         let (path, _) =
@@ -454,7 +500,7 @@ pub(crate) fn load_workspace_settings_from_path(path: &Path) -> Result<Workspace
     }
 
     let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    let settings: WorkspaceSettings = serde_json::from_str(&content)
+    let mut settings: WorkspaceSettings = serde_json::from_str(&content)
         .map_err(|error| format!("Workspace settings must be valid JSON: {error}"))?;
 
     if settings.ignored_paths.iter().any(|value| {
@@ -462,6 +508,12 @@ pub(crate) fn load_workspace_settings_from_path(path: &Path) -> Result<Workspace
     }) {
         return Err("Workspace ignored paths must be relative paths.".to_string());
     }
+
+    settings.ignored_paths = settings
+        .ignored_paths
+        .iter()
+        .map(|value| value.replace('\\', "/"))
+        .collect();
 
     Ok(settings)
 }
@@ -486,7 +538,7 @@ pub(crate) fn load_workspace_settings(
 pub(crate) fn save_workspace_settings(
     state: tauri::State<'_, Mutex<NativeAppState>>,
     workspace_id: String,
-    settings: WorkspaceSettings,
+    mut settings: WorkspaceSettings,
 ) -> NativeResult<()> {
     let state = state.lock().unwrap();
     let workspace = get_workspace(&state, &workspace_id, "save_workspace_settings")?;
@@ -495,8 +547,14 @@ pub(crate) fn save_workspace_settings(
         .map_err(|error| io_error("save_workspace_settings", error))?;
 
     for path in &settings.ignored_paths {
+        ensure_not_workspace_root(path, "save_workspace_settings")?;
         ensure_relative_path(path, "save_workspace_settings")?;
     }
+    settings.ignored_paths = settings
+        .ignored_paths
+        .iter()
+        .map(|value| value.replace('\\', "/"))
+        .collect();
 
     let content = serde_json::to_vec_pretty(&settings).map_err(|error| {
         native_error(
@@ -507,8 +565,25 @@ pub(crate) fn save_workspace_settings(
             false,
         )
     })?;
-    fs::write(settings_dir.join("workspace.json"), content)
-        .map_err(|error| io_error("save_workspace_settings", error))
+    let canonical_settings_dir = fs::canonicalize(&settings_dir)
+        .map_err(|error| io_error("save_workspace_settings", error))?;
+    ensure_inside_root(
+        &workspace.root_path,
+        &canonical_settings_dir,
+        "save_workspace_settings",
+    )?;
+    let target_path = canonical_settings_dir.join("workspace.json");
+    if target_path.exists() {
+        let canonical_target = fs::canonicalize(&target_path)
+            .map_err(|error| io_error("save_workspace_settings", error))?;
+        ensure_inside_root(
+            &workspace.root_path,
+            &canonical_target,
+            "save_workspace_settings",
+        )?;
+    }
+    write_atomic_text_file(&target_path, &content, "save_workspace_settings")?;
+    Ok(())
 }
 #[tauri::command]
 pub(crate) fn open_text_file_by_path(
@@ -584,6 +659,7 @@ pub(crate) fn create_directory(
 #[tauri::command]
 pub(crate) fn rename_path(
     state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
     workspace_id: String,
     path: String,
     new_name: String,
@@ -612,17 +688,14 @@ pub(crate) fn rename_path(
             false,
         ));
     }
-    let next_relative_path =
-        if let Some(index) = relative_path_to_string(&relative_path).rfind('\\') {
-            format!(
-                "{}\\{}",
-                &relative_path_to_string(&relative_path)[..index],
-                valid_name
-            )
-        } else {
-            valid_name.clone()
-        };
-    fs::rename(&canonical_path, &next_path).map_err(|error| io_error("rename_path", error))?;
+    let next_relative_path = relative_path_to_string(
+        &relative_path
+            .parent()
+            .unwrap_or(Path::new(""))
+            .join(&valid_name),
+    );
+    move_without_overwrite(&canonical_path, &next_path)
+        .map_err(|error| io_error("rename_path", error))?;
     update_registered_document_paths(
         &mut state,
         &workspace_id,
@@ -630,7 +703,150 @@ pub(crate) fn rename_path(
         &next_relative_path,
         &workspace.root_path,
     );
+    sync_native_watcher(&mut state, &app_handle)?;
     Ok(next_relative_path)
+}
+
+pub(crate) fn move_workspace_path(
+    state: &mut NativeAppState,
+    workspace_id: &str,
+    path: &str,
+    target_parent: &str,
+) -> NativeResult<String> {
+    const OPERATION: &str = "move_path";
+    ensure_not_workspace_root(path, OPERATION)?;
+    let workspace = get_workspace(state, workspace_id, OPERATION)?.clone();
+    let (source, relative) = resolve_workspace_path(&workspace, path, OPERATION)?;
+    let (parent, relative_parent) = resolve_workspace_parent(&workspace, target_parent, OPERATION)?;
+    if !parent.is_dir() || parent.starts_with(&source) {
+        return Err(native_error(
+            FileErrorCode::InvalidName,
+            OPERATION,
+            "Choose a folder outside the item being moved.",
+            None,
+            false,
+        ));
+    }
+    if is_reparse_path(&workspace.root_path.join(&relative))
+        || is_reparse_path(&workspace.root_path.join(&relative_parent))
+    {
+        return Err(native_error(
+            FileErrorCode::OutsideWorkspace,
+            OPERATION,
+            "Linked paths cannot be moved.",
+            None,
+            false,
+        ));
+    }
+    let name = relative.file_name().ok_or_else(|| {
+        native_error(
+            FileErrorCode::InvalidName,
+            OPERATION,
+            "Invalid source path.",
+            None,
+            false,
+        )
+    })?;
+    let target = parent.join(name);
+    let next_relative = relative_path_to_string(&relative_parent.join(name));
+    if target == source {
+        return Ok(relative_path_to_string(&relative));
+    }
+    let markdown_assets = if source.is_file()
+        && source.extension().is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("markdown")
+        }) {
+        let assets_name = format!("{}.assets", source.file_stem().unwrap().to_string_lossy());
+        let source_assets = source.parent().unwrap().join(&assets_name);
+        match fs::symlink_metadata(&source_assets) {
+            Ok(metadata) => {
+                if !metadata.is_dir() || is_reparse_metadata(&metadata) {
+                    return Err(native_error(
+                        FileErrorCode::OutsideWorkspace,
+                        OPERATION,
+                        "The document assets folder must be a regular folder.",
+                        None,
+                        false,
+                    ));
+                }
+                let target_assets = parent.join(assets_name);
+                match fs::symlink_metadata(&target_assets) {
+                    Ok(_) => {
+                        return Err(native_error(
+                            FileErrorCode::AlreadyExists,
+                            OPERATION,
+                            "The target folder already contains assets for this document.",
+                            Some(path_to_string(&target_assets)),
+                            false,
+                        ));
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(io_error(OPERATION, error)),
+                }
+                Some((source_assets, target_assets))
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(io_error(OPERATION, error)),
+        }
+    } else {
+        None
+    };
+    move_without_overwrite(&source, &target).map_err(|error| io_error(OPERATION, error))?;
+    if let Some((source_assets, target_assets)) = markdown_assets {
+        if let Err(error) = move_without_overwrite(&source_assets, &target_assets) {
+            if let Err(rollback_error) = move_without_overwrite(&target, &source) {
+                update_registered_document_paths(
+                    state,
+                    workspace_id,
+                    &relative_path_to_string(&relative),
+                    &next_relative,
+                    &workspace.root_path,
+                );
+                return Err(native_error(
+                    FileErrorCode::Unknown,
+                    OPERATION,
+                    "The document moved, but its images could not move. Move the images folder beside the document manually.",
+                    Some(format!("Document: {}; images: {}; image move: {error}; rollback: {rollback_error}", path_to_string(&target), path_to_string(&source_assets))),
+                    false,
+                ));
+            }
+            return Err(io_error(OPERATION, error));
+        }
+        update_registered_document_paths(
+            state,
+            workspace_id,
+            &relative_path_to_string(source_assets.strip_prefix(&workspace.root_path).unwrap()),
+            &relative_path_to_string(target_assets.strip_prefix(&workspace.root_path).unwrap()),
+            &workspace.root_path,
+        );
+    }
+    update_registered_document_paths(
+        state,
+        workspace_id,
+        &relative_path_to_string(&relative),
+        &next_relative,
+        &workspace.root_path,
+    );
+    Ok(next_relative)
+}
+
+#[tauri::command]
+pub(crate) fn move_path(
+    state: tauri::State<'_, Mutex<NativeAppState>>,
+    app_handle: tauri::AppHandle,
+    workspace_id: String,
+    path: String,
+    target_parent: String,
+) -> NativeResult<String> {
+    let mut state = state.lock().unwrap();
+    let path = move_workspace_path(&mut state, &workspace_id, &path, &target_parent)?;
+    let workspace = get_workspace(&state, &workspace_id, "move_path")?;
+    let absolute_path = workspace.root_path.join(&path);
+    if absolute_path.is_file() {
+        super::images::authorize_document_image_assets(&app_handle, &absolute_path)?;
+    }
+    sync_native_watcher(&mut state, &app_handle)?;
+    Ok(path)
 }
 #[tauri::command]
 pub(crate) fn trash_path(

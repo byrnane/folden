@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+import { formatError } from '../helpers/errorHelpers'
 import { readonly, ref } from 'vue'
 import { isDocumentDirty } from '../../domain/document'
 import type { OpenDocument } from '../../domain/documents/documentState'
@@ -11,7 +13,7 @@ export function createExternalChangesController() {
   const pendingDocumentReloads = new Map<string, ReturnType<typeof globalThis.setTimeout>>()
 
   function setWatcherWarning(message: string | null) {
-    watcherWarning.value = message
+    watcherWarning.value = message === null ? null : formatError(message)
   }
 
   function scheduleWorkspaceRefresh(key: string, refresh: () => void) {
@@ -70,7 +72,7 @@ export function createExternalChangesController() {
     if (event.kind === 'remove') {
       routes.markDocumentMissing(
         document.id,
-        `${document.name} was moved or deleted outside Folden.`,
+        t('{name} was moved or deleted outside Folden.', { name: document.name }),
       )
       return
     }
@@ -78,7 +80,7 @@ export function createExternalChangesController() {
     if (isDocumentDirty(document)) {
       routes.markDocumentConflict(
         document.id,
-        `${document.name} changed on disk while you have unsaved edits.`,
+        t('{name} changed on disk while you have unsaved edits.', { name: document.name }),
       )
       return
     }

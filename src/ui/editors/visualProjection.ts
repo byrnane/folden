@@ -9,7 +9,7 @@ export function buildVisualMarkdownProjection(
   return blockDocument.blocks
     .map((block) =>
       block.kind === 'raw'
-        ? rawMarkdownMarker(block.rawKind ?? 'unknown', block.rawSource)
+        ? `${block.rawKind === 'reference' ? `${block.rawSource}\n` : ''}${rawMarkdownMarker(block.rawKind ?? 'unknown', block.rawSource)}`
         : block.rawSource,
     )
     .join('')

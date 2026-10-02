@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { DocumentMapSegment } from '../../domain/markdown/outline'
 
@@ -186,7 +187,7 @@ onBeforeUnmount(() => {
   <aside
     ref="mapElement"
     class="document-map"
-    aria-label="Document map"
+    :aria-label="t('Document map')"
     :style="mapStyle"
     @pointerdown="beginDrag"
     @pointermove="drag"
@@ -198,7 +199,7 @@ onBeforeUnmount(() => {
     <span
       class="document-map-resize-handle"
       role="separator"
-      aria-label="Resize document map"
+      :aria-label="t('Resize document map')"
       @pointerdown.stop="beginResize"
     />
   </aside>

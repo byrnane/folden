@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../application/i18n'
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import AppDialog from './AppDialog.vue'
 
@@ -83,7 +84,7 @@ onBeforeUnmount(() => {
     <form class="dialog-form" @submit.prevent="handleSubmit">
       <p class="app-dialog-message">{{ message }}</p>
       <label class="dialog-field">
-        <span class="dialog-field-label">{{ inputLabel }}</span>
+        <span class="dialog-field-label">{{ t(inputLabel) }}</span>
         <input
           ref="inputElement"
           v-model="localValue"
@@ -95,10 +96,10 @@ onBeforeUnmount(() => {
 
       <div class="dialog-inline-actions">
         <button type="button" @click="emit('cancel')">
-          {{ cancelLabel }}
+          {{ t(cancelLabel) }}
         </button>
         <button type="submit">
-          {{ confirmLabel }}
+          {{ t(confirmLabel) }}
         </button>
       </div>
     </form>
