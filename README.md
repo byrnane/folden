@@ -6,11 +6,13 @@ English · [Русский](README.ru.md)
 
 ## Beta 0.12.0
 
-**Release preparation is in progress.** Downloads will become available on the [official beta release page](https://github.com/byrnane/folden/releases/tag/v0.12.0) after CI and native acceptance on every target platform.
+**This is a beta: bugs, crashes, and data loss may occur.** Folden is provided **“AS IS”, without warranties** under the [usage terms](LICENSE.md#warranty-and-liability). Keep independent backups of important documents.
+
+[Download beta 0.12.0](https://github.com/byrnane/folden/releases/tag/v0.12.0).
 
 [Release notes](docs/releases/v0.12.0.md) · [Verification status](docs/BETA-0.12.0.md)
 
-Keep backups of important documents. The release will contain three official installation packages and `SHA256SUMS.txt`; choose the package for your system. It will also include license texts and the NSIS source archive required by the installer's license.
+The release contains three official installation packages and `SHA256SUMS.txt`; choose the package for your system. It also includes license texts and the NSIS source archive required by the installer's license.
 
 | System              | Package          | Supported baseline |
 | ------------------- | ---------------- | ------------------ |
