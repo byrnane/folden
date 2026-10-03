@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { documentDragMimeType, openApp, sourceEditor } from './helpers'
 
-test('keeps split source and visual panes in sync for the same document', async ({ page }) => {
+test('keeps split source and visual panes in sync for the same document @smoke', async ({
+  page,
+}) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()

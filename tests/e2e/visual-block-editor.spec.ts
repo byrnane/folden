@@ -729,7 +729,7 @@ test('keeps a move, duplicate and delete chain stable through undo and redo', as
   await expect.poll(blockIds).toEqual(duplicatedIds.slice(0, 3))
 })
 
-test('persists Visual to Source undo and redo through save and reopen', async ({ page }) => {
+test('persists Visual to Source undo and redo through save and reopen @smoke', async ({ page }) => {
   const initial = '# Flow\n\nBody\n'
   const saved = '# Flow\n\nBody changed\n'
   await openApp(page, { mockOptions: { initialFiles: { 'round-trip-flow.md': initial } } })

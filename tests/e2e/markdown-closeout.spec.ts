@@ -203,7 +203,9 @@ test('uses validated dialogs for source links and images', async ({ page }) => {
   await expect(page.getByTestId('source-editor')).toContainText('![image](./diagram.png)')
 })
 
-test('keeps instant visual edits and view position when switching modes', async ({ page }) => {
+test('keeps instant visual edits and view position when switching modes @smoke', async ({
+  page,
+}) => {
   const longDocument = [
     '# Long Document',
     '',

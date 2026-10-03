@@ -54,7 +54,9 @@ Every package includes `LICENSE.md` and generated `THIRD_PARTY_NOTICES.md`. Wind
 
 ## Isolated candidate and draft
 
-CI runs on `master`, `main`, and pull requests. Pushing a `release/beta-*` branch runs package checks and uploads three artifacts named `folden-<target>`. Their retention is 14 days. Review the results and test the candidate packages before preparing a draft.
+Automatic CI on `master`, `main`, and pull requests runs the quick checks and ten smoke browser scenarios. Use **Actions → CI → Run workflow** for coverage, the complete browser suite, performance checks, and native checks.
+
+Pushing a `release/beta-*` branch runs the full quality and test suite, builds packages, and uploads three artifacts named `folden-<target>`. Their retention is 14 days. Review the results and test the candidate packages before preparing a draft.
 
 For the next version, use `npm run version:bump -- <version>` and complete the changelog and `docs/releases/v<version>.md`. After approval, create and push a new `v<version>` tag at the tested commit. The tag must match `package.json`; existing published tags and releases must remain unchanged.
 

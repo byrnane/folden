@@ -44,6 +44,7 @@ This creates a local executable without an installer. Keep the generated third-p
 | `npm run quality`          | Versions, formatting, types, unused code, dependency cycles, lint, and unit tests |
 | `npm run test:coverage`    | Unit tests with coverage thresholds                                               |
 | `npm run test:e2e`         | Chromium tests; screenshot baselines are recorded on Windows                      |
+| `npm run test:e2e:smoke`   | Ten core Chromium scenarios used by automatic CI                                  |
 | `npm run test:performance` | Separate frontend, browser, and native performance checks                         |
 | `npm run test:release`     | Release-script checks                                                             |
 | `npm run privacy:check`    | Check tracked and unignored source files for private data                         |
@@ -57,7 +58,11 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 ```
 
-CI checks Rust on Windows x64 and both macOS architectures. Browser tests run on Windows. Record checks in the installed desktop app separately; see the [beta verification record](BETA-0.12.0.md).
+Pushes and pull requests run code quality checks, all unit tests, release-script and privacy checks, license verification, a frontend build, and ten core Chromium scenarios on Windows. The smoke tests cover opening and saving files, autosave, Visual/Source switching, undo/redo, split panes, recovery, and conflicts.
+
+For the full suite, use **Actions → CI → Run workflow**. This also runs coverage, all browser tests, performance checks, and Rust checks on Windows x64 and both macOS architectures. Native jobs keep their required check names and are marked as skipped on automatic runs. Release candidates retain the full suite in **Draft beta release**.
+
+Record checks in the installed desktop app separately; see the [beta verification record](BETA-0.12.0.md).
 
 ## Build output and licenses
 

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { openApp, sourceEditor } from './helpers'
 
-test('opens a mocked workspace and saves an edited Markdown document', async ({ page }) => {
+test('opens a mocked workspace and saves an edited Markdown document @smoke', async ({ page }) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
 
@@ -36,7 +36,9 @@ test('opens a mocked workspace and saves an edited Markdown document', async ({ 
   await expect(page.getByTestId('status-path')).toContainText('C:\\FoldenE2E\\README.md')
 })
 
-test('switches visual and source without marking an unchanged document dirty', async ({ page }) => {
+test('switches visual and source without marking an unchanged document dirty @smoke', async ({
+  page,
+}) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
@@ -70,7 +72,9 @@ test('runs toolbar formatting commands in source mode', async ({ page }) => {
   await expect(page.getByTestId('source-editor')).toContainText('source **toolbar**')
 })
 
-test('closes the window after saving dirty documents from the close prompt', async ({ page }) => {
+test('closes the window after saving dirty documents from the close prompt @smoke', async ({
+  page,
+}) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()
@@ -164,7 +168,7 @@ test('keeps the visual editor mounted after saving an open visual document', asy
   ).toBe(true)
 })
 
-test('expands workspace folders lazily and opens nested files', async ({ page }) => {
+test('expands workspace folders lazily and opens nested files @smoke', async ({ page }) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
 

@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -35,26 +35,25 @@ jobs:
       - run: npm run licenses:generate
       - run: npm run licenses:check
       - run: npm run test:coverage
+        if: github.event_name == 'workflow_dispatch'
       - run: npx playwright install chromium
+      - run: npm run test:e2e:smoke
+        if: github.event_name != 'workflow_dispatch'
       - run: npm run test:e2e
+        if: github.event_name == 'workflow_dispatch'
       - run: npm run vue:build
       - run: npm run test:performance
+        if: github.event_name == 'workflow_dispatch'
 
-  native:
-    name: Native ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+  # Fixed names preserve required checks when automatic runs skip native jobs.
+  native-windows:
+    name: Native x86_64-pc-windows-msvc
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2022
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-2022
-            target: x86_64-pc-windows-msvc
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-          - os: macos-15
-            target: aarch64-apple-darwin
-    steps:
+    env:
+      FOLDEN_NATIVE_TARGET: x86_64-pc-windows-msvc
+    steps: &native-steps
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
@@ -63,7 +62,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - name: Set up Rust
-        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy --target ${{ matrix.target }}
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt,clippy --target ${{ env.FOLDEN_NATIVE_TARGET }}
       - run: npm ci
       - run: npm run vue:build
       - name: Rust format
@@ -72,7 +71,25 @@ jobs:
         run: cargo fmt --check
       - name: Rust clippy
         working-directory: src-tauri
-        run: cargo clippy --locked --all-targets --target ${{ matrix.target }} -- -D warnings
+        run: cargo clippy --locked --all-targets --target ${{ env.FOLDEN_NATIVE_TARGET }} -- -D warnings
       - name: Native tests
         working-directory: src-tauri
-        run: cargo test --locked --target ${{ matrix.target }}
+        run: cargo test --locked --target ${{ env.FOLDEN_NATIVE_TARGET }}
+
+  native-macos-intel:
+    name: Native x86_64-apple-darwin
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    env:
+      FOLDEN_NATIVE_TARGET: x86_64-apple-darwin
+    steps: *native-steps
+
+  native-macos-arm:
+    name: Native aarch64-apple-darwin
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      FOLDEN_NATIVE_TARGET: aarch64-apple-darwin
+    steps: *native-steps

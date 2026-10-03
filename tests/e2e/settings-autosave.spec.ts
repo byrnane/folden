@@ -124,7 +124,9 @@ test('applies and persists the selected application theme', async ({ page }) => 
     .toContain('"theme":"folden-dark"')
 })
 
-test('autosaves existing files but does not autosave scratch documents', async ({ page }) => {
+test('autosaves existing files but does not autosave scratch documents @smoke', async ({
+  page,
+}) => {
   await openApp(page)
   await page.getByTestId('open-folder-empty').click()
   await page.getByTestId('workspace-entry-README.md').click()

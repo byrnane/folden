@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { openApp, sourceEditor } from './helpers'
 
-test('restores recovery snapshots into the original document on startup', async ({ page }) => {
+test('restores recovery snapshots into the original document on startup @smoke', async ({
+  page,
+}) => {
   await openApp(page, {
     mockOptions: {
       recoveryEntries: [
@@ -36,7 +38,7 @@ test('restores recovery snapshots into the original document on startup', async 
   await expect(page.getByTestId('open-documents-status')).toContainText('1 unsaved')
 })
 
-test('shows a readable conflict diff and preserves the dirty copy when reloading disk content', async ({
+test('shows a readable conflict diff and preserves the dirty copy when reloading disk content @smoke', async ({
   page,
 }) => {
   await openApp(page)
