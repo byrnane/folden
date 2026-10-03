@@ -33,7 +33,7 @@ Automated results refer to commit `9013e8e45c6b379db4be911dbd9fd94256a56b83` and
 | Windows Program Files/UAC and legacy custom-path upgrade        | No separate per-scenario record                                                                        |
 | Real OS clipboard, print/PDF file dialogs and physical printers | No separate per-scenario record                                                                        |
 | Several real work sessions                                      | No separate record in DOGFOODING.md                                                                    |
-| Beta publication                                                | Owner approved on 2026-10-03 with the beta/AS IS limitations                                           |
+| Beta publication                                                | Beta published on 2026-10-03 with the owner's approval                                                 |
 
 The release uses the checked files from that CI run without rebuilding. Native coverage is limited to the owner's overall Windows/macOS report; it does not establish a complete Windows 10/11 and macOS 14+ hardware matrix.
 

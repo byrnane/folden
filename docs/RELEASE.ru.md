@@ -70,6 +70,6 @@ Dispatch собирает новые пакеты: перед публикаци
 
 ## Настройки репозитория
 
-[Payload](../.github/repository-settings.json) и [инструкция](../.github/REPOSITORY_SETUP.md) описывают настройки. Metadata, темы, private vulnerability reporting, secret scanning, push protection и environment release-draft применены и проверены 2026-10-02. Защита ветки откладывается до отдельно согласованной замены публичной истории. Замена истории, commits, push, tags и публикация согласуются отдельно.
+[Payload](../.github/repository-settings.json) и [инструкция](../.github/REPOSITORY_SETUP.md) описывают настройки. Metadata, темы, private vulnerability reporting, secret scanning, push protection и environment release-draft применены и проверены 2026-10-02. Защита master включена и проверена 2026-10-03 после согласованной замены публичной истории. Замена истории, commits, push, tags и публикация согласуются отдельно.
 
 Официальные бинарники бесплатны для личной и коммерческой работы. Авторские исходники доступны для ознакомления с ограниченным разрешением на приватную Linux-сборку по [LICENSE.md](../LICENSE.md). Права на пользовательские документы и сторонние компоненты регулируются отдельно.

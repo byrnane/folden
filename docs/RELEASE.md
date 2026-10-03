@@ -70,6 +70,6 @@ A dispatched build creates fresh packages: native-test the **final draft files**
 
 ## Repository settings
 
-Review [the settings payload](../.github/repository-settings.json) and [setup instructions](../.github/REPOSITORY_SETUP.md). Repository metadata, topics, private vulnerability reporting, secret scanning, push protection and the release-draft environment were applied and verified on 2026-10-02. Branch protection remains deferred until the separately approved public-history replacement. History replacement, commits, pushes, tags and publication remain separately approved steps.
+Review [the settings payload](../.github/repository-settings.json) and [setup instructions](../.github/REPOSITORY_SETUP.md). Repository metadata, topics, private vulnerability reporting, secret scanning, push protection and the release-draft environment were applied and verified on 2026-10-02. Master branch protection was enabled and verified on 2026-10-03 after the approved public-history replacement. History replacement, commits, pushes, tags and publication remain separately approved steps.
 
 The official binary may be used free of charge for personal and commercial work. Author source is provided for inspection with a limited private Linux self-build permission under [LICENSE.md](../LICENSE.md). Third-party terms and user content ownership are separate.
