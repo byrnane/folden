@@ -21,7 +21,6 @@ export type CommandShortcut = {
 
 export type AppCommand = {
   id: CommandId
-  title: string
   shortcuts?: CommandShortcut[]
   canExecute?: () => boolean
   execute: () => void | Promise<void>
@@ -62,10 +61,6 @@ export function createCommandRegistry(commands: AppCommand[]) {
     return command ? canExecute(command) : false
   }
 
-  function getCommand(commandId: CommandId) {
-    return commandsById.get(commandId) ?? null
-  }
-
   function handleKeyboardEvent(event: KeyboardEvent) {
     if (event.defaultPrevented || event.isComposing) {
       return false
@@ -94,7 +89,6 @@ export function createCommandRegistry(commands: AppCommand[]) {
   return {
     canExecute: canExecuteById,
     execute,
-    getCommand,
     handleKeyboardEvent,
   }
 }

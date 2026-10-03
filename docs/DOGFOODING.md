@@ -1,78 +1,41 @@
-# Folden Dogfooding
+# Using Folden for daily work
 
-Use this file to record real daily usage before starting the next feature cycle.
+[Русский](DOGFOODING.ru.md) · [Beta verification](BETA-0.12.0.md)
 
-For the 0.12 beta, automated and native acceptance is recorded separately in [BETA-0.12.0.md](BETA-0.12.0.md). No real daily-use sessions have been recorded for this beta yet. Add genuine sessions here; do not treat a passing mock/browser test as a work session.
+Record real work in Folden here. No daily-use sessions have been recorded for beta 0.12.0 yet. Automated tests and release acceptance results are kept in the beta verification record.
 
 ## Sessions
 
-Add one entry per real work session:
+Add one entry per work session. Use a neutral project label and synthetic examples in this public log; keep personal paths and documents private.
 
 ```text
 Date:
 Version:
-Environment:
-Project/folder:
+OS and processor:
+Project label:
 Duration:
 Scenarios used:
-Notes:
+What worked:
+Problems and reproduction steps:
 ```
 
-Required coverage:
+## Scenarios to cover
 
-- several full work sessions;
-- real Markdown project;
-- folder with many files;
-- long session with multiple tabs;
-- one document open in split view with Source and Visual modes;
-- Visual/Source switching;
-- autosave in real work;
-- recovery after forced app close;
-- external change of an open file;
-- conflict during simultaneous editing;
-- workspace rename, create, delete, and move scenarios;
-- large Markdown files;
-- outline active-section tracking, keyboard navigation, and document-map click/drag in both editor modes;
-- workspace-level hiding through `.folden/workspace.json`, including reopen and restart;
-- local and remote images;
-- layout and settings persistence between launches;
-- several hours of use;
-- memory use and visible slowdown check;
-- quick open, project search, and Source/Visual find/replace;
-- templates, relative document links, and back/forward navigation;
-- image import/paste and file/folder moves with relative-reference checks;
-- RU/EN persistence and native printing/PDF of a long document.
+Across several sessions, check:
 
-## 0.7 Automated Closeout
+- a real Markdown project, a large folder, many tabs, and a long document;
+- one document in two panes, Source/Visual switching, editing, undo/redo, and autosave;
+- recovery after a forced close, external changes, and simultaneous-edit conflicts;
+- create, rename, move, and trash operations; relative links and sibling assets after moves;
+- project hiding through `.folden/workspace.json`, then reopen and restart;
+- outline tracking and keyboard navigation, document-map clicks and dragging in both modes;
+- quick open, project search, find/replace, templates, and back/forward navigation;
+- image import, clipboard paste, and remote-image permission;
+- saved language, layout, and settings; native printing/PDF of a long document;
+- several hours of use, memory consumption, and visible slowdown.
 
-The 0.7 release gate covered the editor regression checklist with automated E2E tests: Visual/Source no-dirty switching, instant Visual edits before Source, kitchen-sink save/reopen, raw HTML/frontmatter Source preservation, Source link/image dialogs, table/task-list editing, scroll/selection preservation, and tab/workspace/external drag/drop payloads.
+## Issues
 
-This does not replace real dogfooding or installer smoke testing. Record those sessions separately below.
+Report reproducible problems through [GitHub's issue forms](https://github.com/byrnane/folden/issues/new/choose). Include the version, OS, steps, expected result, and actual result. State whether the problem risks data loss or blocks daily work. Link the issue from the session entry.
 
-## 0.8 Automated Closeout
-
-The 0.8 release gate covers duplicate document labels, workspace-level ignores, muted folders, compact workspace actions, Outline navigation, document-map click/drag, persisted navigation widths, and plain-text exclusion. 0.8.2 additionally covers the active Outline item and keyboard navigation.
-
-## Issue Backlog
-
-Add only reproducible bugs or items with clear user value. Keep bug reports separate from future feature ideas.
-
-### Template
-
-```text
-ID:
-Type: bug | UX | performance | enhancement
-Version:
-Environment:
-Data-loss risk: yes | no
-Daily-use blocker: yes | no
-Steps:
-Expected:
-Actual:
-Evidence:
-Status: open | fixed | wontfix
-```
-
-## Known Issues
-
-No dogfooding issues recorded yet.
+For a feature suggestion, describe the writing task it would improve. Follow [SECURITY.md](../SECURITY.md) for vulnerabilities and review screenshots and diagnostics before sharing them.

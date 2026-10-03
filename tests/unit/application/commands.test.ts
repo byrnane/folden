@@ -35,7 +35,6 @@ describe('command registry', () => {
     const registry = createCommandRegistry([
       {
         id: 'document.save',
-        title: 'Save',
         shortcuts: [{ code: 'KeyS', mod: true }],
         execute,
       },
@@ -53,7 +52,6 @@ describe('command registry', () => {
     const registry = createCommandRegistry([
       {
         id: 'document.save',
-        title: 'Save',
         shortcuts: [{ code: 'KeyS', mod: true }],
         canExecute: () => false,
         execute,
@@ -71,7 +69,6 @@ describe('command registry', () => {
     const registry = createCommandRegistry([
       {
         id: 'document.redo',
-        title: 'Redo',
         shortcuts: [
           { code: 'KeyZ', mod: true, shift: true },
           { code: 'KeyY', mod: true },
@@ -94,7 +91,6 @@ describe('command registry', () => {
     const registry = createCommandRegistry([
       {
         id: 'document.save',
-        title: 'Save',
         shortcuts: [{ code: 'KeyS', mod: true }],
         execute,
       },
@@ -111,7 +107,6 @@ describe('command registry', () => {
     const registry = createCommandRegistry([
       {
         id: 'document.save',
-        title: 'Save',
         shortcuts: [{ code: 'KeyS', mod: true }],
         execute,
       },

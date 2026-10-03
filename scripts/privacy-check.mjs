@@ -53,17 +53,6 @@ const syntheticPaths = {
   ],
 }
 
-export const excludedPublicPaths = [
-  '.codex/',
-  'AGENTS.md',
-  'AGENTS.universal.md',
-  'logo_concept.png',
-  'logos.png',
-  'plans/folden_future_search.md',
-  'docs/BETA-0.11.0.md',
-  'docs/BETA-0.11.0.ru.md',
-]
-
 export function sourcePrivacyIssues(content, filename, privateValues = []) {
   let inspected = content
   for (const fixture of syntheticPaths[filename.replaceAll('\\', '/')] || []) {

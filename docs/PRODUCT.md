@@ -1,117 +1,52 @@
-# Folden Product
+# How Folden works
 
-Folden is a local-first, visual-first desktop writing editor built on Markdown. It is meant to feel like a focused tool for articles, scripts, documentation, notes, and specifications while preserving the user's direct control over files and folders.
+English · [Русский](PRODUCT.ru.md)
 
-## Audience
+This document describes the current application's behavior for developers. The [README](../README.md) covers installation and features, and [Architecture](ARCHITECTURE.md) explains the code structure.
 
-Folden is built for people who write and maintain text as part of real work:
+## Files and application data
 
-- writers of articles, scripts, documentation, notes, and specifications;
-- technical writers and game designers working with structured long-form text;
-- Markdown users who want a strong visual block editor while retaining access to source text.
+Saved documents are ordinary Markdown or text files chosen by the user. Their contents, names, folders, and images belong to the user and remain readable outside Folden.
 
-## Principles
+The application stores settings, recent folders, session layout, recovery copies, and bounded diagnostic logs separately. The saved file remains the source for its document. Recovery copies retain unsaved work until the user restores or discards it.
 
-### Local-first
+Saving preserves the file's line endings and UTF-8 BOM. Folden records the file's size and modification time, checks them before saving, and writes the replacement atomically. A detected external change produces a conflict for the user to resolve. Missing files also have a visible state.
 
-Folden does not require accounts, cloud storage, telemetry, or a remote service to edit user documents. User content lives on the user's device and is opened from normal filesystem paths.
+## Editors and panes
 
-### File-first
+Markdown opens in Visual mode by default; the default can be changed in Settings. Visual mode edits blocks such as paragraphs, headings, lists, tables, and code. Source mode gives access to the Markdown text. Plain text files open in Source mode and keep their text format.
 
-Files are the source of truth. Folden can keep session state, recovery snapshots, settings, diagnostics, and caches, but the document body belongs in the user's files, not in a hidden application database.
+Opening a document or switching modes preserves its Markdown. Visual edits affect the changed blocks and retain the source of untouched blocks. Raw HTML, HTML comments, frontmatter, footnotes, reference definitions, and custom directives remain editable source blocks. Images mixed into text that cannot fit the visual editor's block schema are preserved in source blocks too.
 
-### Markdown-friendly
+A document has one content state and one undo/redo history shared by both modes and panes. Each pane keeps its own editing mode, selection, and scroll position. Tabs can be reordered or moved between the two panes. The application remembers the tab layout, active documents, modes, and split ratio.
 
-Markdown is the main interchange format. A document should remain useful in another editor, a Git diff, a static-site pipeline, or a plain text viewer.
+## Saving, closing, and recovery
 
-### Direct before clever
+Autosave is enabled by default for files already on disk. Settings control the delay and saving on window blur or document switch. A previously disabled setting stays disabled. New drafts need a first manual save to choose a path.
 
-Folden should prefer clear, predictable workflows: open a folder, open a file, edit, save, recover if something goes wrong. Automation such as autosave and recovery must support that workflow instead of hiding it.
+Folden tracks unsaved changes. Closing a document or the window with unsaved changes asks the user to save, discard, or cancel. Save as copy writes a separate file. External changes can be compared and resolved before writing.
 
-## User-owned Data
+Recovery retains every active document with unsaved changes, including drafts and edits to saved files. After an unexpected shutdown, the user can restore or discard those copies. Deferred recovery copies are deduplicated and limited separately from active documents.
 
-User-owned data includes:
+## Project folders, search, and links
 
-- opened text and Markdown files;
-- workspace folders and their children;
-- file names, relative paths, line endings, UTF-8 BOM state, and on-disk fingerprints;
-- unsaved scratch document content until the user discards it or saves it.
+The folder tree loads directories as they are opened. Ignored names come from application settings. Paths hidden for a particular project are stored in `.folden/workspace.json`; the `.folden` folder is hidden from the tree. File deletion uses the system trash.
 
-Application-owned supporting data includes:
+Project search reads supported UTF-8 text files and respects ignored names and hidden paths. It can be cancelled and reports incomplete results and skipped files. Symbolic links are not followed. Search limits are:
 
-- UI session layout;
-- recent workspaces;
-- recovery snapshots;
-- settings such as autosave and workspace ignored names;
-- bounded logs and exported diagnostic reports.
+| Limit             | Value   |
+| ----------------- | ------- |
+| Searched file     | 2 MiB   |
+| Matches           | 5,000   |
+| Directory entries | 100,000 |
+| Directory depth   | 32      |
 
-Supporting data must not become the canonical copy of a saved document.
+Relative Markdown links are resolved within the open project, with back/forward navigation. Local image import and clipboard paste store images beside the saved document in `<stem>.assets`.
 
-## Current Product Surface
+Moving a `.md` or `.markdown` file carries its sibling `<stem>.assets` folder if present. An existing destination assets folder blocks the move. Document contents and other image or link paths stay unchanged; relative references need review after a move.
 
-Folden currently supports:
+## Printing and network access
 
-- native text file open/save;
-- workspace folder browsing, lazy tree loading, recent workspaces, ignored names, workspace-level hidden paths in `.folden/workspace.json`, and workspace file operations;
-- multiple documents with tabs, tab reorder, tab transfer between panes, and Open Editors;
-- two-pane split view with shared document sessions and persisted split ratio;
-- activity rail, workspace and settings sections, focus mode, resizable sidebar and rail, density settings, and layout reset;
-- a visual-first Markdown editor with Tiptap;
-- a secondary Source mode with CodeMirror for inspecting and precisely editing Markdown;
-- Markdown outline navigation with active-section highlighting, keyboard navigation, and a resizable document map in Source and Visual modes;
-- explicit dirty state, undo, redo, save, save as copy, and close protection;
-- autosave for saved documents when enabled, including delay, window-blur, and document-switch settings;
-- recovery for scratch and saved documents after an unexpected shutdown;
-- external change detection, missing-file states, stale-save protection, and conflict resolution;
-- local diagnostics export, log access, and toast feedback;
-- remote image blocking in Visual mode until the user allows images for the document.
+Printing takes an immutable snapshot of the current document and uses a light page layout. Unsupported Markdown appears as source blocks, and unavailable images get placeholders. Pagination, printer selection, PDF destination, margins, and completion depend on the system print dialog and webview. Closing the dialog alone does not confirm a successful print or export.
 
-The 0.11 Windows beta also includes:
-
-- quick document open by file name or path, project search, and in-document find/replace;
-- empty document, note, game design document, and video script templates;
-- relative Markdown document links and back/forward navigation;
-- local image import and clipboard paste into a document assets folder;
-- explicit file/folder moves, with no automatic rewriting of relative links;
-- Russian and English interface languages detected on first use and saved in Settings;
-- printing and PDF output through the system print dialog using an immutable document snapshot.
-
-New settings enable autosave for existing files. An explicitly disabled autosave setting stays disabled. Unsaved scratch documents still require a first manual save. Recovery keeps every active dirty document; deferred recovery entries are deduplicated and bounded separately.
-
-Project search scans supported UTF-8 text files, respects project ignores, and reports partial results or skipped files. It is bounded to 2 MiB per searched file, 5,000 matches, 100,000 directory entries, and 32 levels of depth. Symbolic links are not followed.
-
-Print output uses a light paper layout. Unsupported Markdown is displayed as source blocks, and unavailable images get a placeholder. Pagination, printer selection, PDF destination, margins, and successful completion are controlled by the system dialog. Moving a `.md` or `.markdown` file carries its sibling `<stem>.assets` folder when present; a conflicting destination assets folder blocks the move. Document contents and other image/link paths are not rewritten; review relative references afterward.
-
-## Boundaries
-
-Folden is not currently:
-
-- a cloud notes platform;
-- a collaborative editor;
-- a task tracker, CRM, wiki service, or project-management system;
-- a mobile application;
-- an online account system;
-- a database-backed document store;
-- a plugin platform;
-- an AI writing product;
-- an arbitrary split-grid editor;
-- an IDE or code-centric development environment.
-
-Future features should keep the same product contract: user documents stay file-first and readable outside Folden.
-
-## Role of Markdown and Plain Text
-
-Markdown files open in Visual mode by default. Source remains a complete but secondary view for inspecting and precisely editing Markdown. Visual editing is the primary product experience and should expose documents as clear, movable blocks without taking ownership away from the source file. Raw HTML, HTML comments, frontmatter, footnotes, and custom directives must survive as editable source blocks instead of forcing the whole document out of Visual mode. Images mixed into text that cannot fit the Visual block schema also remain editable source blocks with their Markdown preserved.
-
-Plain text files remain plain text files. Folden should not force arbitrary text into a Markdown or block-document model just because the application has a visual editor.
-
-## Success Criteria
-
-Folden is succeeding when:
-
-- users can trust it with real local documents;
-- common editing, saving, closing, and recovery flows are predictable;
-- Markdown remains portable and reviewable outside the app;
-- external file changes are visible and recoverable instead of silently overwritten;
-- the app starts quickly enough to be used as a daily editor;
-- adding features does not blur ownership of user content.
+Editing works without an account or internet connection. Folden has no telemetry or cloud sync. Remote images in Visual mode need permission for the document. Help links open GitHub in the browser. Logs stay local, and exporting diagnostics requires a separate action.

@@ -1,43 +1,39 @@
 # Release procedure
 
-[Русский](RELEASE.ru.md)
+[Русский](RELEASE.ru.md) · [Development](DEVELOPMENT.md)
 
-Folden 0.12 is a beta. The workflow prepares a **draft prerelease** for owner review. Publishing, replacing public history, creating the version tag, and installing over a live profile are separate owner decisions.
+Beta 0.12.0 is published. Its results are in the [verification record](BETA-0.12.0.md). This guide describes how to prepare later beta releases. Publishing, creating tags, and replacing an installed application require the owner's approval.
 
 ## Packages
 
-| Target              | Runner         | Artifact  |
-| ------------------- | -------------- | --------- |
-| Windows x64         | Windows 2022   | NSIS .exe |
-| macOS Intel         | macOS 15 Intel | .dmg      |
-| macOS Apple Silicon | macOS 15 ARM   | .dmg      |
+| Platform            | Rust target              | CI runner        | Package     |
+| ------------------- | ------------------------ | ---------------- | ----------- |
+| Windows x64         | `x86_64-pc-windows-msvc` | `windows-2022`   | NSIS `.exe` |
+| macOS Intel         | `x86_64-apple-darwin`    | `macos-15-intel` | `.dmg`      |
+| macOS Apple Silicon | `aarch64-apple-darwin`   | `macos-15`       | `.dmg`      |
 
-macOS deployment minimum is 14. Windows requires WebView2; its installer can download Microsoft's runtime. Windows packages are unsigned. macOS packages are ad-hoc signed and are not notarized. This matrix defines the supported baseline, not evidence that a native smoke test passed.
+Windows requires WebView2; the installer can download Microsoft's runtime. macOS packages require 14 or newer. Windows packages are unsigned, and macOS packages have an ad-hoc signature without notarization. Test installation and first launch with those OS restrictions.
 
-Linux is outside official beta packaging and native acceptance. The [private self-build instructions](DEVELOPMENT.md#linux-self-build) preserve Linux source support and dependency notices without promising official packages.
+Linux has no official package or recorded native acceptance in this beta. The permitted [Linux self-build](DEVELOPMENT.md#linux-self-build) and dependency notices remain available under [LICENSE.md](../LICENSE.md).
 
 ## Local gates
 
-Use Node 24.16.0 and Rust 1.96.0 from the checked-in version files. Run:
+Use the [development setup](DEVELOPMENT.md) and its pinned Node/Rust versions. From the repository root:
 
 ```text
 npm ci
 npm run quality
 npm run test:release
 npm run privacy:check
+npm run licenses:generate
+npm run licenses:check
 npm run test:coverage
+npx playwright install chromium
 npm run test:e2e
 npm run test:performance
 ```
 
-Generate and check notices from the repository root. The generator fetches locked Cargo sources, reads platform dependency graphs (including Linux self-builds) and verifies upstream license inputs; generated legal documents are included in packages, not committed:
-
-```text
-npm run licenses:generate
-npm run licenses:check
-```
-
-From src-tauri:
+Run native checks from `src-tauri`:
 
 ```text
 cargo fmt --check
@@ -45,31 +41,44 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 ```
 
-Build each package on its matching OS:
+Build and verify each package on its matching OS. For Windows:
 
 ```text
 npm run release:build -- --target x86_64-pc-windows-msvc
 npm run release:verify -- --target x86_64-pc-windows-msvc
 ```
 
-Use x86_64-apple-darwin or aarch64-apple-darwin for the matching macOS architecture. Verification extracts the **final package**, checks version, architecture, legal resources and privacy, and stages only reviewed formats with SHA256SUMS.txt. Source maps, dumps, logs, private build paths and old smoke installers fail the gate.
+Use the macOS target from the table for each Mac build. Verification extracts the final package, checks version, architecture, licenses, and private data, and stages files in `build/release/<target>/` with `SHA256SUMS.txt`. Source maps, dumps, logs, private paths, and old smoke-test installers fail verification.
 
-THIRD_PARTY_NOTICES.md is a conservative npm/Cargo inventory with runtime/build scopes. Windows distribution additionally contains the unmodified NSIS 3.11 corresponding source archive, nsis-3.11-src.tar.bz2, with its pinned SHA-256 in the same checksum file. It accompanies the installer under NSIS/LZMA terms and is not an installation package. Linux release scripts retain their payload audit guards, but no Linux package enters this beta's official artifact list.
+Every package includes `LICENSE.md` and generated `THIRD_PARTY_NOTICES.md`. Windows release files also include `nsis-3.11-src.tar.bz2`, the unmodified NSIS 3.11 source required by its license. Its pinned SHA-256 is included in the checksum file. The notices generator and license cache are described in [Development](DEVELOPMENT.md). Linux package checks remain in the scripts for maintenance; Linux packages are outside the official beta list.
 
 ## Isolated candidate and draft
 
-CI runs on master/main and pull requests. The package workflow checks and builds pushed release/beta-* candidate branches. Candidate pushes create workflow artifacts only; they do not create a release.
+CI runs on `master`, `main`, and pull requests. Pushing a `release/beta-*` branch runs package checks and uploads three artifacts named `folden-<target>`. Their retention is 14 days. Review the results and test the candidate packages before preparing a draft.
 
-After reviewing the sanitized tree/history and approving a candidate push, run CI and native checks on that exact commit. Preserve original Git and source backups before any public-history replacement. Verify author/committer metadata and all reachable public branches/tags, not just HEAD. Removing material from a replacement history cannot remove copies already downloaded or cached elsewhere.
+For the next version, use `npm run version:bump -- <version>` and complete the changelog and `docs/releases/v<version>.md`. After approval, create and push a new `v<version>` tag at the tested commit. The tag must match `package.json`; existing published tags and releases must remain unchanged.
 
-After explicit approval, create the existing v0.12.0 tag at the tested commit. Manually dispatch **Draft beta release** with that tag as both the workflow ref and tag input. The web UI dispatch button depends on default-branch workflow availability. A candidate push registers/runs this workflow; after that, use CLI/API dispatch with the exact approved tag as workflow ref if the UI button is unavailable. For example: `gh workflow run release.yml --ref v0.12.0 -f tag=v0.12.0 -F create_draft=true`. If GitHub rejects dispatch, retain the candidate artifacts for review rather than changing public history just to expose a button. The optional create_draft input is false by default. Only the final draft job has repository write permission; it creates a draft prerelease, refuses to replace an existing release, and never publishes it. Configure the release-draft environment with owner approval before enabling this step.
+Choose one draft path:
 
-Review all three packages, the aggregate checksum file, license/notices, and [release notes](releases/v0.12.0.md). Publish only after native acceptance on the Windows and macOS targets: clean launch, save/reopen, RU/EN, recovery/conflicts, local images/links, printing, installation/update/uninstall. Record results in [BETA-0.12.0.md](BETA-0.12.0.md); browser mocks do not prove native dialogs or installer behavior.
+1. **Build from the tag.** Dispatch **Draft beta release** with the same tag as workflow ref and `tag` input. Set `create_draft=true` to create a draft prerelease after the checks pass; its default is false. Dispatch builds fresh packages, so test the final draft files on native systems before publication.
+2. **Keep tested candidate packages.** Download the exact run's three artifacts into `build/release/folden-<target>/` in a clean checkout of the tested commit. Set `RELEASE_TAG` to the approved tag and `RELEASE_COMMIT` to the full tested commit SHA, then run `node scripts/release-draft.mjs`. It verifies filenames, checksums, matching license files, the clean checkout, and the remote tag's commit. It copies the tested files without rebuilding and creates a draft prerelease.
 
-A dispatched build creates fresh packages: native-test the **final draft files** before publication, even if an earlier candidate was accepted. To preserve already accepted candidate packages instead, download that exact run's three artifacts into `build/release/folden-<target>/` in a clean checkout of the tested commit. After tag approval, set `RELEASE_TAG=v0.12.0` and `RELEASE_COMMIT=<tested SHA>`, then run `node scripts/release-draft.mjs`. It verifies canonical filenames, each downloaded checksum, matching legal resources, a clean checkout and the remote tag's immutable commit. It copies those accepted bytes without rebuilding, and creates only a draft prerelease. Publish only the exact native-accepted files.
+For CLI dispatch, replace `<tag>` with the approved version tag:
 
-## Repository settings
+```text
+gh workflow run release.yml --ref <tag> -f tag=<tag> -F create_draft=true
+```
 
-Review [the settings payload](../.github/repository-settings.json) and [setup instructions](../.github/REPOSITORY_SETUP.md). Repository metadata, topics, private vulnerability reporting, secret scanning, push protection and the release-draft environment were applied and verified on 2026-10-02. Master branch protection was enabled and verified on 2026-10-03 after the approved public-history replacement. History replacement, commits, pushes, tags and publication remain separately approved steps.
+Configure the `release-draft` environment to require owner approval and permit version tags. Its policy checks the run's `GITHUB_REF`; use the tag as the workflow ref. Only the draft job has repository write permission. The script refuses to replace an existing release. See [repository setup](../.github/REPOSITORY_SETUP.md) for configuration.
 
-The official binary may be used free of charge for personal and commercial work. Author source is provided for inspection with a limited private Linux self-build permission under [LICENSE.md](../LICENSE.md). Third-party terms and user content ownership are separate.
+## Native acceptance and publication
+
+Test the final Windows package and both macOS packages. Record the package checksum, OS version, processor, and results:
+
+- clean launch, RU/EN selection, save, and reopen;
+- recovery after a forced close, external changes, and conflicts;
+- local images, relative links, and file/folder moves;
+- clipboard, file dialogs, printing, and PDF output;
+- installation, update, and uninstall, including Windows UAC, Program Files, and an existing custom installation path.
+
+Check the three packages, aggregate `SHA256SUMS.txt`, licenses, required NSIS source archive, and release notes in the draft. Publish only the files that passed native acceptance. Record completed checks and remaining gaps in a verification document for that version, following [BETA-0.12.0.md](BETA-0.12.0.md). Browser tests cover application flows with mocked native APIs; system dialogs and installers need these desktop checks.

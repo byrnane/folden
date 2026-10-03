@@ -1,9 +1,12 @@
 name: Bug report / Ошибка
-description: Report a reproducible Folden issue without private documents or paths.
+description: Describe a bug using a small example without personal data.
 body:
   - type: markdown
     attributes:
-      value: 'Use a small synthetic example. Do not attach private documents, recovery/session files, credentials, or personal paths. Before reporting a security issue, read the [security policy](https://github.com/byrnane/folden/security/policy) for current reporting availability. / Используйте искусственный пример без личных данных. Перед сообщением об уязвимости прочитайте политику безопасности; не публикуйте чувствительные подробности.'
+      value: |
+        Make a small example for this report. Leave out private documents, recovery or session files, credentials and personal paths. For vulnerabilities, use the private reporting form linked in the [security policy](https://github.com/byrnane/folden/security/policy).
+
+        Подготовьте небольшой пример специально для сообщения. Уберите личные документы, файлы восстановления и сессии, учётные данные и персональные пути. Об уязвимостях сообщайте через приватную форму из [политики безопасности](https://github.com/byrnane/folden/security/policy).
   - type: input
     id: version
     attributes:
@@ -14,16 +17,16 @@ body:
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce / Шаги воспроизведения
+      label: How to reproduce / Как повторить ошибку
     validations:
       required: true
   - type: textarea
     id: result
     attributes:
-      label: Expected and actual behavior / Ожидание и результат
+      label: What you expected and what happened / Что ожидали и что произошло
     validations:
       required: true
   - type: textarea
     id: example
     attributes:
-      label: Minimal synthetic Markdown or screenshot / Искусственный пример
+      label: Example Markdown or screenshot without personal data / Markdown или снимок без личных данных

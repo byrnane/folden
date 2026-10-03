@@ -1,17 +1,35 @@
-# Repository setup for owner review
+# Repository settings
 
-repository-settings.json records the desired configuration. Repository metadata, topics, private vulnerability reporting, secret scanning, push protection and the release-draft environment were applied and verified on 2026-10-02. Master branch protection was enabled and verified on 2026-10-03 after the approved public-history replacement. GitHub CLI must run with access to Windows Credential Manager; the sandbox can otherwise report an invalid token despite a working login.
+[repository-settings.json](repository-settings.json) describes the intended GitHub settings for `byrnane/folden`. Compare it with the current settings before applying changes.
 
-The owner has authorized the repository description, topics and security setup in the release plan. After authentication, apply repository fields with PATCH /repos/byrnane/folden; topics with PUT /repos/byrnane/folden/topics (names from topics); and protection with PUT /repos/byrnane/folden/branches/master/protection using branch_protection. Verify actual CI check names before enforcement. Keep administrator enforcement off for the owner-managed repository. Apply protection after the separately approved history replacement.
+## Repository and security
 
-Enable private vulnerability reporting with PUT /repos/byrnane/folden/private-vulnerability-reporting and verify GET returns enabled=true. Enable free secret scanning/push protection where GitHub offers it, and verify the returned security_and_analysis status; absence/null is not proof of activation.
+- Apply `repository` with `PATCH /repos/byrnane/folden` and `topics` with `PUT /repos/byrnane/folden/topics` using the `names` field.
+- Apply `branch_protection` with `PUT /repos/byrnane/folden/branches/master/protection`. Check the CI job names before making them required. Keep `enforce_admins` set to `false` so the owner can manage the repository.
+- Enable private vulnerability reporting with `PUT /repos/byrnane/folden/private-vulnerability-reporting`. Confirm that `GET` on the same endpoint returns `enabled: true`.
+- Enable secret scanning and push protection where GitHub offers them. Check that both are enabled in `security_and_analysis`; missing or null fields leave their status unverified.
 
-Resolve the byrnane account's numeric GitHub ID before PUT /repos/byrnane/folden/environments/release-draft: replace the payload's review-label login with id. Add an environment deployment branch policy for v* with type tag. Confirm the owner can approve the draft job and ordinary candidate branch pushes cannot run it. Environment feature availability depends on the repository/account configuration.
+## Release draft
 
-Dispatch the draft workflow on the version tag itself, with the tag input set to that same tag. The environment rule checks the workflow run's GITHUB_REF; checking out a tag inside a job does not change it. A run dispatched from the default branch with only the tag input filled will not match the tag-only policy. See [GitHub's environment rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments#deployment-branches-and-tags).
+Use `release_environment` for the `release-draft` environment. Replace each reviewer's `login` with their numeric GitHub user `id` before calling `PUT /repos/byrnane/folden/environments/release-draft`. Allow tags matching `v*` and keep self-review available for the owner. GitHub's environment features depend on the account and repository settings.
 
-Set the social preview to [docs/assets/social-preview.png](../docs/assets/social-preview.png), rendered at 1280 × 640 from the project's original vector banner. Check the README, exact-version release link, custom-license display and assets in GitHub. Do not label the project open source: author source is available for inspection under a custom restrictive license.
+Run **Draft beta release** on the version tag and pass that same tag as the `tag` input. The environment rule checks the run's `GITHUB_REF`. See [GitHub's branch and tag rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments#deployment-branches-and-tags). Confirm that the owner can approve the draft job and candidate branch pushes only produce workflow artifacts.
 
-Review the separate cleaned repository's commit/tree comparison and secret scan before exposing replacement history. Original refs/index and verified backup must remain unchanged. No force push, tag creation, release publication or remote setting write is authorized by this instruction file alone.
+## Public presentation
 
-Описание, темы, приватные сообщения об уязвимостях, secret scanning, push protection и environment release-draft применены и проверены 2026-10-02. Защита master включена и проверена 2026-10-03 после согласованной замены публичной истории. Запускайте draft workflow на теге версии и передавайте тот же tag input: environment проверяет GITHUB_REF запуска, а не checkout внутри job. Замена истории и публикация согласуются отдельно.
+Use [social-preview.png](../docs/assets/social-preview.png) for the repository preview. It is 1280 × 640. Check the README, release links, license display and images on GitHub. In the README, explain the permission to read and inspect the source and make private Linux builds under [LICENSE.md](../LICENSE.md).
+
+## Настройки репозитория
+
+[repository-settings.json](repository-settings.json) описывает нужные настройки GitHub для `byrnane/folden`. Перед изменением сравните их с текущими.
+
+- Примените `repository` через `PATCH /repos/byrnane/folden`, а `topics` через `PUT /repos/byrnane/folden/topics` с полем `names`.
+- Примените `branch_protection` через `PUT /repos/byrnane/folden/branches/master/protection`. Проверьте названия задач CI перед добавлением обязательных проверок. Оставьте `enforce_admins: false`, чтобы владелец мог управлять репозиторием.
+- Включите приватные сообщения об уязвимостях через `PUT /repos/byrnane/folden/private-vulnerability-reporting`. Убедитесь, что `GET` по тому же адресу возвращает `enabled: true`.
+- Включите secret scanning и push protection, если GitHub их предлагает. Проверьте статус обеих функций в `security_and_analysis`. Пустые или отсутствующие поля не подтверждают, что функции включены.
+
+Для environment `release-draft` используйте `release_environment`. Перед вызовом `PUT /repos/byrnane/folden/environments/release-draft` замените `login` каждого проверяющего на числовой GitHub `id`. Разрешите теги `v*` и оставьте владельцу возможность подтвердить собственный запуск. Доступность функций environment зависит от аккаунта и настроек репозитория.
+
+Запускайте **Draft beta release** на теге версии и передавайте этот же тег в поле `tag`. Правило environment проверяет `GITHUB_REF` запуска; подробности есть в [документации GitHub](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments#deployment-branches-and-tags). Убедитесь, что владелец может подтвердить создание черновика, а push в ветку кандидата создаёт только артефакты workflow.
+
+Для превью репозитория используйте [social-preview.png](../docs/assets/social-preview.png), 1280 × 640. Проверьте README, ссылки на релизы, отображение лицензии и изображения на GitHub. В README объясните условия чтения и изучения исходников и самостоятельной Linux-сборки по [LICENSE.md](../LICENSE.md).

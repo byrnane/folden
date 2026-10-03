@@ -43,18 +43,18 @@ async function showLegal(kind: 'terms' | 'third-party') {
         <p>{{ version }} · {{ t('Public beta') }} · byrnane</p>
       </div>
     </div>
-    <p>{{ t('A local writing editor. Your Markdown stays yours.') }}</p>
+    <p>{{ t('A desktop editor for Markdown and text files.') }}</p>
     <p>
       {{
         t(
-          'Free for personal and commercial use. Source available for inspection and private Linux self-build under the usage terms.',
+          'Official builds are free for personal and commercial work. See the usage terms for reading the source and building it on Linux for your own use.',
         )
       }}
     </p>
     <p>
       {{
         t(
-          'No accounts or telemetry. Remote images load only with your permission. Local diagnostics are exported only when you ask.',
+          'No accounts or telemetry. Your documents stay on your computer. Remote images load with your permission. You choose when to export diagnostics.',
         )
       }}
     </p>

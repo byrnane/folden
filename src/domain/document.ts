@@ -32,22 +32,6 @@ export function isDocumentDirty(state: DirtyState): boolean {
   return state.revision !== state.persistedRevision
 }
 
-export function markRevisionPersisted(revision: DocumentRevision): DirtyState {
-  const normalizedRevision = createDocumentRevision(revision)
-
-  return {
-    revision: normalizedRevision,
-    persistedRevision: normalizedRevision,
-  }
-}
-
-export function createFileFingerprint(size: number, modifiedAtMs: number): FileFingerprint {
-  return {
-    size: Math.max(0, Math.trunc(size)),
-    modifiedAtMs: Math.max(0, Math.trunc(modifiedAtMs)),
-  }
-}
-
 export function createTextFileFormat(
   lineEnding: LineEnding = 'lf',
   hasUtf8Bom = false,

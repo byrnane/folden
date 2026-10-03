@@ -1,7 +1,11 @@
 # Feedback
 
-Bug reports and concrete workflow suggestions are welcome in English or Russian. Please use the issue forms and synthetic examples without personal documents, credentials or local profile paths.
+Send bug reports and suggestions through [Issues](https://github.com/byrnane/folden/issues) in English or Russian. Include a small example made for the report. Leave out private documents, credentials and local profile paths.
 
-Author source is published for inspection, with a limited private Linux self-build permission under LICENSE.md. It is not an open-source contribution license. Code changes, derivative builds and redistribution require the author's separate permission; unsolicited pull requests do not grant or obtain that permission. Third-party components keep their own licenses.
+The [license](../LICENSE.md) allows reading and inspecting the source, and building the unmodified source for your own use on Linux. Source changes, other builds and redistribution require the author's permission. Opening a pull request does not provide that permission. Third-party components keep their own licenses.
 
-Отзывы и предложения принимаются на русском и английском через формы Issues. Используйте искусственные примеры. Публичный source предназначен для ознакомления с ограниченным разрешением на приватную Linux-сборку по LICENSE.md; изменение, сборка производных приложений и распространение требуют отдельного разрешения автора.
+## Обратная связь
+
+Сообщайте об ошибках и предлагайте улучшения через [Issues](https://github.com/byrnane/folden/issues) на русском или английском. Подготовьте небольшой пример специально для сообщения. Уберите личные документы, учётные данные и пути к локальным профилям.
+
+[Лицензия](../LICENSE.md) разрешает читать и изучать исходный код, а также собирать неизменённый код для собственного использования на Linux. Для изменения кода, других сборок и распространения нужно разрешение автора. Отправка pull request сама по себе такого разрешения не даёт. Сторонние компоненты сохраняют свои лицензии.

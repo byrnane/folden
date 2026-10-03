@@ -1,6 +1,6 @@
 {
   "repository": {
-    "description": "Local-first Markdown editor with Source and Visual modes. Windows/macOS beta, Linux self-build. RU/EN. Source available for inspection.",
+    "description": "Desktop Markdown and text editor with visual and source modes. Windows and macOS beta. English and Russian.",
     "homepage": "https://github.com/byrnane/folden#readme",
     "has_issues": true,
     "has_wiki": false,

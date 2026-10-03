@@ -2,7 +2,7 @@
   "name": "folden",
   "private": true,
   "version": "0.12.0",
-  "description": "Local-first desktop Markdown and text editor.",
+  "description": "Desktop Markdown and text editor with visual and source modes.",
   "author": "byrnane",
   "license": "SEE LICENSE IN LICENSE.md",
   "homepage": "https://github.com/byrnane/folden",

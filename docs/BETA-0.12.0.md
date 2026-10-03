@@ -1,46 +1,40 @@
-# Folden 0.12.0 beta
+# Folden 0.12.0: test results
 
-[Русский](BETA-0.12.0.ru.md) · [Release page](https://github.com/byrnane/folden/releases/tag/v0.12.0)
+English · [Русский](BETA-0.12.0.ru.md) · [Release](https://github.com/byrnane/folden/releases/tag/v0.12.0)
 
-Folden is a local-first Markdown editor with Source and Visual modes, project folders, recovery, search, images, templates and printing. This public beta adds original branding and native path handling for Windows, Linux and macOS.
+Beta 0.12.0 was published on 2026-10-03. This record describes the checks on its Windows x64 and macOS Intel/Apple Silicon packages. Features and installation instructions are in the [README](../README.md); changes are in the [release notes](releases/v0.12.0.md).
 
-**Beta software: bugs, crashes, and data loss may occur.** Folden is provided **“AS IS”, without warranties** under [LICENSE.md](../LICENSE.md#warranty-and-liability). Keep independent backups of important documents.
+## Automated checks
 
-## Changes
+Results refer to commit `9013e8e45c6b379db4be911dbd9fd94256a56b83` and [CI run 37026856164](https://github.com/byrnane/folden/actions/runs/37026856164). The release contains the checked files from that run, without a rebuild.
 
-- English/Russian documentation, original branding and an About dialog with version, license, notices and project links.
-- Target-specific native filesystem handling, compatible legacy path normalization and safer atomic file operations.
-- macOS Command shortcuts and native print flow.
-- Official Windows x64 NSIS and macOS Intel/Apple Silicon DMG packages, with locked toolchain versions and final-payload checks. Linux is available only as a private self-build of the unmodified source.
-- Clear source-inspection and free-binary terms, third-party attribution, source privacy checks and a release workflow with draft review.
+| Check               | Recorded result                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------- |
+| Frontend quality    | Passed: versions, formatting, types, unused code, dependency cycles, lint, and 260 unit tests             |
+| Unit coverage       | Passed: all configured thresholds met                                                                     |
+| Browser tests       | Passed: 100 tests                                                                                         |
+| Performance         | Passed: frontend regression, native workspace test with 100,000 entries, and three browser scenarios      |
+| Rust on Windows     | Formatting, clippy, and 27 tests passed; the performance test runs separately                             |
+| Windows package     | NSIS x64 built; extracted app version, publisher, licenses, and privacy checks passed                     |
+| macOS packages      | Intel and Apple Silicon DMGs built; Rust checks, package checks, and ad-hoc signature verification passed |
+| Downloaded packages | All three sets passed SHA-256, license, executable architecture, and privacy checks                       |
 
-## Verification record
+## Tests on real systems
 
-Automated results refer to commit `9013e8e45c6b379db4be911dbd9fd94256a56b83` and [CI run 37026856164](https://github.com/byrnane/folden/actions/runs/37026856164). Manual results are the owner's report, not independent confirmation of every supported OS/device.
+The owner reported successful Windows and macOS checks on 2026-10-03. The record does not include machine models, OS versions, or separate results for both Mac processor types.
 
-| Check                                                           | Status                                                                                                 |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| CI frontend quality                                             | Passed: versions, formatting, types, unused code, dependency cycles, lint and 260 unit tests           |
-| Unit coverage                                                   | Passed: 260 tests; coverage thresholds met                                                             |
-| Browser E2E                                                     | Passed in CI: 100 tests; three performance cases run separately                                        |
-| Performance                                                     | Passed in CI: frontend regression, native 100k workspace check and three browser performance cases     |
-| Native Windows fmt/clippy/tests                                 | Passed: 27 tests; one performance test intentionally ignored in the ordinary suite                     |
-| Windows CI package                                              | NSIS x64 built; extracted application version, publisher, resource licenses and privacy audit passed   |
-| Both macOS CI builds                                            | Passed: Intel/Apple Silicon DMG; native fmt/clippy/tests, package checks and ad-hoc signature verified |
-| Downloaded final packages                                       | Passed: all three file sets, SHA-256, legal resources, executable architectures and payload privacy    |
-| Owner's Windows/macOS checklist                                 | Reported OK on 2026-10-03; machine/OS details and separate confirmation of both Mac CPUs not provided  |
-| Linux packages and native acceptance                            | Outside this beta; private self-build only                                                             |
-| Windows Program Files/UAC and legacy custom-path upgrade        | No separate per-scenario record                                                                        |
-| Real OS clipboard, print/PDF file dialogs and physical printers | No separate per-scenario record                                                                        |
-| Several real work sessions                                      | No separate record in DOGFOODING.md                                                                    |
-| Beta publication                                                | Beta published on 2026-10-03 with the owner's approval                                                 |
+The following need separate records:
 
-The release uses the checked files from that CI run without rebuilding. Native coverage is limited to the owner's overall Windows/macOS report; it does not establish a complete Windows 10/11 and macOS 14+ hardware matrix.
+- Windows installation with UAC in Program Files and an upgrade from an older installation with a custom path.
+- OS clipboard, print/PDF dialogs, and physical printing.
+- Several work sessions following the [daily-use checklist](DOGFOODING.md).
 
-Windows packages are unsigned; macOS packages have an ad-hoc signature and no notarization. macOS requires 14+ and Windows requires WebView2. Check the release origin and SHA256SUMS.txt before installation. Linux has [private self-build instructions](DEVELOPMENT.md#linux-self-build) and no official beta package.
+Linux has no official package or recorded testing on a real system for this beta. See the [Linux self-build instructions](DEVELOPMENT.md#linux-self-build).
 
-Visual mode edits common Markdown and retains unsupported syntax as source blocks. Moves carry sibling asset folders but do not rewrite every relative link. Printing depends on the system webview and printer; closing a dialog does not prove successful export. Keep backups of important documents.
+## Limits
 
-Official binaries are free for personal and commercial work. Author source is available for inspection with a limited private Linux self-build permission; redistribution and modification rights are restricted by [LICENSE.md](../LICENSE.md). User content and third-party rights are separate.
+Browser tests use a simulated native API. System dialogs, installers, and printing require checks on real systems. The recorded manual results cover the owner's machines; other Windows 10/11 and macOS 14+ configurations remain unverified.
 
-See [release procedure](RELEASE.md), [product behavior](PRODUCT.md) and [release notes](releases/v0.12.0.md). Local ignored logs/backups are not public artifacts and are not linked as proof here.
+The beta may contain bugs, crash, or lose data. Keep separate backups of important documents. See the [usage terms](../LICENSE.md#warranty-and-liability).
+
+See [Release](RELEASE.md) for the build procedure and [Product behavior](PRODUCT.md) for editing, file moves, and printing.

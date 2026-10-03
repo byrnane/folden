@@ -358,7 +358,7 @@ inner fenced block example
 
 Символы с HTML entities: &copy; &amp; &lt;div&gt; &nbsp;
 
-Путь с backslash: `C:\pets\Folden\test_files\markdown_kitchen_sink.md`
+Путь с backslash: `C:\Documents\Notes\example.md`
 
 JSON-like text без fenced блока: {"a":1,"b":[true,false,null]}
 

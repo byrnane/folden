@@ -1,15 +1,15 @@
 name: Feature request / Предложение
-description: Explain a concrete editing workflow that Folden could improve.
+description: Describe what you want to do and how Folden could help.
 body:
   - type: textarea
     id: workflow
     attributes:
-      label: Workflow and problem / Сценарий и проблема
+      label: What you want to do and what gets in the way / Что хотите сделать и что мешает
     validations:
       required: true
   - type: textarea
     id: suggestion
     attributes:
-      label: Proposed behavior / Предлагаемое поведение
+      label: What would help / Что помогло бы
     validations:
       required: true

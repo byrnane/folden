@@ -8,12 +8,12 @@ export const language = ref<Language>(systemLanguage())
 export const russianMessages = {
   'About Folden': 'О Folden',
   'Public beta': 'Публичная бета',
-  'A local writing editor. Your Markdown stays yours.':
-    'Локальный редактор текстов. Ваш Markdown принадлежит вам.',
-  'Free for personal and commercial use. Source available for inspection and private Linux self-build under the usage terms.':
-    'Бесплатно для личных и рабочих задач. Исходники доступны для ознакомления и приватной Linux-сборки на условиях лицензии.',
-  'No accounts or telemetry. Remote images load only with your permission. Local diagnostics are exported only when you ask.':
-    'Без аккаунтов и телеметрии. Сетевые изображения загружаются с вашего разрешения. Локальная диагностика экспортируется по вашему запросу.',
+  'A desktop editor for Markdown and text files.':
+    'Настольный редактор Markdown и обычного текста.',
+  'Official builds are free for personal and commercial work. See the usage terms for reading the source and building it on Linux for your own use.':
+    'Официальные сборки бесплатны для личных и коммерческих задач. Ознакомление с исходниками и Linux-сборка для себя разрешены на условиях лицензии.',
+  'No accounts or telemetry. Your documents stay on your computer. Remote images load with your permission. You choose when to export diagnostics.':
+    'Без аккаунтов и телеметрии. Документы хранятся на вашем компьютере. Сетевые изображения загружаются с вашего разрешения. Экспорт диагностики запускаете вы.',
   Help: 'Помощь',
   Releases: 'Выпуски',
   'Report a problem': 'Сообщить о проблеме',
