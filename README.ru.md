@@ -1,3 +1,5 @@
+> **Разработка на паузе с 12 октября 2026.** [Состояние проекта и порядок возвращения](CONSERVATION.md).
+
 ![Редактор Markdown Folden](docs/assets/banner.svg)
 
 [English](README.md) · Русский

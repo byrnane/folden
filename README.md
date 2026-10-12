@@ -1,3 +1,5 @@
+> **Development paused on October 12, 2026.** [Project state and resuming development (Russian)](CONSERVATION.md). The published beta remains available.
+
 ![Folden Markdown editor](docs/assets/banner.svg)
 
 English · [Русский](README.ru.md)
